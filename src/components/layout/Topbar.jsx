@@ -75,6 +75,16 @@ export default function Topbar({ title, right }) {
                     Preview Admin Dashboard
                   </button>
                 ) : null}
+                {['admin', 'super_admin'].includes(user?.role) ? (
+                  <Link
+                    to="/admin/overview"
+                    onClick={() => setOpen(false)}
+                    className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-ink-600 hover:bg-ink-50 dark:text-ink-300 dark:hover:bg-ink-700"
+                  >
+                    <ShieldCheck className="h-4 w-4" />
+                    Go to Admin Dashboard
+                  </Link>
+                ) : null}
                 {user?.role === 'admin' ? (
                   <button
                     onClick={async () => {
