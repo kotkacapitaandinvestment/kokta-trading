@@ -1,5 +1,6 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
 import ProtectedRoute from './ProtectedRoute';
+import RequireSuperAdmin from './RequireSuperAdmin';
 import AppLayout from '../components/layout/AppLayout';
 import AdminLayout from '../components/layout/AdminLayout';
 
@@ -41,6 +42,7 @@ import AdminAuditLogs from '../features/admin/AdminAuditLogs';
 import AdminSystemHealth from '../features/admin/AdminSystemHealth';
 import AdminApiUsage from '../features/admin/AdminApiUsage';
 import AdminSettings from '../features/admin/AdminSettings';
+import AdminIntegrations from '../features/admin/AdminIntegrations';
 
 export default function AppRoutes() {
   return (
@@ -93,7 +95,22 @@ export default function AppRoutes() {
         <Route path="audit-logs" element={<AdminAuditLogs />} />
         <Route path="system-health" element={<AdminSystemHealth />} />
         <Route path="api-usage" element={<AdminApiUsage />} />
-        <Route path="settings" element={<AdminSettings />} />
+        <Route
+          path="integrations"
+          element={
+            <RequireSuperAdmin>
+              <AdminIntegrations />
+            </RequireSuperAdmin>
+          }
+        />
+        <Route
+          path="settings"
+          element={
+            <RequireSuperAdmin>
+              <AdminSettings />
+            </RequireSuperAdmin>
+          }
+        />
       </Route>
 
       <Route path="*" element={<NotFound />} />

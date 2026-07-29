@@ -1,10 +1,10 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { CheckCircle2, Circle, Sparkles, RotateCcw } from 'lucide-react';
 import PageHeader from '../../components/ui/PageHeader';
 import Card, { CardBody, CardHeader } from '../../components/ui/Card';
 import Button from '../../components/ui/Button';
 import ProgressRing from '../../components/ui/ProgressRing';
-import { usePersistedState } from '../../lib/usePersistedState';
+import { api } from '../../lib/api';
 
 const items = [
   { id: 'trend', label: 'Trend confirmed?', hint: 'Higher timeframe bias matches your intended direction.' },
@@ -17,10 +17,20 @@ const items = [
   { id: 'sizing', label: 'Position size calculated?', hint: 'Lot size derived from stop distance and account risk, not guesswork.' },
 ];
 
-const todayKey = () => `checklist.${new Date().toISOString().slice(0, 10)}`;
+const today = () => new Date().toISOString().slice(0, 10);
 
 export default function Checklist() {
-  const [checked, setChecked] = usePersistedState(todayKey(), {});
+  const [checked, setChecked] = useState({});
+  const date = today();
+
+  useEffect(() => {
+    api.get(`/checklist/${date}`).then(({ items }) => setChecked(items));
+  }, [date]);
+
+  const persist = (next) => {
+    setChecked(next);
+    api.put(`/checklist/${date}`, { items: next });
+  };
 
   const completedCount = items.filter((i) => checked[i.id]).length;
   const baseScore = Math.round((completedCount / items.length) * 100);
@@ -32,8 +42,8 @@ export default function Checklist() {
     return { label: 'Not ready', tone: 'text-loss-500' };
   }, [baseScore]);
 
-  const toggle = (id) => setChecked((c) => ({ ...c, [id]: !c[id] }));
-  const reset = () => setChecked({});
+  const toggle = (id) => persist({ ...checked, [id]: !checked[id] });
+  const reset = () => persist({});
 
   return (
     <div>

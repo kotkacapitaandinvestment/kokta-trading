@@ -62,18 +62,45 @@ export default function Topbar({ title, right }) {
                 >
                   <UserIcon className="h-4 w-4" /> Profile & Settings
                 </Link>
-                <button
-                  onClick={() => {
-                    const goingToAdmin = user?.role !== 'admin';
-                    setRole(goingToAdmin ? 'admin' : 'premium');
-                    setOpen(false);
-                    navigate(goingToAdmin ? '/admin/overview' : '/app/dashboard');
-                  }}
-                  className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-ink-600 hover:bg-ink-50 dark:text-ink-300 dark:hover:bg-ink-700"
-                >
-                  <ShieldCheck className="h-4 w-4" />
-                  {user?.role === 'admin' ? 'Exit Admin Preview' : 'Preview Admin Dashboard'}
-                </button>
+                {user?.role === 'trader' || user?.role === 'premium' ? (
+                  <button
+                    onClick={async () => {
+                      setOpen(false);
+                      await setRole('admin');
+                      navigate('/admin/overview');
+                    }}
+                    className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-ink-600 hover:bg-ink-50 dark:text-ink-300 dark:hover:bg-ink-700"
+                  >
+                    <ShieldCheck className="h-4 w-4" />
+                    Preview Admin Dashboard
+                  </button>
+                ) : null}
+                {user?.role === 'admin' ? (
+                  <button
+                    onClick={async () => {
+                      setOpen(false);
+                      await setRole('super_admin');
+                      navigate('/admin/integrations');
+                    }}
+                    className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-ink-600 hover:bg-ink-50 dark:text-ink-300 dark:hover:bg-ink-700"
+                  >
+                    <ShieldCheck className="h-4 w-4" />
+                    Preview Super Admin
+                  </button>
+                ) : null}
+                {['admin', 'super_admin'].includes(user?.role) ? (
+                  <button
+                    onClick={async () => {
+                      setOpen(false);
+                      await setRole('premium');
+                      navigate('/app/dashboard');
+                    }}
+                    className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-ink-600 hover:bg-ink-50 dark:text-ink-300 dark:hover:bg-ink-700"
+                  >
+                    <ShieldCheck className="h-4 w-4" />
+                    Exit Admin Preview
+                  </button>
+                ) : null}
                 <div className="my-1 h-px bg-ink-100 dark:bg-ink-700" />
                 <button
                   onClick={logout}

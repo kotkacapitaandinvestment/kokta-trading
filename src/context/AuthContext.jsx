@@ -1,73 +1,51 @@
-import { createContext, useContext, useMemo, useState } from 'react';
-import { readStorage, writeStorage } from '../lib/storage';
+import { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import { api } from '../lib/api';
 
 const AuthContext = createContext(null);
 
-const DEFAULT_USER = {
-  id: 'usr_demo_001',
-  name: 'Alex Morgan',
-  email: 'alex.morgan@example.com',
-  role: 'premium', // 'trader' | 'premium' | 'admin'
-  plan: 'Institutional',
-  initials: 'AM',
-  memberSince: '2024-11-02',
-};
-
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(() => readStorage('auth.user', null));
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
 
-  const persist = (next) => {
-    setUser(next);
-    writeStorage('auth.user', next);
-  };
+  useEffect(() => {
+    api
+      .get('/auth/me')
+      .then(({ user }) => setUser(user))
+      .catch(() => setUser(null))
+      .finally(() => setLoading(false));
+  }, []);
 
-  const login = async ({ email }) => {
-    const next = { ...DEFAULT_USER, email: email || DEFAULT_USER.email };
-    persist(next);
-    return next;
+  const login = async ({ email, password }) => {
+    const { user } = await api.post('/auth/login', { email, password });
+    setUser(user);
+    return user;
   };
 
   const loginWithProvider = async (provider) => {
-    const next = {
-      ...DEFAULT_USER,
-      name: provider === 'apple' ? 'Alex Morgan' : DEFAULT_USER.name,
-      email: `alex.morgan@${provider}.mock`,
-    };
-    persist(next);
-    return next;
+    const { user } = await api.post('/auth/provider', { provider });
+    setUser(user);
+    return user;
   };
 
-  const signup = async ({ name, email }) => {
-    const initials = (name || 'New Trader')
-      .split(' ')
-      .map((p) => p[0])
-      .join('')
-      .slice(0, 2)
-      .toUpperCase();
-    const next = {
-      ...DEFAULT_USER,
-      id: `usr_${Date.now()}`,
-      name: name || 'New Trader',
-      email,
-      role: 'trader',
-      plan: 'Free',
-      initials,
-      memberSince: new Date().toISOString().slice(0, 10),
-    };
-    persist(next);
-    return next;
+  const signup = async ({ name, email, password }) => {
+    const { user } = await api.post('/auth/signup', { name, email, password });
+    setUser(user);
+    return user;
   };
 
-  const logout = () => persist(null);
+  const logout = async () => {
+    await api.post('/auth/logout', {});
+    setUser(null);
+  };
 
-  const setRole = (role) => {
-    if (!user) return;
-    persist({ ...user, role, plan: role === 'trader' ? 'Free' : user.plan === 'Free' ? 'Premium' : user.plan });
+  const setRole = async (role) => {
+    const { user } = await api.patch('/auth/role', { role });
+    setUser(user);
   };
 
   const value = useMemo(
-    () => ({ user, login, loginWithProvider, signup, logout, setRole, isAuthenticated: !!user }),
-    [user],
+    () => ({ user, loading, login, loginWithProvider, signup, logout, setRole, isAuthenticated: !!user }),
+    [user, loading],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

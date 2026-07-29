@@ -26,6 +26,7 @@ import {
   Activity,
   Server,
   SlidersHorizontal,
+  Plug,
 } from 'lucide-react';
 
 export const traderNav = [
@@ -65,5 +66,6 @@ export const adminNav = [
   { to: '/admin/audit-logs', label: 'Audit Logs', icon: ShieldCheck },
   { to: '/admin/system-health', label: 'System Health', icon: Activity },
   { to: '/admin/api-usage', label: 'API Usage', icon: Server },
-  { to: '/admin/settings', label: 'Settings', icon: SlidersHorizontal },
+  { to: '/admin/integrations', label: 'Integrations', icon: Plug, superAdminOnly: true },
+  { to: '/admin/settings', label: 'Settings', icon: SlidersHorizontal, superAdminOnly: true },
 ];

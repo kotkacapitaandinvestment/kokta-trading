@@ -3,7 +3,7 @@ import clsx from 'clsx';
 import { Lock } from 'lucide-react';
 import Badge from '../ui/Badge';
 
-export default function Sidebar({ brandTo, items, secondaryItems, isPremium = true, footer }) {
+export default function Sidebar({ brandTo, items, secondaryItems, footer }) {
   return (
     <aside className="hidden w-64 shrink-0 flex-col border-r border-ink-100 bg-white lg:flex dark:border-ink-800 dark:bg-ink-900">
       <div className="flex h-16 items-center gap-2.5 border-b border-ink-100 px-6 dark:border-ink-800">
@@ -21,7 +21,7 @@ export default function Sidebar({ brandTo, items, secondaryItems, isPremium = tr
       <nav className="flex-1 overflow-y-auto scrollbar-thin px-3 py-4">
         <ul className="space-y-0.5">
           {items.map((item) => {
-            const locked = item.premium && !isPremium;
+            const locked = !!item.locked;
             return (
               <li key={item.to}>
                 <NavLink
@@ -41,9 +41,9 @@ export default function Sidebar({ brandTo, items, secondaryItems, isPremium = tr
                   <item.icon className="h-4 w-4 shrink-0" strokeWidth={1.75} />
                   <span className="flex-1 truncate">{item.label}</span>
                   {locked ? <Lock className="h-3.5 w-3.5 text-ink-300" /> : null}
-                  {item.premium && isPremium ? (
+                  {item.badge && !locked ? (
                     <Badge tone="accent" className="px-1.5 py-0 text-[10px]">
-                      Pro
+                      {item.badge}
                     </Badge>
                   ) : null}
                 </NavLink>

@@ -9,18 +9,25 @@ import Badge from '../ui/Badge';
 const titleFromPath = (pathname) => adminNav.find((i) => pathname.startsWith(i.to))?.label ?? 'Admin';
 
 export default function AdminLayout() {
-  const { user } = useAuth();
+  const { user, loading } = useAuth();
   const location = useLocation();
 
+  if (loading) return null;
   if (!user) return <Navigate to="/login" replace />;
-  if (user.role !== 'admin') return <Navigate to="/app/dashboard" replace />;
+  if (!['admin', 'super_admin'].includes(user.role)) return <Navigate to="/app/dashboard" replace />;
+
+  const isSuperAdmin = user.role === 'super_admin';
+  const items = adminNav.map((item) => ({
+    ...item,
+    locked: item.superAdminOnly && !isSuperAdmin,
+    badge: item.superAdminOnly ? 'Super Admin' : undefined,
+  }));
 
   return (
     <div className="flex h-screen overflow-hidden bg-ink-50 dark:bg-ink-950">
       <Sidebar
         brandTo="/admin/overview"
-        items={adminNav}
-        isPremium
+        items={items}
         footer={
           <Link to="/app/dashboard" className="block rounded-xl border border-ink-200 p-3 text-center text-xs font-medium text-ink-500 hover:bg-ink-50 dark:border-ink-700 dark:text-ink-400 dark:hover:bg-ink-800">
             ← Back to trader app
@@ -32,8 +39,8 @@ export default function AdminLayout() {
           title={titleFromPath(location.pathname)}
           right={
             <>
-              <Badge tone="accent" className="hidden sm:inline-flex">Administrator</Badge>
-              <MobileNav items={adminNav} />
+              <Badge tone="accent" className="hidden sm:inline-flex">{isSuperAdmin ? 'Super Admin' : 'Administrator'}</Badge>
+              <MobileNav items={items} />
             </>
           }
         />

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import clsx from 'clsx';
 import { User, ShieldCheck, Bell, Palette, Sparkles, LineChart, Lock, CreditCard } from 'lucide-react';
 import PageHeader from '../../components/ui/PageHeader';
@@ -8,7 +8,7 @@ import Button from '../../components/ui/Button';
 import Badge from '../../components/ui/Badge';
 import { useAuth } from '../../context/AuthContext';
 import { useTheme } from '../../context/ThemeContext';
-import { usePersistedState } from '../../lib/usePersistedState';
+import { api } from '../../lib/api';
 
 const sections = [
   { id: 'profile', label: 'Profile', icon: User },
@@ -42,23 +42,53 @@ export default function Settings() {
   const { user } = useAuth();
   const { theme, setTheme } = useTheme();
   const [active, setActive] = useState('profile');
-  const [notifPrefs, setNotifPrefs] = usePersistedState('settings.notifications', {
+  const [notifPrefs, setNotifPrefsState] = useState({
     checklist: true,
     journal: true,
     riskWarnings: true,
     weeklyReview: true,
     aiInsights: false,
   });
-  const [aiPrefs, setAiPrefs] = usePersistedState('settings.ai', {
+  const [aiPrefs, setAiPrefsState] = useState({
     tone: 'Direct & challenging',
     autoSuggest: true,
     rememberContext: true,
   });
-  const [tradingPrefs, setTradingPrefs] = usePersistedState('settings.trading', {
+  const [tradingPrefs, setTradingPrefsState] = useState({
     baseCurrency: 'USD',
     dailyLossLimit: 2,
     defaultRisk: 1,
   });
+
+  useEffect(() => {
+    api.get('/settings').then(({ settings }) => {
+      setNotifPrefsState(settings.notifications);
+      setAiPrefsState(settings.aiPreferences);
+      setTradingPrefsState(settings.tradingPreferences);
+    });
+  }, []);
+
+  const setNotifPrefs = (updater) => {
+    setNotifPrefsState((prev) => {
+      const next = typeof updater === 'function' ? updater(prev) : updater;
+      api.put('/settings', { notifications: next });
+      return next;
+    });
+  };
+  const setAiPrefs = (updater) => {
+    setAiPrefsState((prev) => {
+      const next = typeof updater === 'function' ? updater(prev) : updater;
+      api.put('/settings', { aiPreferences: next });
+      return next;
+    });
+  };
+  const setTradingPrefs = (updater) => {
+    setTradingPrefsState((prev) => {
+      const next = typeof updater === 'function' ? updater(prev) : updater;
+      api.put('/settings', { tradingPreferences: next });
+      return next;
+    });
+  };
 
   return (
     <div>

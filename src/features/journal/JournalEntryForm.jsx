@@ -52,51 +52,53 @@ export default function JournalEntryForm({ onSubmit, onCancel }) {
   return (
     <form onSubmit={handleSubmit} className="space-y-5">
       <div className="grid grid-cols-2 gap-4">
-        <Input label="Date" type="date" value={form.date} onChange={set('date')} required />
-        <Select label="Market" value={form.market} onChange={set('market')}>
+        <Input name="date" label="Date" type="date" value={form.date} onChange={set('date')} required />
+        <Select name="market" label="Market" value={form.market} onChange={set('market')}>
           {markets.map((m) => <option key={m}>{m}</option>)}
         </Select>
-        <Select label="Session" value={form.session} onChange={set('session')}>
+        <Select name="session" label="Session" value={form.session} onChange={set('session')}>
           {sessions.map((s) => <option key={s}>{s}</option>)}
         </Select>
-        <Select label="Direction" value={form.direction} onChange={set('direction')}>
+        <Select name="direction" label="Direction" value={form.direction} onChange={set('direction')}>
           <option>Long</option>
           <option>Short</option>
         </Select>
       </div>
 
-      <Input label="Strategy" placeholder="e.g. Liquidity Sweep + FVG" value={form.strategy} onChange={set('strategy')} required />
+      <Input name="strategy" label="Strategy" placeholder="e.g. Liquidity Sweep + FVG" value={form.strategy} onChange={set('strategy')} required />
 
       <div className="grid grid-cols-3 gap-4">
-        <Input label="Entry" type="number" step="any" value={form.entry} onChange={set('entry')} required />
-        <Input label="Stop Loss" type="number" step="any" value={form.stopLoss} onChange={set('stopLoss')} required />
-        <Input label="Take Profit" type="number" step="any" value={form.takeProfit} onChange={set('takeProfit')} required />
+        <Input name="entry" label="Entry" type="number" step="any" value={form.entry} onChange={set('entry')} required />
+        <Input name="stopLoss" label="Stop Loss" type="number" step="any" value={form.stopLoss} onChange={set('stopLoss')} required />
+        <Input name="takeProfit" label="Take Profit" type="number" step="any" value={form.takeProfit} onChange={set('takeProfit')} required />
       </div>
 
       <div className="grid grid-cols-3 gap-4">
-        <Input label="Risk (%)" type="number" step="any" value={form.risk} onChange={set('risk')} />
-        <Select label="Result" value={form.result} onChange={set('result')}>
+        <Input name="risk" label="Risk (%)" type="number" step="any" value={form.risk} onChange={set('risk')} />
+        <Select name="result" label="Result" value={form.result} onChange={set('result')}>
           <option value="win">Win</option>
           <option value="loss">Loss</option>
           <option value="breakeven">Breakeven</option>
         </Select>
-        <Input label="P&L ($)" type="number" step="any" value={form.pnl} onChange={set('pnl')} />
+        <Input name="pnl" label="P&L ($)" type="number" step="any" value={form.pnl} onChange={set('pnl')} />
       </div>
 
       <div className="grid grid-cols-2 gap-4">
-        <Select label="Emotion before trade" value={form.emotionBefore} onChange={set('emotionBefore')}>
+        <Select name="emotionBefore" label="Emotion before trade" value={form.emotionBefore} onChange={set('emotionBefore')}>
           {emotions.map((e) => <option key={e}>{e}</option>)}
         </Select>
-        <Select label="Emotion after trade" value={form.emotionAfter} onChange={set('emotionAfter')}>
+        <Select name="emotionAfter" label="Emotion after trade" value={form.emotionAfter} onChange={set('emotionAfter')}>
           {emotions.map((e) => <option key={e}>{e}</option>)}
         </Select>
       </div>
 
       <div>
-        <span className="mb-1.5 block text-sm font-medium text-ink-700 dark:text-ink-200">
+        <label htmlFor="confidence" className="mb-1.5 block text-sm font-medium text-ink-700 dark:text-ink-200">
           Confidence ({form.confidence}/10)
-        </span>
+        </label>
         <input
+          id="confidence"
+          name="confidence"
           type="range"
           min="1"
           max="10"
@@ -106,11 +108,11 @@ export default function JournalEntryForm({ onSubmit, onCancel }) {
         />
       </div>
 
-      <Input label="Mistakes" placeholder="What did you do wrong, if anything?" value={form.mistakes} onChange={set('mistakes')} />
-      <Input label="Lessons" placeholder="What will you do differently next time?" value={form.lessons} onChange={set('lessons')} />
+      <Input name="mistakes" label="Mistakes" placeholder="What did you do wrong, if anything?" value={form.mistakes} onChange={set('mistakes')} />
+      <Input name="lessons" label="Lessons" placeholder="What will you do differently next time?" value={form.lessons} onChange={set('lessons')} />
 
-      <label className="flex items-center gap-2 text-sm text-ink-600 dark:text-ink-300">
-        <input type="checkbox" checked={form.checklistComplete} onChange={set('checklistComplete')} className="h-4 w-4 rounded accent-ink-900" />
+      <label htmlFor="checklistComplete" className="flex items-center gap-2 text-sm text-ink-600 dark:text-ink-300">
+        <input id="checklistComplete" name="checklistComplete" type="checkbox" checked={form.checklistComplete} onChange={set('checklistComplete')} className="h-4 w-4 rounded accent-ink-900" />
         Pre-trade checklist was completed for this trade
       </label>
 

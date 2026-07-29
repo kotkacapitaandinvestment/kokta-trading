@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Plus, Search, Sparkles, CheckCircle2, XCircle } from 'lucide-react';
 import PageHeader from '../../components/ui/PageHeader';
 import Card, { CardBody } from '../../components/ui/Card';
@@ -6,10 +6,10 @@ import Badge from '../../components/ui/Badge';
 import Button from '../../components/ui/Button';
 import Modal from '../../components/ui/Modal';
 import EmptyState from '../../components/ui/EmptyState';
+import Skeleton from '../../components/ui/Skeleton';
 import { NotebookPen } from 'lucide-react';
 import JournalEntryForm from './JournalEntryForm';
-import { usePersistedState } from '../../lib/usePersistedState';
-import { journalEntries as seedEntries } from '../../lib/mockData';
+import { api } from '../../lib/api';
 
 const resultTone = { win: 'profit', loss: 'loss', breakeven: 'neutral' };
 
@@ -24,10 +24,18 @@ function aiReviewFor(entry) {
 }
 
 export default function Journal() {
-  const [entries, setEntries] = usePersistedState('journal.entries', seedEntries);
+  const [entries, setEntries] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [detail, setDetail] = useState(null);
+
+  useEffect(() => {
+    api
+      .get('/journal')
+      .then(({ entries }) => setEntries(entries))
+      .finally(() => setLoading(false));
+  }, []);
 
   const filtered = useMemo(
     () =>
@@ -37,8 +45,9 @@ export default function Journal() {
     [entries, search],
   );
 
-  const handleSave = (entry) => {
-    setEntries((prev) => [entry, ...prev]);
+  const handleSave = async (entry) => {
+    const { entry: saved } = await api.post('/journal', entry);
+    setEntries((prev) => [saved, ...prev]);
     setShowForm(false);
   };
 
@@ -67,7 +76,13 @@ export default function Journal() {
         </div>
       </div>
 
-      {filtered.length === 0 ? (
+      {loading ? (
+        <div className="space-y-2">
+          <Skeleton className="h-12 w-full" />
+          <Skeleton className="h-12 w-full" />
+          <Skeleton className="h-12 w-full" />
+        </div>
+      ) : filtered.length === 0 ? (
         <EmptyState
           icon={NotebookPen}
           title="No journal entries yet"

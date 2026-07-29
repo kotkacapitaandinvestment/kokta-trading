@@ -1,0 +1,86 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  trader
+  premium
+  admin
+  super_admin
+}
+
+model User {
+  id           String   @id @default(cuid())
+  name         String
+  email        String   @unique
+  passwordHash String
+  initials     String
+  role         Role     @default(trader)
+  plan         String   @default("Free")
+  createdAt    DateTime @default(now())
+
+  journalEntries JournalEntry[]
+  checklistDays  ChecklistDay[]
+  settings       UserSettings?
+}
+
+model JournalEntry {
+  id                String   @id @default(cuid())
+  userId            String
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  date              String
+  market            String
+  session           String
+  strategy          String
+  direction         String
+  entry             Float
+  stopLoss          Float
+  takeProfit        Float
+  risk              Float
+  reward            Float
+  result            String
+  pnl               Float
+  emotionBefore     String
+  emotionAfter      String
+  confidence        Int
+  mistakes          String   @default("")
+  lessons           String   @default("")
+  checklistComplete Boolean  @default(false)
+  createdAt         DateTime @default(now())
+
+  @@index([userId])
+}
+
+model ChecklistDay {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  date   String
+  items  Json   @default("{}")
+
+  @@unique([userId, date])
+}
+
+model UserSettings {
+  id                String @id @default(cuid())
+  userId            String @unique
+  user              User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  notifications     Json   @default("{\"checklist\": true, \"journal\": true, \"riskWarnings\": true, \"weeklyReview\": true, \"aiInsights\": false}")
+  aiPreferences     Json   @default("{\"tone\": \"Direct & challenging\", \"autoSuggest\": true, \"rememberContext\": true}")
+  tradingPreferences Json  @default("{\"baseCurrency\": \"USD\", \"dailyLossLimit\": 2, \"defaultRisk\": 1}")
+}
+
+model Integration {
+  id             String   @id @default(cuid())
+  provider       String   @unique
+  apiKeyCipher   String
+  model          String
+  baseUrl        String
+  enabled        Boolean  @default(true)
+  updatedAt      DateTime @updatedAt
+}

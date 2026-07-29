@@ -3,12 +3,14 @@ import { ImagePlus, Send, Star, Sparkles } from 'lucide-react';
 import PageHeader from '../../components/ui/PageHeader';
 import { Select } from '../../components/ui/Input';
 import Button from '../../components/ui/Button';
+import Badge from '../../components/ui/Badge';
 import Card from '../../components/ui/Card';
 import ConversationList from './components/ConversationList';
 import ChatMessage from './components/ChatMessage';
 import { aiConversations } from '../../lib/mockData';
 import { generateAssistantReply, markets, timeframes } from './mockAssistant';
 import { useAuth } from '../../context/AuthContext';
+import { api } from '../../lib/api';
 
 export default function KotkaAI() {
   const { user } = useAuth();
@@ -21,6 +23,7 @@ export default function KotkaAI() {
   const [input, setInput] = useState('');
   const [pendingImage, setPendingImage] = useState(null);
   const [thinking, setThinking] = useState(false);
+  const [lastSource, setLastSource] = useState(null);
   const fileInputRef = useRef(null);
   const usageToday = 6;
   const usageLimit = isPremium ? Infinity : 10;
@@ -57,10 +60,15 @@ export default function KotkaAI() {
     reader.readAsDataURL(file);
   };
 
-  const handleSend = () => {
+  const handleSend = async () => {
     if (!input.trim() && !pendingImage) return;
-    const userMsg = { role: 'user', content: input.trim() || 'Chart attached for review.', image: pendingImage };
+    const userText = input.trim() || 'Chart attached for review.';
+    const userMsg = { role: 'user', content: userText, image: pendingImage };
     const nextTitle = active.messages.length === 0 ? input.slice(0, 48) || 'Chart review' : active.title;
+    const historyForApi = [...active.messages, userMsg].map((m) => ({
+      role: m.role,
+      content: m.image ? `${m.content}\n[Trader attached a chart screenshot for this message.]` : m.content,
+    }));
 
     updateActive((c) => ({
       ...c,
@@ -74,14 +82,23 @@ export default function KotkaAI() {
     setPendingImage(null);
     setThinking(true);
 
-    setTimeout(() => {
-      const reply = generateAssistantReply(userMsg.content, market);
+    try {
+      const { source, reply } = await api.post('/ai/chat', { market, timeframe, messages: historyForApi });
+      setLastSource(source);
+      const finalReply = source === 'nvidia' && reply ? reply : generateAssistantReply(userText, market);
       updateActive((c) => ({
         ...c,
-        messages: [...c.messages, { role: 'assistant', content: reply }],
+        messages: [...c.messages, { role: 'assistant', content: finalReply }],
       }));
+    } catch {
+      setLastSource('mock');
+      updateActive((c) => ({
+        ...c,
+        messages: [...c.messages, { role: 'assistant', content: generateAssistantReply(userText, market) }],
+      }));
+    } finally {
       setThinking(false);
-    }, 900);
+    }
   };
 
   return (
@@ -119,6 +136,11 @@ export default function KotkaAI() {
               </Select>
             </div>
             <div className="flex items-center gap-3">
+              {lastSource ? (
+                <Badge tone={lastSource === 'nvidia' ? 'profit' : 'neutral'}>
+                  {lastSource === 'nvidia' ? 'Live · NVIDIA' : 'Scripted mentor'}
+                </Badge>
+              ) : null}
               {!isPremium ? (
                 <span className="text-xs text-ink-400">{usageToday}/{usageLimit} today</span>
               ) : (
