@@ -15,13 +15,17 @@ export function requireAuth(req, res, next) {
 }
 
 export function requireRole(...roles) {
-  return async (req, res, next) => {
-    const user = await prisma.user.findUnique({ where: { id: req.userId } });
-    if (!user || !roles.includes(user.role)) {
-      return res.status(403).json({ error: 'You do not have permission to perform this action.' });
-    }
-    req.user = user;
-    next();
+  return (req, res, next) => {
+    prisma.user
+      .findUnique({ where: { id: req.userId } })
+      .then((user) => {
+        if (!user || !roles.includes(user.role)) {
+          return res.status(403).json({ error: 'You do not have permission to perform this action.' });
+        }
+        req.user = user;
+        next();
+      })
+      .catch(next);
   };
 }
 

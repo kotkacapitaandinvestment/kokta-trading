@@ -3,6 +3,7 @@ import { prisma } from '../lib/prisma.js';
 import { requireAuth, requireRole } from '../middleware/auth.js';
 import { encryptSecret, decryptSecret, maskSecret } from '../lib/crypto.js';
 import { nvidiaChatCompletion, NVIDIA_DEFAULT_BASE_URL, NVIDIA_DEFAULT_MODEL } from '../lib/nvidia.js';
+import { asyncHandler } from '../lib/asyncHandler.js';
 
 export const adminIntegrationsRouter = Router();
 adminIntegrationsRouter.use(requireAuth, requireRole('super_admin'));
@@ -19,12 +20,12 @@ function toPublicIntegration(row) {
   };
 }
 
-adminIntegrationsRouter.get('/', async (req, res) => {
+adminIntegrationsRouter.get('/', asyncHandler(async (req, res) => {
   const rows = await prisma.integration.findMany();
   res.json({ integrations: rows.map(toPublicIntegration) });
-});
+}));
 
-adminIntegrationsRouter.put('/:provider', async (req, res) => {
+adminIntegrationsRouter.put('/:provider', asyncHandler(async (req, res) => {
   const { provider } = req.params;
   const { apiKey, model, baseUrl, enabled } = req.body ?? {};
 
@@ -51,9 +52,9 @@ adminIntegrationsRouter.put('/:provider', async (req, res) => {
   });
 
   res.json({ integration: toPublicIntegration(row) });
-});
+}));
 
-adminIntegrationsRouter.post('/:provider/test', async (req, res) => {
+adminIntegrationsRouter.post('/:provider/test', asyncHandler(async (req, res) => {
   const row = await prisma.integration.findUnique({ where: { provider: req.params.provider } });
   if (!row) return res.status(404).json({ error: 'Integration not configured.' });
 
@@ -69,4 +70,4 @@ adminIntegrationsRouter.post('/:provider/test', async (req, res) => {
   } catch (err) {
     res.status(502).json({ ok: false, error: err.message });
   }
-});
+}));

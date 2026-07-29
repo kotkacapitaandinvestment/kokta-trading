@@ -1,19 +1,20 @@
 import { Router } from 'express';
 import { prisma } from '../lib/prisma.js';
 import { requireAuth } from '../middleware/auth.js';
+import { asyncHandler } from '../lib/asyncHandler.js';
 
 export const journalRouter = Router();
 journalRouter.use(requireAuth);
 
-journalRouter.get('/', async (req, res) => {
+journalRouter.get('/', asyncHandler(async (req, res) => {
   const entries = await prisma.journalEntry.findMany({
     where: { userId: req.userId },
     orderBy: { date: 'desc' },
   });
   res.json({ entries });
-});
+}));
 
-journalRouter.post('/', async (req, res) => {
+journalRouter.post('/', asyncHandler(async (req, res) => {
   const b = req.body ?? {};
   if (!b.date || !b.market || !b.strategy) {
     return res.status(400).json({ error: 'date, market, and strategy are required.' });
@@ -43,4 +44,4 @@ journalRouter.post('/', async (req, res) => {
     },
   });
   res.status(201).json({ entry });
-});
+}));

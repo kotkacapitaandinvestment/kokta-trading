@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import { prisma } from '../lib/prisma.js';
 import { requireAuth, issueSessionCookie } from '../middleware/auth.js';
 import { toPublicUser } from '../lib/serialize.js';
+import { asyncHandler } from '../lib/asyncHandler.js';
 
 export const authRouter = Router();
 
@@ -15,7 +16,7 @@ function initialsFor(name) {
     .toUpperCase();
 }
 
-authRouter.post('/signup', async (req, res) => {
+authRouter.post('/signup', asyncHandler(async (req, res) => {
   const { name, email, password } = req.body ?? {};
   if (!name || !email || !password || password.length < 8) {
     return res.status(400).json({ error: 'Name, email, and an 8+ character password are required.' });
@@ -39,9 +40,9 @@ authRouter.post('/signup', async (req, res) => {
 
   issueSessionCookie(res, user.id);
   res.status(201).json({ user: toPublicUser(user) });
-});
+}));
 
-authRouter.post('/login', async (req, res) => {
+authRouter.post('/login', asyncHandler(async (req, res) => {
   const { email, password } = req.body ?? {};
   if (!email || !password) return res.status(400).json({ error: 'Email and password are required.' });
 
@@ -53,9 +54,9 @@ authRouter.post('/login', async (req, res) => {
 
   issueSessionCookie(res, user.id);
   res.json({ user: toPublicUser(user) });
-});
+}));
 
-authRouter.post('/provider', async (req, res) => {
+authRouter.post('/provider', asyncHandler(async (req, res) => {
   const { provider } = req.body ?? {};
   if (!provider) return res.status(400).json({ error: 'Provider is required.' });
 
@@ -76,11 +77,11 @@ authRouter.post('/provider', async (req, res) => {
 
   issueSessionCookie(res, user.id);
   res.json({ user: toPublicUser(user) });
-});
+}));
 
 // Demo-only affordance so the admin dashboard can be previewed without a real admin account.
 // A production build would gate role changes behind an actual admin action, not self-service.
-authRouter.patch('/role', requireAuth, async (req, res) => {
+authRouter.patch('/role', requireAuth, asyncHandler(async (req, res) => {
   const { role } = req.body ?? {};
   if (!['trader', 'premium', 'admin', 'super_admin'].includes(role)) {
     return res.status(400).json({ error: 'Invalid role.' });
@@ -90,15 +91,15 @@ authRouter.patch('/role', requireAuth, async (req, res) => {
   const plan = role === 'trader' ? 'Free' : current.plan === 'Free' ? 'Premium' : current.plan;
   const user = await prisma.user.update({ where: { id: req.userId }, data: { role, plan } });
   res.json({ user: toPublicUser(user) });
-});
+}));
 
 authRouter.post('/logout', (req, res) => {
   res.clearCookie('kotka_session');
   res.json({ ok: true });
 });
 
-authRouter.get('/me', requireAuth, async (req, res) => {
+authRouter.get('/me', requireAuth, asyncHandler(async (req, res) => {
   const user = await prisma.user.findUnique({ where: { id: req.userId } });
   if (!user) return res.status(401).json({ error: 'Not authenticated' });
   res.json({ user: toPublicUser(user) });
-});
+}));

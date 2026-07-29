@@ -3,6 +3,7 @@ import { prisma } from '../lib/prisma.js';
 import { requireAuth } from '../middleware/auth.js';
 import { decryptSecret } from '../lib/crypto.js';
 import { nvidiaChatCompletion } from '../lib/nvidia.js';
+import { asyncHandler } from '../lib/asyncHandler.js';
 
 export const aiRouter = Router();
 aiRouter.use(requireAuth);
@@ -22,7 +23,7 @@ Your job is to build professional traders, not find them trades:
 Current context: the trader is discussing the ${market} market on the ${timeframe} timeframe.`;
 }
 
-aiRouter.post('/chat', async (req, res) => {
+aiRouter.post('/chat', asyncHandler(async (req, res) => {
   const { market = 'Forex', timeframe = '15m', messages = [] } = req.body ?? {};
 
   const integration = await prisma.integration.findUnique({ where: { provider: 'nvidia' } });
@@ -45,4 +46,4 @@ aiRouter.post('/chat', async (req, res) => {
     console.error('NVIDIA chat completion failed:', err.message);
     res.json({ source: 'mock' });
   }
-});
+}));

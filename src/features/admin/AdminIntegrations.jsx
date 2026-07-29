@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Plug, CheckCircle2, XCircle, Loader2 } from 'lucide-react';
+import { Plug, CheckCircle2, XCircle, Loader2, AlertTriangle } from 'lucide-react';
 import PageHeader from '../../components/ui/PageHeader';
 import Card, { CardHeader, CardBody } from '../../components/ui/Card';
 import Input from '../../components/ui/Input';
@@ -16,19 +16,23 @@ export default function AdminIntegrations() {
   const [integration, setIntegration] = useState(null);
   const [form, setForm] = useState({ apiKey: '', model: NVIDIA_DEFAULTS.model, baseUrl: NVIDIA_DEFAULTS.baseUrl, enabled: true });
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(null);
   const [saving, setSaving] = useState(false);
   const [testResult, setTestResult] = useState(null);
   const [testing, setTesting] = useState(false);
 
   useEffect(() => {
-    api.get('/admin/integrations').then(({ integrations }) => {
-      const nvidia = integrations.find((i) => i.provider === 'nvidia');
-      if (nvidia) {
-        setIntegration(nvidia);
-        setForm((f) => ({ ...f, model: nvidia.model, baseUrl: nvidia.baseUrl, enabled: nvidia.enabled }));
-      }
-      setLoading(false);
-    });
+    api
+      .get('/admin/integrations')
+      .then(({ integrations }) => {
+        const nvidia = integrations.find((i) => i.provider === 'nvidia');
+        if (nvidia) {
+          setIntegration(nvidia);
+          setForm((f) => ({ ...f, model: nvidia.model, baseUrl: nvidia.baseUrl, enabled: nvidia.enabled }));
+        }
+      })
+      .catch((err) => setLoadError(err.message))
+      .finally(() => setLoading(false));
   }, []);
 
   const handleSave = async (e) => {
@@ -57,7 +61,13 @@ export default function AdminIntegrations() {
     }
   };
 
-  if (loading) return null;
+  if (loading) {
+    return (
+      <div className="flex items-center gap-2 py-12 text-sm text-ink-400">
+        <Loader2 className="h-4 w-4 animate-spin" /> Loading integrations…
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -66,6 +76,13 @@ export default function AdminIntegrations() {
         title="Integrations"
         description="Connect the AI providers that power Kotka AI. Keys are encrypted at rest and never sent to the browser."
       />
+
+      {loadError ? (
+        <div className="flex items-start gap-2 rounded-lg bg-loss-50 p-3 text-sm text-loss-600 dark:bg-loss-500/10 dark:text-loss-400">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+          <span>Couldn't load integrations: {loadError}</span>
+        </div>
+      ) : null}
 
       <Card>
         <CardHeader
