@@ -1,21 +1,29 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import PageHeader from '../../components/ui/PageHeader';
 import Badge from '../../components/ui/Badge';
 import Button from '../../components/ui/Button';
 import AdminTable from './components/AdminTable';
-import { usePersistedState } from '../../lib/usePersistedState';
-import { adminUsers } from '../../lib/mockData';
+import { api } from '../../lib/api';
 
 const statusTone = { active: 'profit', suspended: 'warning', banned: 'loss' };
 
 export default function AdminUsers() {
-  const [users, setUsers] = usePersistedState('admin.users', adminUsers);
+  const [users, setUsers] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState(null);
 
-  const updateUser = (id, patch) => {
+  useEffect(() => {
+    api.get('/admin/users').then(({ users }) => setUsers(users)).finally(() => setLoading(false));
+  }, []);
+
+  const updateUser = async (id, patch) => {
     setBusyId(id);
-    setUsers((prev) => prev.map((u) => (u.id === id ? { ...u, ...patch } : u)));
-    setTimeout(() => setBusyId(null), 300);
+    try {
+      const { user } = await api.patch(`/admin/users/${id}`, patch);
+      setUsers((prev) => prev.map((u) => (u.id === id ? user : u)));
+    } finally {
+      setBusyId(null);
+    }
   };
 
   const columns = [
@@ -32,7 +40,7 @@ export default function AdminUsers() {
     { key: 'role', label: 'Role', render: (u) => <Badge tone="accent">{u.role}</Badge> },
     { key: 'plan', label: 'Plan' },
     { key: 'status', label: 'Status', render: (u) => <Badge tone={statusTone[u.status]}>{u.status}</Badge> },
-    { key: 'lastActive', label: 'Last Active' },
+    { key: 'lastActive', label: 'Last Active', render: (u) => u.lastActive ?? '—' },
     {
       key: 'actions',
       label: 'Actions',
@@ -70,7 +78,7 @@ export default function AdminUsers() {
         title="Users"
         description="Search, verify, suspend, and manage subscriptions for every trader on the platform."
       />
-      <AdminTable columns={columns} rows={users} searchKeys={['name', 'email', 'plan', 'status']} />
+      <AdminTable columns={columns} rows={users} searchKeys={['name', 'email', 'plan', 'status']} emptyLabel={loading ? 'Loading users…' : 'No users found'} />
     </div>
   );
 }

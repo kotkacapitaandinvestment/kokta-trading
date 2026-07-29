@@ -34,6 +34,7 @@ authRouter.post('/signup', asyncHandler(async (req, res) => {
       initials: initialsFor(name),
       role: 'trader',
       plan: 'Free',
+      lastLoginAt: new Date(),
       settings: { create: {} },
     },
   });
@@ -52,8 +53,13 @@ authRouter.post('/login', asyncHandler(async (req, res) => {
   const valid = await bcrypt.compare(password, user.passwordHash);
   if (!valid) return res.status(401).json({ error: 'Invalid email or password.' });
 
-  issueSessionCookie(res, user.id);
-  res.json({ user: toPublicUser(user) });
+  if (user.status !== 'active') {
+    return res.status(403).json({ error: 'This account has been suspended. Contact support for help.' });
+  }
+
+  const updated = await prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
+  issueSessionCookie(res, updated.id);
+  res.json({ user: toPublicUser(updated) });
 }));
 
 authRouter.post('/provider', asyncHandler(async (req, res) => {
@@ -63,7 +69,7 @@ authRouter.post('/provider', asyncHandler(async (req, res) => {
   const email = `demo+${provider}@kotka.trading`;
   const user = await prisma.user.upsert({
     where: { email },
-    update: {},
+    update: { lastLoginAt: new Date() },
     create: {
       name: 'Alex Morgan',
       email,
@@ -71,6 +77,7 @@ authRouter.post('/provider', asyncHandler(async (req, res) => {
       initials: initialsFor('Alex Morgan'),
       role: 'trader',
       plan: 'Free',
+      lastLoginAt: new Date(),
       settings: { create: {} },
     },
   });
