@@ -32,9 +32,11 @@ model User {
   createdAt    DateTime   @default(now())
   lastLoginAt  DateTime?
 
-  journalEntries JournalEntry[]
-  checklistDays  ChecklistDay[]
-  settings       UserSettings?
+  journalEntries   JournalEntry[]
+  checklistDays    ChecklistDay[]
+  settings         UserSettings?
+  aiUsageLogs      AIUsageLog[]
+  simulatorSessions SimulatorSession[]
 }
 
 model JournalEntry {
@@ -127,4 +129,30 @@ model MarketNewsItem {
   market      String
   impact      String   @default("medium")
   publishedAt DateTime @default(now())
+}
+
+model AIUsageLog {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  source     String
+  model      String
+  latencyMs  Int
+  createdAt  DateTime @default(now())
+
+  @@index([userId])
+  @@index([createdAt])
+}
+
+model SimulatorSession {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  difficulty String
+  overall    Int
+  isBest     Boolean
+  createdAt  DateTime @default(now())
+
+  @@index([userId])
+  @@index([createdAt])
 }

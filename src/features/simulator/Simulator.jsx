@@ -6,6 +6,7 @@ import Card, { CardHeader, CardBody } from '../../components/ui/Card';
 import Button from '../../components/ui/Button';
 import Badge from '../../components/ui/Badge';
 import { difficulties, getScenario, scoreDecision } from './scenarios';
+import { api } from '../../lib/api';
 
 export default function Simulator() {
   const [difficulty, setDifficulty] = useState(null);
@@ -19,7 +20,9 @@ export default function Simulator() {
   };
 
   const choose = (option) => {
-    setResult(scoreDecision(scenario, option));
+    const scored = scoreDecision(scenario, option);
+    setResult(scored);
+    api.post('/simulator/sessions', { difficulty, overall: scored.overall, isBest: scored.isBest }).catch(() => {});
   };
 
   const nextScenario = () => {

@@ -1,14 +1,8 @@
+import { useEffect, useState } from 'react';
 import PageHeader from '../../components/ui/PageHeader';
 import StatTile from '../../components/ui/StatTile';
 import AdminTable from './components/AdminTable';
-
-const rows = [
-  { id: 'd1', difficulty: 'Beginner', sessions: 8420, avgScore: 74 },
-  { id: 'd2', difficulty: 'Intermediate', sessions: 6210, avgScore: 66 },
-  { id: 'd3', difficulty: 'Advanced', sessions: 3140, avgScore: 58 },
-  { id: 'd4', difficulty: 'Professional', sessions: 1280, avgScore: 51 },
-  { id: 'd5', difficulty: 'Institutional Chaos', sessions: 640, avgScore: 44 },
-];
+import { api } from '../../lib/api';
 
 const columns = [
   { key: 'difficulty', label: 'Difficulty' },
@@ -17,16 +11,28 @@ const columns = [
 ];
 
 export default function AdminSimulatorStats() {
+  const [stats, setStats] = useState(null);
+
+  useEffect(() => {
+    api.get('/admin/stats/simulator').then(setStats);
+  }, []);
+
+  if (!stats) return null;
+
   return (
     <div className="space-y-6">
       <PageHeader eyebrow="Admin" title="Simulator Statistics" description="Engagement and scoring distribution across simulator difficulty levels." />
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <StatTile label="Sessions (30d)" value="19,690" delta="+12%" deltaTone="profit" />
-        <StatTile label="Avg Score" value="62/100" delta="+2" deltaTone="profit" />
-        <StatTile label="Completion Rate" value="88%" />
-        <StatTile label="Most Played" value="Beginner" />
+        <StatTile label="Sessions (30d)" value={stats.sessions30d.toLocaleString()} />
+        <StatTile label="Avg Score" value={`${stats.avgScore}/100`} />
+        <StatTile label="Most Played" value={stats.mostPlayed ?? '—'} />
       </div>
-      <AdminTable columns={columns} rows={rows} searchKeys={['difficulty']} />
+      <AdminTable
+        columns={columns}
+        rows={stats.difficulties}
+        searchKeys={['difficulty']}
+        emptyLabel="No simulator sessions logged yet"
+      />
     </div>
   );
 }

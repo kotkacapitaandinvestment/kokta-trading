@@ -23,11 +23,20 @@ Your job is to build professional traders, not find them trades:
 Current context: the trader is discussing the ${market} market on the ${timeframe} timeframe.`;
 }
 
+function logUsage(userId, source, model, startedAt) {
+  const latencyMs = Date.now() - startedAt;
+  prisma.aIUsageLog.create({ data: { userId, source, model, latencyMs } }).catch((err) => {
+    console.error('Failed to record AI usage log:', err.message);
+  });
+}
+
 aiRouter.post('/chat', asyncHandler(async (req, res) => {
   const { market = 'Forex', timeframe = '15m', messages = [] } = req.body ?? {};
+  const startedAt = Date.now();
 
   const integration = await prisma.integration.findUnique({ where: { provider: 'nvidia' } });
   if (!integration || !integration.enabled) {
+    logUsage(req.userId, 'mock', 'scripted-mentor', startedAt);
     return res.json({ source: 'mock' });
   }
 
@@ -41,9 +50,11 @@ aiRouter.post('/chat', asyncHandler(async (req, res) => {
         ...messages.map((m) => ({ role: m.role, content: m.content })),
       ],
     });
+    logUsage(req.userId, 'nvidia', integration.model, startedAt);
     res.json({ source: 'nvidia', reply });
   } catch (err) {
     console.error('NVIDIA chat completion failed:', err.message);
+    logUsage(req.userId, 'mock', 'scripted-mentor', startedAt);
     res.json({ source: 'mock' });
   }
 }));

@@ -1,34 +1,43 @@
+import { useEffect, useState } from 'react';
 import { BarChart, Bar, ResponsiveContainer, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
 import PageHeader from '../../components/ui/PageHeader';
 import Card, { CardHeader, CardBody } from '../../components/ui/Card';
 import StatTile from '../../components/ui/StatTile';
 import AdminTable from './components/AdminTable';
-import { aiUsageByModel } from '../../lib/mockData';
+import { api } from '../../lib/api';
 
 const columns = [
   { key: 'model', label: 'Model' },
   { key: 'requests', label: 'Requests (30d)', render: (r) => r.requests.toLocaleString() },
-  { key: 'avgCostCents', label: 'Avg cost / request', render: (r) => `$${(r.avgCostCents / 100).toFixed(3)}` },
+  { key: 'avgLatencyMs', label: 'Avg latency', render: (r) => `${r.avgLatencyMs}ms` },
 ];
 
 export default function AdminAIUsage() {
+  const [stats, setStats] = useState(null);
+
+  useEffect(() => {
+    api.get('/admin/stats/ai-usage').then(setStats);
+  }, []);
+
+  if (!stats) return null;
+
   return (
     <div className="space-y-6">
-      <PageHeader eyebrow="Admin" title="AI Usage" description="Monitor Kotka AI cost, volume, rate limits, and response quality." />
+      <PageHeader eyebrow="Admin" title="AI Usage" description="Monitor Kotka AI volume, latency, and how often it falls back to the scripted mentor." />
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <StatTile label="Requests (30d)" value="70,300" delta="+9.4%" deltaTone="profit" />
-        <StatTile label="Total AI Cost (30d)" value="$1,842" delta="+6.1%" deltaTone="loss" />
-        <StatTile label="Avg Response Time" value="1.8s" delta="-0.2s" deltaTone="profit" />
-        <StatTile label="Flagged Responses" value="12" hint="Under manual review" />
+        <StatTile label="Requests (30d)" value={stats.totalRequests30d.toLocaleString()} />
+        <StatTile label="Requests Today" value={stats.requestsToday.toLocaleString()} />
+        <StatTile label="Avg Response Time" value={`${(stats.avgLatencyMs / 1000).toFixed(2)}s`} />
+        <StatTile label="Live (NVIDIA) Share" value={`${stats.liveSharePct}%`} hint="vs. scripted fallback" />
       </div>
 
       <Card>
-        <CardHeader title="Requests by Model" />
+        <CardHeader title="Requests by Model" subtitle="Last 30 days" />
         <CardBody>
           <div className="h-64 w-full">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={aiUsageByModel} layout="vertical" margin={{ top: 0, right: 16, left: 8, bottom: 0 }}>
+              <BarChart data={stats.models} layout="vertical" margin={{ top: 0, right: 16, left: 8, bottom: 0 }}>
                 <CartesianGrid horizontal={false} stroke="#e6e9ef" strokeDasharray="3 3" />
                 <XAxis type="number" tickLine={false} axisLine={false} tick={{ fontSize: 12, fill: '#a3aabb' }} />
                 <YAxis type="category" dataKey="model" width={200} tickLine={false} axisLine={false} tick={{ fontSize: 12, fill: '#585f70' }} />
@@ -40,7 +49,7 @@ export default function AdminAIUsage() {
         </CardBody>
       </Card>
 
-      <AdminTable columns={columns} rows={aiUsageByModel} searchKeys={['model']} exportable={false} />
+      <AdminTable columns={columns} rows={stats.models} searchKeys={['model']} exportable={false} emptyLabel="No AI requests logged yet" />
     </div>
   );
 }

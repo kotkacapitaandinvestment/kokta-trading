@@ -8,7 +8,9 @@ import { checklistRouter } from './routes/checklist.js';
 import { settingsRouter } from './routes/settings.js';
 import { adminIntegrationsRouter } from './routes/adminIntegrations.js';
 import { adminUsersRouter } from './routes/adminUsers.js';
+import { adminStatsRouter } from './routes/adminStats.js';
 import { aiRouter } from './routes/ai.js';
+import { simulatorRouter } from './routes/simulator.js';
 import { requireAuth, requireRole } from './middleware/auth.js';
 import { createCrudRouter } from './lib/crudRouter.js';
 import { prisma } from './lib/prisma.js';
@@ -32,7 +34,9 @@ app.use('/api/admin/content', requireAdmin, createCrudRouter(prisma.contentItem)
 app.use('/api/admin/courses', requireAdmin, createCrudRouter(prisma.course));
 app.use('/api/admin/announcements', requireAdmin, createCrudRouter(prisma.announcement));
 app.use('/api/admin/market-news', requireAdmin, createCrudRouter(prisma.marketNewsItem, { orderBy: { publishedAt: 'desc' } }));
+app.use('/api/admin/stats', requireAdmin, adminStatsRouter);
 app.use('/api/ai', aiRouter);
+app.use('/api/simulator', simulatorRouter);
 
 app.use((err, req, res, next) => {
   console.error(err);
