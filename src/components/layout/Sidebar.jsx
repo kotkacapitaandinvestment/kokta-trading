@@ -3,7 +3,7 @@ import clsx from 'clsx';
 import { Lock } from 'lucide-react';
 import Badge from '../ui/Badge';
 
-export default function Sidebar({ brandTo, items, secondaryItems, footer }) {
+export default function Sidebar({ brandTo, items, secondaryItems, secondaryLabel, footer }) {
   return (
     <aside className="hidden w-64 shrink-0 flex-col border-r border-ink-100 bg-white lg:flex dark:border-ink-800 dark:bg-ink-900">
       <div className="flex h-16 items-center gap-2.5 border-b border-ink-100 px-6 dark:border-ink-800">
@@ -55,6 +55,11 @@ export default function Sidebar({ brandTo, items, secondaryItems, footer }) {
         {secondaryItems ? (
           <>
             <div className="my-3 h-px bg-ink-100 dark:bg-ink-800" />
+            {secondaryLabel ? (
+              <p className="mb-1.5 px-3 text-[10px] font-semibold uppercase tracking-wider text-ink-300 dark:text-ink-600">
+                {secondaryLabel}
+              </p>
+            ) : null}
             <ul className="space-y-0.5">
               {secondaryItems.map((item) => (
                 <li key={item.to}>

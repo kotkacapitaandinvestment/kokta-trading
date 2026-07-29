@@ -1,8 +1,8 @@
-import { Outlet, useLocation, Navigate, Link } from 'react-router-dom';
+import { Outlet, useLocation, Navigate } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import Topbar from './Topbar';
 import MobileNav from './MobileNav';
-import { adminNav } from './navConfig';
+import { adminNav, traderNav } from './navConfig';
 import { useAuth } from '../../context/AuthContext';
 import Badge from '../ui/Badge';
 
@@ -22,17 +22,15 @@ export default function AdminLayout() {
     locked: item.superAdminOnly && !isSuperAdmin,
     badge: item.superAdminOnly ? 'Super Admin' : undefined,
   }));
+  const traderTools = traderNav.map((item) => ({ ...item, locked: false, badge: undefined }));
 
   return (
     <div className="flex h-screen overflow-hidden bg-ink-50 dark:bg-ink-950">
       <Sidebar
         brandTo="/admin/overview"
         items={items}
-        footer={
-          <Link to="/app/dashboard" className="block rounded-xl border border-ink-200 p-3 text-center text-xs font-medium text-ink-500 hover:bg-ink-50 dark:border-ink-700 dark:text-ink-400 dark:hover:bg-ink-800">
-            ← Back to trader app
-          </Link>
-        }
+        secondaryItems={traderTools}
+        secondaryLabel="Trader Tools"
       />
       <div className="flex min-w-0 flex-1 flex-col">
         <Topbar
@@ -40,7 +38,7 @@ export default function AdminLayout() {
           right={
             <>
               <Badge tone="accent" className="hidden sm:inline-flex">{isSuperAdmin ? 'Super Admin' : 'Administrator'}</Badge>
-              <MobileNav items={items} />
+              <MobileNav items={items} secondaryItems={traderTools} />
             </>
           }
         />
