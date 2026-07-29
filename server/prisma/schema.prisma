@@ -86,13 +86,13 @@ model UserSettings {
 }
 
 model Integration {
-  id             String   @id @default(cuid())
-  provider       String   @unique
-  apiKeyCipher   String
-  model          String
-  baseUrl        String
-  enabled        Boolean  @default(true)
-  updatedAt      DateTime @updatedAt
+  id           String   @id @default(cuid())
+  provider     String   @unique
+  secretCipher String?
+  publicKey    String?
+  config       Json     @default("{}")
+  enabled      Boolean  @default(true)
+  updatedAt    DateTime @updatedAt
 }
 
 model ContentItem {

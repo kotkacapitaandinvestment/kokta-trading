@@ -35,22 +35,23 @@ aiRouter.post('/chat', asyncHandler(async (req, res) => {
   const startedAt = Date.now();
 
   const integration = await prisma.integration.findUnique({ where: { provider: 'nvidia' } });
-  if (!integration || !integration.enabled) {
+  if (!integration || !integration.enabled || !integration.secretCipher) {
     logUsage(req.userId, 'mock', 'scripted-mentor', startedAt);
     return res.json({ source: 'mock' });
   }
 
+  const model = integration.config?.model;
   try {
     const reply = await nvidiaChatCompletion({
-      apiKey: decryptSecret(integration.apiKeyCipher),
-      baseUrl: integration.baseUrl,
-      model: integration.model,
+      apiKey: decryptSecret(integration.secretCipher),
+      baseUrl: integration.config?.baseUrl,
+      model,
       messages: [
         { role: 'system', content: systemPromptFor(market, timeframe) },
         ...messages.map((m) => ({ role: m.role, content: m.content })),
       ],
     });
-    logUsage(req.userId, 'nvidia', integration.model, startedAt);
+    logUsage(req.userId, 'nvidia', model, startedAt);
     res.json({ source: 'nvidia', reply });
   } catch (err) {
     console.error('NVIDIA chat completion failed:', err.message);
