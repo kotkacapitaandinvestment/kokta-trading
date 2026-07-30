@@ -4,7 +4,7 @@ import { requireAuth } from '../middleware/auth.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 import { decryptSecret } from '../lib/crypto.js';
 import { fetchWatchlistQuotes, fetchEconomicCalendar } from '../lib/finnhub.js';
-import { fetchMassiveQuotes } from '../lib/massive.js';
+import { fetchMassiveQuotes, fetchMassiveVolatility } from '../lib/massive.js';
 import { watchlist as mockWatchlist, economicEvents as mockEconomicEvents, marketSentiment as mockSentiment } from '../lib/mockMarketData.js';
 
 export const marketDataRouter = Router();
@@ -72,11 +72,21 @@ marketDataRouter.get('/snapshot', asyncHandler(async (req, res) => {
   const sentimentLive = liveItems.length >= 2;
   const sentiment = sentimentLive ? computeSentiment(liveItems) : mockSentiment;
 
+  let volatility = [];
+  if (massiveRow) {
+    try {
+      volatility = await fetchMassiveVolatility(decryptSecret(massiveRow.secretCipher));
+    } catch (err) {
+      console.error('Massive volatility fetch failed:', err.message);
+    }
+  }
+
   res.json({
     watchlist,
     economicEvents: economicEvents?.length ? economicEvents : mockEconomicEvents,
     economicEventsLive: !!economicEvents?.length,
     sentiment,
     sentimentLive,
+    volatility,
   });
 }));

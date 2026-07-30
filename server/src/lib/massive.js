@@ -25,6 +25,49 @@ export const MASSIVE_SYMBOLS = {
   'BTC/USD': ['X:BTCUSD', 'Crypto'],
 };
 
+function computeATR(bars) {
+  if (bars.length < 2) return null;
+  const trueRanges = [];
+  for (let i = 1; i < bars.length; i++) {
+    const { h, l } = bars[i];
+    const prevClose = bars[i - 1].c;
+    trueRanges.push(Math.max(h - l, Math.abs(h - prevClose), Math.abs(l - prevClose)));
+  }
+  return trueRanges.reduce((s, v) => s + v, 0) / trueRanges.length;
+}
+
+function regimeFor(atr, avgPrice) {
+  const atrPct = (atr / avgPrice) * 100;
+  if (atrPct > 1.5) return 'High';
+  if (atrPct > 0.7) return 'Elevated';
+  return 'Normal';
+}
+
+export async function fetchMassiveVolatility(apiKey, days = 14) {
+  const to = new Date().toISOString().slice(0, 10);
+  const from = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const entries = Object.entries(MASSIVE_SYMBOLS);
+
+  const results = await Promise.allSettled(
+    entries.map(([, [ticker]]) => massiveGet(apiKey, `/v2/aggs/ticker/${ticker}/range/1/day/${from}/${to}`)),
+  );
+
+  const items = [];
+  results.forEach((result, i) => {
+    const [display] = entries[i];
+    const bars = result.status === 'fulfilled' ? result.value?.results : null;
+    const atr = bars && bars.length >= 2 ? computeATR(bars) : null;
+    if (atr !== null) {
+      const avgPrice = bars[bars.length - 1].c;
+      items.push({ symbol: display, atr: Math.round(atr * 10000) / 10000, regime: regimeFor(atr, avgPrice), live: true });
+    } else {
+      items.push({ symbol: display, atr: null, regime: null, live: false });
+    }
+  });
+
+  return items;
+}
+
 export async function fetchMassiveQuotes(apiKey) {
   const entries = Object.entries(MASSIVE_SYMBOLS);
   const results = await Promise.allSettled(

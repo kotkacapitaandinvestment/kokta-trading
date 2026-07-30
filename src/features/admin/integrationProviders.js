@@ -52,8 +52,8 @@ export const INTEGRATION_PROVIDERS = [
     name: 'Massive',
     category: 'Market Data',
     icon: Globe2,
-    description: 'Formerly Polygon.io — forex, metals, indices, and crypto previous-close data for the Watchlist.',
-    fallbackNote: 'Without an active Massive connection, symbols it would otherwise cover fall back to sample data.',
+    description: 'Formerly Polygon.io — forex, metals, indices, and crypto data powering the Watchlist and Market Intelligence volatility (ATR).',
+    fallbackNote: 'Without an active Massive connection, symbols and volatility figures it would otherwise cover fall back to sample data.',
     fields: [{ key: 'secret', label: 'API Key', type: 'password', placeholder: 'Massive API key' }],
   },
 ];
