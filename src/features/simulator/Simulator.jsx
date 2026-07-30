@@ -137,6 +137,12 @@ export default function Simulator() {
                 entryBarIndex={openTrade?.entryBarIndex}
                 stopLoss={openTrade?.stopLoss}
                 takeProfit={openTrade?.takeProfit}
+                theme="terminal"
+                crosshair
+                volume
+                zoomPan
+                initialVisibleBars={60}
+                height={420}
               />
             </CardBody>
           </Card>

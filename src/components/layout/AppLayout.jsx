@@ -10,6 +10,8 @@ const titleFromPath = (pathname) => {
   return match?.label ?? 'Kotka Trading';
 };
 
+const FULL_WIDTH_ROUTES = ['/app/simulator'];
+
 export default function AppLayout() {
   const { user } = useAuth();
   const location = useLocation();
@@ -38,7 +40,7 @@ export default function AppLayout() {
       <div className="flex min-w-0 flex-1 flex-col">
         <Topbar title={titleFromPath(location.pathname)} right={<MobileNav items={items} secondaryItems={traderNavSecondary} />} />
         <main className="flex-1 overflow-y-auto scrollbar-thin px-4 py-6 lg:px-8 lg:py-8">
-          <div className="mx-auto max-w-7xl animate-fade-in">
+          <div className={`animate-fade-in ${FULL_WIDTH_ROUTES.some((r) => location.pathname.startsWith(r)) ? 'max-w-none' : 'mx-auto max-w-7xl'}`}>
             <Outlet />
           </div>
         </main>
