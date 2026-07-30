@@ -7,8 +7,11 @@ import { MASSIVE_SYMBOLS, fetchHistoricalBars } from '../lib/massive.js';
 import {
   SIMULATOR_TIMEFRAME,
   WARMUP_BAR_COUNT,
+  EXTEND_BATCH_BARS,
+  EXTEND_LOOKBACK_STAGES_DAYS,
   pickFetchWindow,
   pickSessionSlice,
+  pickExtendHistoryWindow,
   advanceSession,
   closeTradeManual,
   endSession,
@@ -248,4 +251,43 @@ simulatorRouter.post('/sessions/:id/trades/:tradeId/close', asyncHandler(async (
   ]);
 
   res.json({ trade });
+}));
+
+simulatorRouter.post('/sessions/:id/extend-history', asyncHandler(async (req, res) => {
+  const session = await loadOwnedSession(req.params.id, req.userId);
+  if (!session) return res.status(404).json({ error: 'Session not found.' });
+
+  const requestedBefore = new Date(req.body?.before);
+  if (Number.isNaN(requestedBefore.getTime())) {
+    return res.status(400).json({ error: '"before" must be a valid timestamp.' });
+  }
+
+  // Anti-cheat: never trust the client's `before` as an unbounded ceiling —
+  // clamp to the session's own recorded start. Without this, a client could
+  // pass a future timestamp and use this "backward" endpoint as a
+  // side-channel to fetch bars at or beyond what /advance has revealed.
+  const before = requestedBefore.getTime() > session.windowStart.getTime() ? session.windowStart : requestedBefore;
+
+  const massiveRow = await getEnabledIntegration('massive');
+  if (!massiveRow) return res.status(503).json({ error: 'Market data provider not configured.' });
+  const apiKey = decryptSecret(massiveRow.secretCipher);
+
+  const stages = EXTEND_LOOKBACK_STAGES_DAYS[session.timeframeUnit] ?? [30, 90];
+  let bars = [];
+  for (const days of stages) {
+    const { from, to } = pickExtendHistoryWindow(before, days);
+    try {
+      const fetched = await fetchHistoricalBars(apiKey, session.ticker, session.timeframeMultiplier, session.timeframeUnit, from, to);
+      const filtered = fetched.filter((b) => b.t < before.getTime()).sort((a, b) => a.t - b.t);
+      if (filtered.length) {
+        bars = filtered.slice(-EXTEND_BATCH_BARS);
+        break;
+      }
+    } catch (err) {
+      console.error(`extend-history fetch failed for ${session.ticker}:`, err.message);
+      return res.status(502).json({ error: 'Could not fetch earlier historical data. Try again shortly.' });
+    }
+  }
+
+  res.json({ bars, exhausted: bars.length === 0 });
 }));

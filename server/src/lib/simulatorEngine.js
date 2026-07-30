@@ -42,6 +42,24 @@ export function pickFetchWindow() {
   return { from: from.toISOString().slice(0, 10), to: to.toISOString().slice(0, 10) };
 }
 
+// How many real earlier bars to return per "scroll back" page.
+export const EXTEND_BATCH_BARS = 150;
+
+// Calendar-day lookback per timeframe unit, staged so weekend/holiday gaps
+// in the real data don't false-positive as "exhausted" — same idea as the
+// TIMEFRAME_FALLBACKS ladder in simulator.js.
+export const EXTEND_LOOKBACK_STAGES_DAYS = {
+  minute: [6, 20, 60],
+  hour: [60, 180, 400],
+  day: [720, 1800],
+};
+
+export function pickExtendHistoryWindow(beforeDate, lookbackDays) {
+  const to = new Date(beforeDate.getTime() - 1); // strictly exclusive of the boundary
+  const from = new Date(to.getTime() - lookbackDays * 24 * 60 * 60 * 1000);
+  return { from: from.toISOString().slice(0, 10), to: to.toISOString().slice(0, 10) };
+}
+
 // Picks a random contiguous slice of SESSION_BAR_COUNT bars from a larger
 // fetched array of real historical bars.
 export function pickSessionSlice(bars) {

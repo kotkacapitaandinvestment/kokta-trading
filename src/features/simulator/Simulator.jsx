@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import clsx from 'clsx';
 import { Play, Pause, SkipForward, RotateCcw } from 'lucide-react';
 import PageHeader from '../../components/ui/PageHeader';
 import Card, { CardHeader, CardBody } from '../../components/ui/Card';
@@ -17,6 +18,12 @@ export default function Simulator() {
   const [trades, setTrades] = useState([]);
   const [playing, setPlaying] = useState(false);
   const [error, setError] = useState(null);
+  const [extendedBars, setExtendedBars] = useState([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyExhausted, setHistoryExhausted] = useState(false);
+  const [smaEnabled, setSmaEnabled] = useState(false);
+  const [emaEnabled, setEmaEnabled] = useState(false);
+  const [rsiEnabled, setRsiEnabled] = useState(false);
 
   const sessionRef = useRef(session);
   const advancingRef = useRef(false);
@@ -40,7 +47,30 @@ export default function Simulator() {
     setTrades([]);
     setPlaying(false);
     setError(null);
+    setExtendedBars([]);
+    setHistoryLoading(false);
+    setHistoryExhausted(false);
   };
+
+  const requestMoreHistory = useCallback(
+    (beforeTimestamp) => {
+      const current = sessionRef.current;
+      if (!current || historyLoading || historyExhausted) return;
+      setHistoryLoading(true);
+      api
+        .post(`/simulator/sessions/${current.id}/extend-history`, { before: new Date(beforeTimestamp).toISOString() })
+        .then(({ bars: older, exhausted }) => {
+          if (exhausted || !older.length) {
+            setHistoryExhausted(true);
+            return;
+          }
+          setExtendedBars((prev) => [...older, ...prev]);
+        })
+        .catch(() => setHistoryExhausted(true))
+        .finally(() => setHistoryLoading(false));
+    },
+    [historyLoading, historyExhausted],
+  );
 
   const advanceOneStep = () => {
     const current = sessionRef.current;
@@ -131,6 +161,27 @@ export default function Simulator() {
               }
             />
             <CardBody>
+              <div className="mb-3 flex flex-wrap items-center gap-2">
+                {[
+                  { label: 'SMA 20', enabled: smaEnabled, toggle: () => setSmaEnabled((v) => !v) },
+                  { label: 'EMA 50', enabled: emaEnabled, toggle: () => setEmaEnabled((v) => !v) },
+                  { label: 'RSI 14', enabled: rsiEnabled, toggle: () => setRsiEnabled((v) => !v) },
+                ].map((ind) => (
+                  <button
+                    key={ind.label}
+                    type="button"
+                    onClick={ind.toggle}
+                    className={clsx(
+                      'rounded-full border px-3 py-1 text-xs font-medium transition-colors',
+                      ind.enabled
+                        ? 'border-accent-500 bg-accent-50 text-accent-700 dark:bg-accent-900/30 dark:text-accent-300'
+                        : 'border-ink-200 text-ink-500 hover:bg-ink-50 dark:border-ink-700 dark:text-ink-400 dark:hover:bg-ink-800',
+                    )}
+                  >
+                    {ind.label}
+                  </button>
+                ))}
+              </div>
               <CandlestickChart
                 bars={session.bars}
                 entryPrice={openTrade?.entryPrice}
@@ -143,6 +194,16 @@ export default function Simulator() {
                 zoomPan
                 initialVisibleBars={60}
                 height={420}
+                extendedBars={extendedBars}
+                onRequestHistory={requestMoreHistory}
+                historyLoading={historyLoading}
+                historyExhausted={historyExhausted}
+                drawingTools
+                indicators={[
+                  ...(smaEnabled ? [{ type: 'sma', period: 20 }] : []),
+                  ...(emaEnabled ? [{ type: 'ema', period: 50 }] : []),
+                ]}
+                rsi={rsiEnabled ? { period: 14 } : false}
               />
             </CardBody>
           </Card>

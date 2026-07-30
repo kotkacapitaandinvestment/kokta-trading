@@ -1,10 +1,17 @@
-import { useMemo, useRef } from 'react';
-import { ComposedChart, Bar, XAxis, YAxis, ResponsiveContainer, ReferenceLine, ReferenceDot, Tooltip, CartesianGrid } from 'recharts';
-import { CHART_THEMES, MARGIN, Y_AXIS_WIDTH, formatTime } from './candlestick/theme';
+import { useEffect, useMemo, useRef } from 'react';
+import { ComposedChart, Bar, Line, XAxis, YAxis, ResponsiveContainer, ReferenceLine, ReferenceDot, Tooltip, CartesianGrid } from 'recharts';
+import { CHART_THEMES, MARGIN, Y_AXIS_WIDTH, INDICATOR_COLORS, formatTime } from './candlestick/theme';
 import { useChartZoomPan } from './candlestick/useChartZoomPan';
 import { useChartCrosshair } from './candlestick/useChartCrosshair';
+import { useChartDrawings } from './candlestick/useChartDrawings';
+import { computeSMA, computeEMA, computeRSI } from './candlestick/indicators';
 import VolumePane from './candlestick/VolumePane';
+import IndicatorPane from './candlestick/IndicatorPane';
 import CrosshairOverlay from './candlestick/CrosshairOverlay';
+import DrawingsOverlay from './candlestick/DrawingsOverlay';
+import DrawingToolbar from './candlestick/DrawingToolbar';
+
+const HISTORY_PREFETCH_THRESHOLD = 15;
 
 function makeCandlestickShape(palette) {
   return function CandlestickShape(props) {
@@ -67,13 +74,24 @@ export default function CandlestickChart({
   zoomPan = false,
   initialVisibleBars = 60,
   minVisibleBars = 10,
+  extendedBars = [],
+  onRequestHistory,
+  historyLoading = false,
+  historyExhausted = false,
+  drawingTools = false,
+  indicators = [],
+  rsi = false,
 }) {
   const palette = CHART_THEMES[theme] ?? CHART_THEMES.app;
   const containerRef = useRef(null);
   const chartRef = useRef(null);
 
+  const minIndex = -extendedBars.length;
+  const allBars = useMemo(() => [...extendedBars, ...bars], [extendedBars, bars]);
+
   const { range, dragHandlers } = useChartZoomPan({
     totalBars: bars.length,
+    minIndex,
     containerRef,
     enabled: zoomPan,
     initialVisibleBars,
@@ -84,21 +102,49 @@ export default function CandlestickChart({
 
   const { hover, onMouseMove, onMouseLeave } = useChartCrosshair({ enabled: crosshair, chartRef });
 
-  const visibleBars = useMemo(() => bars.slice(range.start, range.end), [bars, range.start, range.end]);
+  const { activeTool, setActiveTool, drawings, pendingDrawing, clearAll, drawingHandlers } = useChartDrawings({
+    enabled: drawingTools,
+    containerRef,
+    chartRef,
+    range,
+    yAxisWidth: Y_AXIS_WIDTH,
+    margin: MARGIN,
+  });
+
+  const requestedForRef = useRef(null);
+  useEffect(() => {
+    if (!onRequestHistory || historyLoading || historyExhausted) return;
+    if (range.start > minIndex + HISTORY_PREFETCH_THRESHOLD) return;
+    if (requestedForRef.current === minIndex) return;
+    requestedForRef.current = minIndex;
+    const earliestTs = allBars[0]?.t;
+    if (earliestTs != null) onRequestHistory(earliestTs);
+  }, [range.start, minIndex, historyLoading, historyExhausted, onRequestHistory, allBars]);
+
+  const visibleBars = useMemo(() => allBars.slice(range.start - minIndex, range.end - minIndex), [allBars, range.start, range.end, minIndex]);
+
+  const fullIndicatorSeries = useMemo(() => {
+    const series = {};
+    for (const ind of indicators) {
+      const key = `${ind.type}${ind.period}`;
+      series[key] = ind.type === 'ema' ? computeEMA(allBars, ind.period) : computeSMA(allBars, ind.period);
+    }
+    return series;
+  }, [allBars, indicators]);
+
+  const fullRsiSeries = useMemo(() => (rsi ? computeRSI(allBars, rsi.period ?? 14) : null), [allBars, rsi]);
+
   const data = useMemo(
     () =>
-      visibleBars.map((b, i) => ({
-        x: range.start + i,
-        t: b.t,
-        o: b.o,
-        h: b.h,
-        l: b.l,
-        c: b.c,
-        v: b.v,
-        range: [b.l, b.h],
-        isUp: b.c >= b.o,
-      })),
-    [visibleBars, range.start],
+      visibleBars.map((b, i) => {
+        const absIndex = range.start + i;
+        const seriesIndex = absIndex - minIndex;
+        const row = { x: absIndex, t: b.t, o: b.o, h: b.h, l: b.l, c: b.c, v: b.v, range: [b.l, b.h], isUp: b.c >= b.o };
+        for (const key of Object.keys(fullIndicatorSeries)) row[key] = fullIndicatorSeries[key][seriesIndex] ?? null;
+        if (fullRsiSeries) row.rsi = fullRsiSeries[seriesIndex] ?? null;
+        return row;
+      }),
+    [visibleBars, range.start, minIndex, fullIndicatorSeries, fullRsiSeries],
   );
 
   const xTicks = useMemo(() => buildTicks(data), [data]);
@@ -123,18 +169,26 @@ export default function CandlestickChart({
     tick: { fontSize: 10, fill: palette.axisText },
   };
 
+  const hasSubPane = volume || !!rsi;
+  const containerOnMouseDown = drawingTools && activeTool !== 'cursor' ? drawingHandlers.onMouseDown : dragHandlers.onMouseDown;
+  const showHistoryPill = historyLoading || (historyExhausted && range.start <= minIndex + HISTORY_PREFETCH_THRESHOLD);
+
   return (
     <div style={palette.bg ? { background: palette.bg, borderRadius: 12, padding: 8 } : undefined}>
+      {drawingTools ? (
+        <DrawingToolbar activeTool={activeTool} onSelectTool={setActiveTool} onClearAll={clearAll} hasDrawings={drawings.length > 0} palette={palette} />
+      ) : null}
+
       <div
         ref={containerRef}
         className="relative w-full"
-        style={{ height, cursor: zoomPan ? 'grab' : undefined }}
-        onMouseDown={dragHandlers.onMouseDown}
+        style={{ height, cursor: drawingTools && activeTool !== 'cursor' ? 'crosshair' : zoomPan ? 'grab' : undefined }}
+        onMouseDown={containerOnMouseDown}
       >
         <ResponsiveContainer width="100%" height="100%">
-          <ComposedChart ref={chartRef} data={data} margin={MARGIN} syncId={volume ? 'kotka-candlestick' : undefined} onMouseMove={onMouseMove} onMouseLeave={onMouseLeave}>
+          <ComposedChart ref={chartRef} data={data} margin={MARGIN} syncId={hasSubPane ? 'kotka-candlestick' : undefined} onMouseMove={onMouseMove} onMouseLeave={onMouseLeave}>
             {palette.grid ? <CartesianGrid stroke={palette.grid} /> : null}
-            <XAxis {...xAxisProps} tick={volume ? false : xAxisProps.tick} />
+            <XAxis {...xAxisProps} tick={hasSubPane ? false : xAxisProps.tick} />
             <YAxis
               domain={[yMin - pad, yMax + pad]}
               tick={{ fontSize: 10, fill: palette.axisText }}
@@ -143,6 +197,18 @@ export default function CandlestickChart({
             />
             {!crosshair ? <Tooltip content={<ChartTooltip />} /> : <Tooltip content={() => null} cursor={false} />}
             <Bar dataKey="range" shape={CandlestickShape} isAnimationActive={false} />
+            {indicators.map((ind, i) => (
+              <Line
+                key={`${ind.type}${ind.period}`}
+                type="monotone"
+                dataKey={`${ind.type}${ind.period}`}
+                stroke={INDICATOR_COLORS[i % INDICATOR_COLORS.length]}
+                dot={false}
+                strokeWidth={1.5}
+                isAnimationActive={false}
+                connectNulls={false}
+              />
+            ))}
             {typeof stopLoss === 'number' ? <ReferenceLine y={stopLoss} stroke="#ef4444" strokeDasharray="4 4" label={{ value: 'SL', position: 'insideTopLeft', fontSize: 10, fill: '#ef4444' }} /> : null}
             {typeof takeProfit === 'number' ? <ReferenceLine y={takeProfit} stroke="#16a34a" strokeDasharray="4 4" label={{ value: 'TP', position: 'insideTopLeft', fontSize: 10, fill: '#16a34a' }} /> : null}
             {typeof entryPrice === 'number' ? <ReferenceLine y={entryPrice} stroke="#64748b" strokeDasharray="2 2" label={{ value: 'Entry', position: 'insideTopLeft', fontSize: 10, fill: '#64748b' }} /> : null}
@@ -151,7 +217,41 @@ export default function CandlestickChart({
             ) : null}
           </ComposedChart>
         </ResponsiveContainer>
+
         {crosshair ? <CrosshairOverlay hover={hover} width="100%" height={height} showHorizontal palette={palette} /> : null}
+        {drawingTools ? (
+          <DrawingsOverlay
+            width="100%"
+            height={height}
+            palette={palette}
+            containerRef={containerRef}
+            chartRef={chartRef}
+            range={range}
+            yAxisWidth={Y_AXIS_WIDTH}
+            margin={MARGIN}
+            drawings={drawings}
+            pendingDrawing={pendingDrawing}
+          />
+        ) : null}
+
+        {indicators.length || showHistoryPill ? (
+          <div className="pointer-events-none absolute left-2 top-2 z-10 flex flex-col items-start gap-1">
+            {indicators.length ? (
+              <div className="flex flex-wrap gap-2 text-[10px] font-medium">
+                {indicators.map((ind, i) => (
+                  <span key={`${ind.type}${ind.period}`} style={{ color: INDICATOR_COLORS[i % INDICATOR_COLORS.length] }}>
+                    {ind.type.toUpperCase()} {ind.period}
+                  </span>
+                ))}
+              </div>
+            ) : null}
+            {showHistoryPill ? (
+              <div className={`w-fit rounded px-2 py-1 text-[10px] font-medium ${palette.tooltipClassName}`}>
+                {historyLoading ? 'Loading earlier candles…' : 'Start of available history'}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
       </div>
 
       {volume ? (
@@ -160,6 +260,21 @@ export default function CandlestickChart({
           height={volumeHeight}
           palette={palette}
           syncId="kotka-candlestick"
+          crosshairEnabled={crosshair}
+          hover={hover}
+          onMouseMove={onMouseMove}
+          onMouseLeave={onMouseLeave}
+        />
+      ) : null}
+
+      {rsi ? (
+        <IndicatorPane
+          data={data}
+          height={volumeHeight}
+          palette={palette}
+          syncId="kotka-candlestick"
+          dataKey="rsi"
+          color={INDICATOR_COLORS[0]}
           crosshairEnabled={crosshair}
           hover={hover}
           onMouseMove={onMouseMove}

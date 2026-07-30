@@ -30,3 +30,7 @@ export function formatTime(t) {
   const d = new Date(t);
   return d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
 }
+
+export const FIB_LEVELS = [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1];
+
+export const INDICATOR_COLORS = ['#3b82f6', '#f59e0b', '#a855f7', '#14b8a6'];
