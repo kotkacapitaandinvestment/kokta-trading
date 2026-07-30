@@ -9,13 +9,12 @@ import { watchlist as mockWatchlist, economicEvents as mockEconomicEvents, marke
 export const marketDataRouter = Router();
 marketDataRouter.use(requireAuth);
 
-function computeSentiment(items) {
-  const live = items.filter((i) => i.live);
-  if (live.length === 0) return null;
-  const avgChange = live.reduce((s, i) => s + i.change, 0) / live.length;
-  // Map an average % change (roughly -2..+2 typical daily range) onto a 0-100 bullish scale.
+const mockBySymbol = Object.fromEntries(mockWatchlist.map((w) => [w.symbol, w]));
+
+function computeSentiment(liveItems) {
+  const avgChange = liveItems.reduce((s, i) => s + i.change, 0) / liveItems.length;
   const overall = Math.round(Math.max(0, Math.min(100, 50 + avgChange * 15)));
-  const breakdown = live.map((i) => ({
+  const breakdown = liveItems.map((i) => ({
     market: i.symbol,
     sentiment: Math.round(Math.max(0, Math.min(100, 50 + i.change * 15))),
   }));
@@ -25,42 +24,48 @@ function computeSentiment(items) {
 marketDataRouter.get('/snapshot', asyncHandler(async (req, res) => {
   const integration = await prisma.integration.findUnique({ where: { provider: 'finnhub' } });
   if (!integration || !integration.enabled || !integration.secretCipher) {
-    return res.json({ source: 'mock', watchlist: mockWatchlist, economicEvents: mockEconomicEvents, sentiment: mockSentiment });
+    return res.json({
+      watchlist: mockWatchlist,
+      economicEvents: mockEconomicEvents,
+      economicEventsLive: false,
+      sentiment: mockSentiment,
+      sentimentLive: false,
+    });
   }
 
   const apiKey = decryptSecret(integration.secretCipher);
 
-  let watchlistResult;
+  let fetched;
   try {
-    watchlistResult = await fetchWatchlistQuotes(apiKey);
+    fetched = await fetchWatchlistQuotes(apiKey);
   } catch (err) {
     console.error('Finnhub watchlist fetch failed:', err.message);
-    watchlistResult = { items: [], anySucceeded: false };
+    fetched = { items: [] };
   }
 
-  let economicEvents;
+  // Merge: use the real quote where Finnhub returned one, otherwise fall back to that
+  // symbol's illustrative value (still labeled live:false so the UI can be honest about it).
+  const watchlist = mockWatchlist.map((mockItem) => {
+    const real = fetched.items.find((i) => i.symbol === mockItem.symbol && i.live);
+    return real ?? { ...mockItem, live: false };
+  });
+
+  let economicEvents = null;
   try {
     economicEvents = await fetchEconomicCalendar(apiKey);
   } catch (err) {
     console.error('Finnhub economic calendar fetch failed:', err.message);
-    economicEvents = null;
   }
 
-  if (!watchlistResult.anySucceeded) {
-    return res.json({
-      source: 'mock',
-      watchlist: mockWatchlist,
-      economicEvents: economicEvents ?? mockEconomicEvents,
-      sentiment: mockSentiment,
-    });
-  }
-
-  const sentiment = computeSentiment(watchlistResult.items) ?? mockSentiment;
+  const liveItems = watchlist.filter((w) => w.live);
+  const sentimentLive = liveItems.length >= 2;
+  const sentiment = sentimentLive ? computeSentiment(liveItems) : mockSentiment;
 
   res.json({
-    source: 'finnhub',
-    watchlist: watchlistResult.items,
-    economicEvents: economicEvents ?? mockEconomicEvents,
+    watchlist,
+    economicEvents: economicEvents?.length ? economicEvents : mockEconomicEvents,
+    economicEventsLive: !!economicEvents?.length,
     sentiment,
+    sentimentLive,
   });
 }));

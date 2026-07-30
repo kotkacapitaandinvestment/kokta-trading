@@ -41,7 +41,7 @@ export default function Dashboard() {
     api.get('/market/snapshot').then(setMarket);
   }, []);
 
-  const isSampleData = market?.source === 'mock';
+  const watchlistAllLive = market?.watchlist?.length > 0 && market.watchlist.every((w) => w.live);
 
   const checklistTotal = 8;
   const checklistDone = Object.values(checklist).filter(Boolean).length;
@@ -224,13 +224,20 @@ export default function Dashboard() {
           </Card>
 
           <Card>
-            <CardHeader title="Watchlist" action={isSampleData ? <Badge tone="warning">Sample data</Badge> : null} />
+            <CardHeader title="Watchlist" action={watchlistAllLive ? <Badge tone="profit">Live</Badge> : null} />
             <CardBody className="space-y-1">
               {market?.watchlist?.slice(0, 5).map((w) => (
                 <div key={w.symbol} className="flex items-center justify-between py-1.5">
-                  <div>
-                    <p className="text-sm font-medium text-ink-800 dark:text-ink-100">{w.symbol}</p>
-                    <p className="text-xs text-ink-400">{w.market}</p>
+                  <div className="flex items-center gap-1.5">
+                    <div>
+                      <p className="text-sm font-medium text-ink-800 dark:text-ink-100">{w.symbol}</p>
+                      <p className="text-xs text-ink-400">{w.market}</p>
+                    </div>
+                    {!w.live ? (
+                      <span className="rounded bg-ink-100 px-1 py-0.5 text-[9px] font-medium uppercase tracking-wide text-ink-400 dark:bg-ink-800">
+                        sample
+                      </span>
+                    ) : null}
                   </div>
                   <div className="text-right">
                     <p className="text-sm font-medium text-ink-800 dark:text-ink-100">{w.price ?? '—'}</p>
@@ -247,7 +254,7 @@ export default function Dashboard() {
           </Card>
 
           <Card>
-            <CardHeader title="Economic Events" subtitle="Today" action={isSampleData ? <Badge tone="warning">Sample data</Badge> : null} />
+            <CardHeader title="Economic Events" subtitle="Today" action={!market?.economicEventsLive ? <Badge tone="warning">Sample data</Badge> : <Badge tone="profit">Live</Badge>} />
             <CardBody className="space-y-3">
               {!market?.economicEvents?.length ? (
                 <p className="text-sm text-ink-400">No high-impact events found for today.</p>
@@ -268,7 +275,11 @@ export default function Dashboard() {
           </Card>
 
           <Card>
-            <CardHeader title="Market Sentiment" subtitle={isSampleData ? undefined : 'Derived from your watchlist’s real price moves'} action={isSampleData ? <Badge tone="warning">Sample data</Badge> : null} />
+            <CardHeader
+              title="Market Sentiment"
+              subtitle={market?.sentimentLive ? "Derived from your watchlist's real price moves" : undefined}
+              action={!market?.sentimentLive ? <Badge tone="warning">Sample data</Badge> : <Badge tone="profit">Live</Badge>}
+            />
             <CardBody>
               <div className="mb-2 flex items-center justify-between text-xs text-ink-400">
                 <span>Bearish</span>
