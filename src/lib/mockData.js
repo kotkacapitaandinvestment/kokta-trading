@@ -173,45 +173,6 @@ export const marketSentiment = {
   ],
 };
 
-export const aiConversations = [
-  {
-    id: 'c1',
-    title: 'EUR/USD liquidity structure review',
-    market: 'Forex',
-    updatedAt: '2026-07-28T09:14:00Z',
-    favorite: true,
-    messages: [
-      { role: 'user', content: 'I want to go long EUR/USD off this 15m order block. What am I missing?' },
-      {
-        role: 'assistant',
-        content:
-          "Before direction — what's your invalidation, and is this order block inside a premium or discount zone relative to the last daily range? An order block without displacement into liquidity is just a support line with a better name.",
-      },
-      { role: 'user', content: 'It formed after a sweep of yesterday\'s low.' },
-      {
-        role: 'assistant',
-        content:
-          "Better. So the thesis is: liquidity sweep → displacement → order block → return for entry. Ask yourself honestly: did price displace with imbalance (FVG) after the sweep, or did it just chop back up? If there's no imbalance, you're trading a level, not a structure.",
-      },
-    ],
-  },
-  {
-    id: 'c2',
-    title: 'Position sizing after a red week',
-    market: 'General',
-    updatedAt: '2026-07-25T18:02:00Z',
-    favorite: false,
-    messages: [
-      { role: 'user', content: "I'm down 4R this week, should I increase size to get it back faster?" },
-      {
-        role: 'assistant',
-        content:
-          "That question is the tell. Increasing size after a loss to 'get it back' is martingale thinking dressed up as strategy. What does your process say you should do after a -4R week — repeat size, or step down until your process stabilizes?",
-      },
-    ],
-  },
-];
-
 export const notifications = [
   { id: 'n1', type: 'checklist', title: 'Checklist reminder', body: 'You have not completed today\'s pre-trade checklist.', time: '08:05', read: false },
   { id: 'n2', type: 'risk', title: 'Risk warning', body: 'You are approaching your daily loss limit (1.6R used of 2R).', time: 'Yesterday', read: false },
