@@ -20,6 +20,8 @@ journalRouter.post('/', asyncHandler(async (req, res) => {
     return res.status(400).json({ error: 'date, market, and strategy are required.' });
   }
 
+  const isOpen = b.positionStatus === 'open';
+
   const entry = await prisma.journalEntry.create({
     data: {
       userId: req.userId,
@@ -33,15 +35,42 @@ journalRouter.post('/', asyncHandler(async (req, res) => {
       takeProfit: Number(b.takeProfit) || 0,
       risk: Number(b.risk) || 0,
       reward: Number(b.reward) || 0,
-      result: b.result ?? 'win',
-      pnl: Number(b.pnl) || 0,
+      result: isOpen ? null : (b.result ?? 'win'),
+      pnl: isOpen ? null : (Number(b.pnl) || 0),
       emotionBefore: b.emotionBefore ?? '',
-      emotionAfter: b.emotionAfter ?? '',
+      emotionAfter: isOpen ? null : (b.emotionAfter ?? ''),
       confidence: Number(b.confidence) || 0,
       mistakes: b.mistakes ?? '',
       lessons: b.lessons ?? '',
       checklistComplete: !!b.checklistComplete,
+      positionStatus: isOpen ? 'open' : 'closed',
     },
   });
   res.status(201).json({ entry });
+}));
+
+journalRouter.patch('/:id/close', asyncHandler(async (req, res) => {
+  const b = req.body ?? {};
+  const existing = await prisma.journalEntry.findUnique({ where: { id: req.params.id } });
+  if (!existing || existing.userId !== req.userId) {
+    return res.status(404).json({ error: 'Journal entry not found.' });
+  }
+  if (existing.positionStatus === 'closed') {
+    return res.status(400).json({ error: 'This position is already closed.' });
+  }
+
+  const entry = await prisma.journalEntry.update({
+    where: { id: req.params.id },
+    data: {
+      positionStatus: 'closed',
+      result: b.result ?? 'win',
+      pnl: Number(b.pnl) || 0,
+      reward: Number(b.reward) || existing.reward,
+      emotionAfter: b.emotionAfter ?? '',
+      mistakes: b.mistakes ?? existing.mistakes,
+      lessons: b.lessons ?? existing.lessons,
+      closedAt: new Date(),
+    },
+  });
+  res.json({ entry });
 }));

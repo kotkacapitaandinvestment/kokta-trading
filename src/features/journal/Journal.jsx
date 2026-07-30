@@ -9,6 +9,7 @@ import EmptyState from '../../components/ui/EmptyState';
 import Skeleton from '../../components/ui/Skeleton';
 import { NotebookPen } from 'lucide-react';
 import JournalEntryForm from './JournalEntryForm';
+import ClosePositionForm from './ClosePositionForm';
 import { api } from '../../lib/api';
 
 const resultTone = { win: 'profit', loss: 'loss', breakeven: 'neutral' };
@@ -29,6 +30,7 @@ export default function Journal() {
   const [search, setSearch] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [detail, setDetail] = useState(null);
+  const [closing, setClosing] = useState(null);
 
   useEffect(() => {
     api
@@ -49,6 +51,17 @@ export default function Journal() {
     const { entry: saved } = await api.post('/journal', entry);
     setEntries((prev) => [saved, ...prev]);
     setShowForm(false);
+  };
+
+  const handleClose = async (data) => {
+    const { entry: updated } = await api.patch(`/journal/${closing.id}/close`, data);
+    setEntries((prev) => prev.map((e) => (e.id === updated.id ? updated : e)));
+    setClosing(null);
+  };
+
+  const handleRowClick = (entry) => {
+    if (entry.positionStatus === 'open') setClosing(entry);
+    else setDetail(entry);
   };
 
   return (
@@ -98,7 +111,7 @@ export default function Journal() {
                 <th className="px-5 py-3 font-medium">Market</th>
                 <th className="px-5 py-3 font-medium">Strategy</th>
                 <th className="px-5 py-3 font-medium">Direction</th>
-                <th className="px-5 py-3 font-medium">R:R</th>
+                <th className="px-5 py-3 font-medium">Status</th>
                 <th className="px-5 py-3 font-medium">Checklist</th>
                 <th className="px-5 py-3 text-right font-medium">P&L</th>
               </tr>
@@ -107,7 +120,7 @@ export default function Journal() {
               {filtered.map((e) => (
                 <tr
                   key={e.id}
-                  onClick={() => setDetail(e)}
+                  onClick={() => handleRowClick(e)}
                   className="cursor-pointer border-b border-ink-50 last:border-0 hover:bg-ink-50 dark:border-ink-800/60 dark:hover:bg-ink-800/40"
                 >
                   <td className="px-5 py-3 text-ink-500 dark:text-ink-400">{e.date}</td>
@@ -115,7 +128,11 @@ export default function Journal() {
                   <td className="px-5 py-3 text-ink-500 dark:text-ink-400">{e.strategy}</td>
                   <td className="px-5 py-3 text-ink-500 dark:text-ink-400">{e.direction}</td>
                   <td className="px-5 py-3">
-                    <Badge tone={resultTone[e.result]}>{e.reward ?? e.rr ?? '—'}R</Badge>
+                    {e.positionStatus === 'open' ? (
+                      <Badge tone="accent">Open</Badge>
+                    ) : (
+                      <Badge tone={resultTone[e.result]}>{e.result}</Badge>
+                    )}
                   </td>
                   <td className="px-5 py-3">
                     {e.checklistComplete ? (
@@ -125,9 +142,13 @@ export default function Journal() {
                     )}
                   </td>
                   <td className="px-5 py-3 text-right font-medium">
-                    <span className={e.pnl >= 0 ? 'text-profit-600 dark:text-profit-400' : 'text-loss-500'}>
-                      {e.pnl >= 0 ? '+' : ''}${e.pnl}
-                    </span>
+                    {e.positionStatus === 'open' ? (
+                      <span className="text-ink-400">—</span>
+                    ) : (
+                      <span className={e.pnl >= 0 ? 'text-profit-600 dark:text-profit-400' : 'text-loss-500'}>
+                        {e.pnl >= 0 ? '+' : ''}${e.pnl}
+                      </span>
+                    )}
                   </td>
                 </tr>
               ))}
@@ -138,6 +159,10 @@ export default function Journal() {
 
       <Modal open={showForm} onClose={() => setShowForm(false)} title="New journal entry" width="max-w-2xl">
         <JournalEntryForm onSubmit={handleSave} onCancel={() => setShowForm(false)} />
+      </Modal>
+
+      <Modal open={!!closing} onClose={() => setClosing(null)} title="Close position">
+        {closing ? <ClosePositionForm entry={closing} onSubmit={handleClose} onCancel={() => setClosing(null)} /> : null}
       </Modal>
 
       <Modal open={!!detail} onClose={() => setDetail(null)} title={detail ? `${detail.market} · ${detail.date}` : ''} width="max-w-xl">

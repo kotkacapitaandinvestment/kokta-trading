@@ -1,4 +1,4 @@
-import { Sparkles, CreditCard } from 'lucide-react';
+import { Sparkles, CreditCard, Globe2 } from 'lucide-react';
 
 export const INTEGRATION_PROVIDERS = [
   {
@@ -37,5 +37,14 @@ export const INTEGRATION_PROVIDERS = [
       { key: 'secret', label: 'Secret Key', type: 'password', placeholder: 'sk_test_… or sk_live_…' },
       { key: 'publicKey', label: 'Public Key', type: 'text', placeholder: 'pk_test_… or pk_live_…' },
     ],
+  },
+  {
+    id: 'finnhub',
+    name: 'Finnhub',
+    category: 'Market Data',
+    icon: Globe2,
+    description: 'Real watchlist quotes and the economic calendar shown on the Dashboard and Market Intelligence.',
+    fallbackNote: 'Without an active Finnhub connection, Watchlist, Economic Events, and Sentiment show illustrative sample data instead of live figures.',
+    fields: [{ key: 'secret', label: 'API Key', type: 'password', placeholder: 'Finnhub API key' }],
   },
 ];

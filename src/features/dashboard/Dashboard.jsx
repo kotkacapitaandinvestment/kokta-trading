@@ -10,7 +10,7 @@ import {
   Calendar,
   Brain,
   ChevronRight,
-  NotebookText,
+  Target,
 } from 'lucide-react';
 import Card, { CardHeader, CardBody } from '../../components/ui/Card';
 import Badge from '../../components/ui/Badge';
@@ -19,11 +19,6 @@ import ProgressRing from '../../components/ui/ProgressRing';
 import { useAuth } from '../../context/AuthContext';
 import { api } from '../../lib/api';
 import WeeklyPerformanceChart from './widgets/WeeklyPerformanceChart';
-import {
-  watchlist,
-  economicEvents,
-  marketSentiment,
-} from '../../lib/mockData';
 
 function greeting() {
   const hour = new Date().getHours();
@@ -37,12 +32,16 @@ export default function Dashboard() {
   const firstName = user?.name?.split(' ')[0] ?? 'Trader';
   const [data, setData] = useState(null);
   const [checklist, setChecklist] = useState({});
+  const [market, setMarket] = useState(null);
 
   useEffect(() => {
     const today = new Date().toISOString().slice(0, 10);
     api.get('/me/dashboard').then(setData);
     api.get(`/checklist/${today}`).then(({ items }) => setChecklist(items));
+    api.get('/market/snapshot').then(setMarket);
   }, []);
+
+  const isSampleData = market?.source === 'mock';
 
   const checklistTotal = 8;
   const checklistDone = Object.values(checklist).filter(Boolean).length;
@@ -105,13 +104,22 @@ export default function Dashboard() {
 
         <Card className="p-5">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-medium uppercase tracking-wide text-ink-400">Trades Logged</span>
-            <NotebookText className="h-4 w-4 text-ink-300" strokeWidth={1.75} />
+            <span className="text-xs font-medium uppercase tracking-wide text-ink-400">Open Positions</span>
+            <Target className="h-4 w-4 text-ink-300" strokeWidth={1.75} />
           </div>
           <div className="mt-2 flex items-baseline gap-1">
-            <span className="text-2xl font-semibold text-ink-900 dark:text-ink-50">{data?.totalEntries ?? 0}</span>
-            <span className="text-sm text-ink-400">all-time in your journal</span>
+            <span className="text-2xl font-semibold text-ink-900 dark:text-ink-50">{data?.openPositions?.length ?? 0}</span>
+            <span className="text-sm text-ink-400">logged, not yet closed</span>
           </div>
+          {data?.openPositions?.length ? (
+            <div className="mt-3 flex flex-wrap gap-1.5">
+              {data.openPositions.slice(0, 3).map((p) => (
+                <Badge key={p.id} tone="accent">
+                  {p.symbol} {p.direction}
+                </Badge>
+              ))}
+            </div>
+          ) : null}
         </Card>
       </div>
 
@@ -216,20 +224,22 @@ export default function Dashboard() {
           </Card>
 
           <Card>
-            <CardHeader title="Watchlist" />
+            <CardHeader title="Watchlist" action={isSampleData ? <Badge tone="warning">Sample data</Badge> : null} />
             <CardBody className="space-y-1">
-              {watchlist.slice(0, 5).map((w) => (
+              {market?.watchlist?.slice(0, 5).map((w) => (
                 <div key={w.symbol} className="flex items-center justify-between py-1.5">
                   <div>
                     <p className="text-sm font-medium text-ink-800 dark:text-ink-100">{w.symbol}</p>
                     <p className="text-xs text-ink-400">{w.market}</p>
                   </div>
                   <div className="text-right">
-                    <p className="text-sm font-medium text-ink-800 dark:text-ink-100">{w.price}</p>
-                    <p className={`flex items-center justify-end gap-0.5 text-xs font-medium ${w.change >= 0 ? 'text-profit-600 dark:text-profit-400' : 'text-loss-500'}`}>
-                      {w.change >= 0 ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownRight className="h-3 w-3" />}
-                      {Math.abs(w.change)}%
-                    </p>
+                    <p className="text-sm font-medium text-ink-800 dark:text-ink-100">{w.price ?? '—'}</p>
+                    {w.change !== null ? (
+                      <p className={`flex items-center justify-end gap-0.5 text-xs font-medium ${w.change >= 0 ? 'text-profit-600 dark:text-profit-400' : 'text-loss-500'}`}>
+                        {w.change >= 0 ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownRight className="h-3 w-3" />}
+                        {Math.abs(w.change)}%
+                      </p>
+                    ) : null}
                   </div>
                 </div>
               ))}
@@ -237,24 +247,28 @@ export default function Dashboard() {
           </Card>
 
           <Card>
-            <CardHeader title="Economic Events" subtitle="Today" />
+            <CardHeader title="Economic Events" subtitle="Today" action={isSampleData ? <Badge tone="warning">Sample data</Badge> : null} />
             <CardBody className="space-y-3">
-              {economicEvents.slice(0, 4).map((e) => (
-                <div key={e.title} className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="text-sm font-medium text-ink-800 dark:text-ink-100">{e.title}</p>
-                    <p className="text-xs text-ink-400">
-                      {e.time} · {e.currency}
-                    </p>
+              {!market?.economicEvents?.length ? (
+                <p className="text-sm text-ink-400">No high-impact events found for today.</p>
+              ) : (
+                market.economicEvents.slice(0, 4).map((e, i) => (
+                  <div key={i} className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-medium text-ink-800 dark:text-ink-100">{e.title}</p>
+                      <p className="text-xs text-ink-400">
+                        {e.time} · {e.currency}
+                      </p>
+                    </div>
+                    <Badge tone={e.impact === 'high' ? 'loss' : 'warning'}>{e.impact}</Badge>
                   </div>
-                  <Badge tone={e.impact === 'high' ? 'loss' : 'warning'}>{e.impact}</Badge>
-                </div>
-              ))}
+                ))
+              )}
             </CardBody>
           </Card>
 
           <Card>
-            <CardHeader title="Market Sentiment" />
+            <CardHeader title="Market Sentiment" subtitle={isSampleData ? undefined : 'Derived from your watchlist’s real price moves'} action={isSampleData ? <Badge tone="warning">Sample data</Badge> : null} />
             <CardBody>
               <div className="mb-2 flex items-center justify-between text-xs text-ink-400">
                 <span>Bearish</span>
@@ -263,11 +277,11 @@ export default function Dashboard() {
               <div className="h-2 w-full overflow-hidden rounded-full bg-gradient-to-r from-loss-400 via-ink-100 to-profit-500">
                 <div
                   className="h-full w-0.5 bg-ink-900 dark:bg-white"
-                  style={{ marginLeft: `${marketSentiment.overall}%` }}
+                  style={{ marginLeft: `${market?.sentiment?.overall ?? 50}%` }}
                 />
               </div>
               <p className="mt-2 text-center text-sm font-medium text-ink-700 dark:text-ink-200">
-                {marketSentiment.overall}/100 · Moderately Bullish
+                {market?.sentiment?.overall ?? '—'}/100
               </p>
             </CardBody>
           </Card>

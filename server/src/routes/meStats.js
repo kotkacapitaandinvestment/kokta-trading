@@ -12,13 +12,15 @@ const todayStr = () => new Date().toISOString().slice(0, 10);
 const daysAgoStr = (n) => new Date(Date.now() - n * DAY_MS).toISOString().slice(0, 10);
 
 async function getUserContext(userId) {
-  const [entries, settings] = await Promise.all([
+  const [allEntries, settings] = await Promise.all([
     prisma.journalEntry.findMany({ where: { userId }, orderBy: { date: 'asc' } }),
     prisma.userSettings.findUnique({ where: { userId } }),
   ]);
+  const entries = allEntries.filter((e) => e.positionStatus !== 'open');
+  const openPositions = allEntries.filter((e) => e.positionStatus === 'open');
   const defaultRisk = settings?.tradingPreferences?.defaultRisk ?? 1;
   const dailyLossLimit = settings?.tradingPreferences?.dailyLossLimit ?? 2;
-  return { entries, defaultRisk, dailyLossLimit };
+  return { entries, openPositions, defaultRisk, dailyLossLimit };
 }
 
 meStatsRouter.get('/dna', asyncHandler(async (req, res) => {
@@ -36,7 +38,7 @@ meStatsRouter.get('/analytics', asyncHandler(async (req, res) => {
 }));
 
 meStatsRouter.get('/dashboard', asyncHandler(async (req, res) => {
-  const { entries, dailyLossLimit } = await getUserContext(req.userId);
+  const { entries, openPositions, dailyLossLimit } = await getUserContext(req.userId);
   const { scores } = computeScores(entries);
   const disciplineScore = scores.find((s) => s.label === 'Discipline')?.value ?? 0;
 
@@ -61,7 +63,7 @@ meStatsRouter.get('/dashboard', asyncHandler(async (req, res) => {
     weeklyByDay[d] = { day: label, pnl: 0 };
   }
   for (const e of entries) {
-    if (e.date >= last7 && weeklyByDay[e.date]) weeklyByDay[e.date].pnl += e.pnl;
+    if (e.date >= last7 && weeklyByDay[e.date]) weeklyByDay[e.date].pnl += e.pnl ?? 0;
   }
   const weeklyPerformance = Object.values(weeklyByDay);
 
@@ -69,6 +71,20 @@ meStatsRouter.get('/dashboard', asyncHandler(async (req, res) => {
     .sort((a, b) => new Date(b.date) - new Date(a.date))
     .slice(0, 5)
     .map((e) => ({ id: e.id, symbol: e.market, direction: e.direction, result: e.result, rr: e.reward, pnl: e.pnl, date: e.date, session: e.session }));
+
+  const openPositionsView = openPositions
+    .sort((a, b) => new Date(b.date) - new Date(a.date))
+    .map((e) => ({
+      id: e.id,
+      symbol: e.market,
+      direction: e.direction,
+      entry: e.entry,
+      stopLoss: e.stopLoss,
+      takeProfit: e.takeProfit,
+      risk: e.risk,
+      date: e.date,
+      session: e.session,
+    }));
 
   const insights = generatePsychologyInsights(entries);
 
@@ -95,6 +111,7 @@ meStatsRouter.get('/dashboard', asyncHandler(async (req, res) => {
     streak,
     weeklyPerformance,
     recentTrades,
+    openPositions: openPositionsView,
     hasJournaledToday: todayEntries.length > 0,
     insights,
     weeklyGoals,

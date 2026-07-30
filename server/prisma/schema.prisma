@@ -53,14 +53,16 @@ model JournalEntry {
   takeProfit        Float
   risk              Float
   reward            Float
-  result            String
-  pnl               Float
+  result            String?
+  pnl               Float?
   emotionBefore     String
-  emotionAfter      String
+  emotionAfter      String?
   confidence        Int
   mistakes          String   @default("")
   lessons           String   @default("")
   checklistComplete Boolean  @default(false)
+  positionStatus    String   @default("closed")
+  closedAt          DateTime?
   createdAt         DateTime @default(now())
 
   @@index([userId])
