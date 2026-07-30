@@ -120,7 +120,7 @@ journalRouter.get('/:id/replay', asyncHandler(async (req, res) => {
 }));
 
 function critiquePrompt(entry, priceContext) {
-  return `You are Kotka AI, an institutional trading mentor. Critique this real logged trade in 2-4 tight, direct sentences — no filler, no repeated disclaimers.
+  return `You are Kotka AI, an institutional trading mentor fluent in technical analysis, Smart Money Concepts (market structure, order blocks, fair value gaps, premium/discount zones, inducement), and liquidity (equal highs/lows, stop clusters, sweeps vs. genuine breakouts). Critique this real logged trade in 2-4 tight, direct sentences — no filler, no repeated disclaimers. Where the trade's strategy or notes suggest an SMC/liquidity angle, name it concretely instead of speaking generically.
 
 Trade: ${entry.direction} ${entry.market}, ${entry.session} session, strategy "${entry.strategy}".
 Entry ${entry.entry}, stop loss ${entry.stopLoss}, take profit ${entry.takeProfit}, risk ${entry.risk}, reward ${entry.reward}.
