@@ -147,14 +147,48 @@ model AIUsageLog {
 }
 
 model SimulatorSession {
-  id         String   @id @default(cuid())
-  userId     String
-  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  difficulty String
-  overall    Int
-  isBest     Boolean
-  createdAt  DateTime @default(now())
+  id                  String    @id @default(cuid())
+  userId              String
+  user                User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  symbol              String
+  ticker              String
+  timeframeMultiplier Int
+  timeframeUnit       String
+  windowStart         DateTime
+  windowEnd           DateTime
+  bars                Json
+  cursor              Int       @default(0)
+  startingBalance     Float     @default(10000)
+  balance             Float
+  status              String    @default("active")
+  createdAt           DateTime  @default(now())
+  completedAt         DateTime?
+
+  trades SimulatorTrade[]
 
   @@index([userId])
   @@index([createdAt])
+}
+
+model SimulatorTrade {
+  id            String           @id @default(cuid())
+  sessionId     String
+  session       SimulatorSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  direction     String
+  size          Float
+  entryPrice    Float
+  entryBarIndex Int
+  entryAt       DateTime
+  stopLoss      Float?
+  takeProfit    Float?
+  exitPrice     Float?
+  exitBarIndex  Int?
+  exitAt        DateTime?
+  pnl           Float?
+  result        String?
+  closeReason   String?
+  status        String   @default("open")
+  createdAt     DateTime @default(now())
+
+  @@index([sessionId])
 }

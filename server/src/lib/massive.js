@@ -1,6 +1,6 @@
 const MASSIVE_BASE_URL = 'https://api.massive.com';
 
-async function massiveGet(apiKey, path) {
+export async function massiveGet(apiKey, path) {
   const res = await fetch(`${MASSIVE_BASE_URL}${path}${path.includes('?') ? '&' : '?'}apiKey=${apiKey}`);
   const data = await res.json().catch(() => null);
   if (!res.ok || data?.status === 'NOT_AUTHORIZED' || data?.status === 'ERROR') {
@@ -66,6 +66,13 @@ export async function fetchMassiveVolatility(apiKey, days = 14) {
   });
 
   return items;
+}
+
+// Generic historical bar fetch, used by both volatility (daily) and the
+// trading simulator (intraday). Returns raw {t,o,h,l,c,v} bar objects.
+export async function fetchHistoricalBars(apiKey, ticker, multiplier, unit, from, to) {
+  const data = await massiveGet(apiKey, `/v2/aggs/ticker/${ticker}/range/${multiplier}/${unit}/${from}/${to}`);
+  return data?.results ?? [];
 }
 
 export async function fetchMassiveQuotes(apiKey) {

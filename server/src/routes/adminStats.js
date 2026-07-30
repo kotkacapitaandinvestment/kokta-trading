@@ -44,25 +44,59 @@ adminStatsRouter.get('/ai-usage', asyncHandler(async (req, res) => {
 adminStatsRouter.get('/simulator', asyncHandler(async (req, res) => {
   const since30d = daysAgo(30);
   const sessions = await prisma.simulatorSession.findMany({ where: { createdAt: { gte: since30d } } });
+  const trades = await prisma.simulatorTrade.findMany({
+    where: { session: { createdAt: { gte: since30d } } },
+    include: { session: { select: { symbol: true } } },
+  });
 
-  const total = sessions.length;
-  const avgScore = total ? Math.round(sessions.reduce((s, x) => s + x.overall, 0) / total) : 0;
+  const sessions30d = sessions.length;
+  const completedSessions30d = sessions.filter((s) => s.status === 'completed').length;
+  const closedTrades = trades.filter((t) => t.status === 'closed');
+  const totalTrades30d = closedTrades.length;
 
-  const byDifficulty = {};
+  const wins = closedTrades.filter((t) => t.result === 'win').length;
+  const avgWinRate = totalTrades30d ? Math.round((wins / totalTrades30d) * 100) : 0;
+
+  const withStop = closedTrades.filter((t) => t.stopLoss != null);
+  const avgExpectancyR = withStop.length
+    ? Math.round(
+        (withStop.reduce((s, t) => s + t.pnl / (Math.abs(t.entryPrice - t.stopLoss) * t.size), 0) / withStop.length) * 100,
+      ) / 100
+    : null;
+
+  const totalSimulatedPnl30d = Math.round(closedTrades.reduce((s, t) => s + t.pnl, 0) * 100) / 100;
+
+  const bySymbol = {};
   for (const s of sessions) {
-    if (!byDifficulty[s.difficulty]) byDifficulty[s.difficulty] = { difficulty: s.difficulty, sessions: 0, totalScore: 0 };
-    byDifficulty[s.difficulty].sessions += 1;
-    byDifficulty[s.difficulty].totalScore += s.overall;
+    if (!bySymbol[s.symbol]) bySymbol[s.symbol] = { symbol: s.symbol, sessions: 0, trades: 0, wins: 0, totalPnl: 0 };
+    bySymbol[s.symbol].sessions += 1;
   }
-  const difficulties = Object.values(byDifficulty)
-    .map((d) => ({ difficulty: d.difficulty, sessions: d.sessions, avgScore: Math.round(d.totalScore / d.sessions) }))
+  for (const t of closedTrades) {
+    const symbol = t.session.symbol;
+    if (!bySymbol[symbol]) bySymbol[symbol] = { symbol, sessions: 0, trades: 0, wins: 0, totalPnl: 0 };
+    bySymbol[symbol].trades += 1;
+    if (t.result === 'win') bySymbol[symbol].wins += 1;
+    bySymbol[symbol].totalPnl += t.pnl;
+  }
+  const symbolBreakdown = Object.values(bySymbol)
+    .map((s) => ({
+      symbol: s.symbol,
+      sessions: s.sessions,
+      trades: s.trades,
+      winRate: s.trades ? Math.round((s.wins / s.trades) * 100) : 0,
+      avgPnl: s.trades ? Math.round((s.totalPnl / s.trades) * 100) / 100 : 0,
+    }))
     .sort((a, b) => b.sessions - a.sessions);
 
   res.json({
-    sessions30d: total,
-    avgScore,
-    mostPlayed: difficulties[0]?.difficulty ?? null,
-    difficulties,
+    sessions30d,
+    completedSessions30d,
+    totalTrades30d,
+    avgWinRate,
+    avgExpectancyR,
+    mostTradedSymbol: symbolBreakdown[0]?.symbol ?? null,
+    totalSimulatedPnl30d,
+    bySymbol: symbolBreakdown,
   });
 }));
 

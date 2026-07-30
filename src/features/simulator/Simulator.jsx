@@ -1,122 +1,153 @@
-import { useState } from 'react';
-import clsx from 'clsx';
-import { Gamepad2, RotateCcw, TrendingUp } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { Play, Pause, SkipForward, RotateCcw } from 'lucide-react';
 import PageHeader from '../../components/ui/PageHeader';
 import Card, { CardHeader, CardBody } from '../../components/ui/Card';
 import Button from '../../components/ui/Button';
-import Badge from '../../components/ui/Badge';
-import { difficulties, getScenario, scoreDecision } from './scenarios';
 import { api } from '../../lib/api';
+import SymbolPicker from './components/SymbolPicker';
+import CandlestickChart from './components/CandlestickChart';
+import OrderTicket from './components/OrderTicket';
+import TradeLog from './components/TradeLog';
+import SessionSummary from './components/SessionSummary';
+
+const STEP_INTERVAL_MS = 800;
 
 export default function Simulator() {
-  const [difficulty, setDifficulty] = useState(null);
-  const [scenario, setScenario] = useState(null);
-  const [result, setResult] = useState(null);
+  const [session, setSession] = useState(null);
+  const [trades, setTrades] = useState([]);
+  const [playing, setPlaying] = useState(false);
+  const [error, setError] = useState(null);
 
-  const startScenario = (id) => {
-    setDifficulty(id);
-    setScenario(getScenario(id));
-    setResult(null);
+  const sessionRef = useRef(session);
+  const advancingRef = useRef(false);
+  useEffect(() => {
+    sessionRef.current = session;
+  }, [session]);
+
+  const startSession = (symbol) => {
+    setError(null);
+    api
+      .post('/simulator/sessions', { symbol })
+      .then(({ session: s }) => {
+        setSession(s);
+        setTrades([]);
+      })
+      .catch((err) => setError(err.message));
   };
 
-  const choose = (option) => {
-    const scored = scoreDecision(scenario, option);
-    setResult(scored);
-    api.post('/simulator/sessions', { difficulty, overall: scored.overall, isBest: scored.isBest }).catch(() => {});
+  const newSession = () => {
+    setSession(null);
+    setTrades([]);
+    setPlaying(false);
+    setError(null);
   };
 
-  const nextScenario = () => {
-    setScenario(getScenario(difficulty));
-    setResult(null);
+  const advanceOneStep = () => {
+    const current = sessionRef.current;
+    if (!current || current.status !== 'active' || advancingRef.current) return Promise.resolve();
+    advancingRef.current = true;
+    return api
+      .post(`/simulator/sessions/${current.id}/advance`, { steps: 1 })
+      .then((data) => {
+        setSession((prev) => (prev ? { ...prev, cursor: data.cursor, balance: data.balance, status: data.status, bars: [...prev.bars, ...data.newBars] } : prev));
+        if (data.closedTrades?.length) {
+          setTrades((prev) => prev.map((t) => data.closedTrades.find((c) => c.id === t.id) ?? t));
+        }
+        if (data.status === 'completed') setPlaying(false);
+      })
+      .catch((err) => {
+        setError(err.message);
+        setPlaying(false);
+      })
+      .finally(() => {
+        advancingRef.current = false;
+      });
   };
+
+  useEffect(() => {
+    if (!playing) return;
+    const interval = setInterval(advanceOneStep, STEP_INTERVAL_MS);
+    return () => clearInterval(interval);
+  }, [playing]);
+
+  const placeTrade = (order) => {
+    setError(null);
+    api
+      .post(`/simulator/sessions/${session.id}/trades`, order)
+      .then(({ trade }) => setTrades((prev) => [...prev, trade]))
+      .catch((err) => setError(err.message));
+  };
+
+  const closeOpenTrade = () => {
+    const openTrade = trades.find((t) => t.status === 'open');
+    if (!openTrade) return;
+    api
+      .post(`/simulator/sessions/${session.id}/trades/${openTrade.id}/close`)
+      .then(({ trade }) => {
+        setTrades((prev) => prev.map((t) => (t.id === trade.id ? trade : t)));
+        setSession((prev) => (prev ? { ...prev, balance: prev.balance + trade.pnl } : prev));
+      })
+      .catch((err) => setError(err.message));
+  };
+
+  const openTrade = trades.find((t) => t.status === 'open') ?? null;
+  const closedTrades = trades.filter((t) => t.status === 'closed');
+  const currentBar = session?.bars?.[session.bars.length - 1];
 
   return (
     <div className="space-y-6">
       <PageHeader
         eyebrow="Practice"
         title="Trading Simulator"
-        description="Rehearse decisions under pressure. Kotka AI generates the scenario and scores your judgment, not your luck."
+        description="Practice real historical price action. Place a trade, play through real candles, and see how it plays out — no fake scenarios, no fake scores."
       />
 
-      {!difficulty ? (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {difficulties.map((d) => (
-            <Card key={d.id} hover className="cursor-pointer p-6" onClick={() => startScenario(d.id)}>
-              <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-ink-50 dark:bg-ink-800">
-                <Gamepad2 className="h-5 w-5 text-ink-700 dark:text-ink-200" strokeWidth={1.75} />
-              </div>
-              <h3 className="text-sm font-semibold text-ink-900 dark:text-ink-50">{d.label}</h3>
-              <p className="mt-1.5 text-xs text-ink-500 dark:text-ink-400">{d.description}</p>
-            </Card>
-          ))}
-        </div>
+      {error ? (
+        <Card className="border-loss-200 bg-loss-50 p-4 text-sm text-loss-600 dark:border-loss-500/30 dark:bg-loss-500/10 dark:text-loss-400">{error}</Card>
+      ) : null}
+
+      {!session ? (
+        <SymbolPicker onSelect={startSession} />
+      ) : session.status === 'completed' ? (
+        <SessionSummary session={session} trades={trades} onNewSession={newSession} />
       ) : (
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
           <Card className="lg:col-span-2">
             <CardHeader
-              title={scenario?.market}
-              subtitle={difficulties.find((d) => d.id === difficulty)?.label}
+              title={session.symbol}
+              subtitle={`Balance: $${session.balance.toFixed(2)}`}
               action={
-                <Button variant="ghost" size="sm" icon={RotateCcw} onClick={() => setDifficulty(null)}>
-                  Change difficulty
-                </Button>
-              }
-            />
-            <CardBody className="space-y-5">
-              <div className="flex h-40 items-center justify-center rounded-xl bg-ink-50 text-xs text-ink-400 dark:bg-ink-800">
-                Live chart feed placeholder — connect a market data provider to render real price action here.
-              </div>
-              <p className="text-sm leading-relaxed text-ink-600 dark:text-ink-300">{scenario?.narrative}</p>
-
-              {!result ? (
-                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                  {scenario?.options.map((opt) => (
-                    <button
-                      key={opt}
-                      onClick={() => choose(opt)}
-                      className="rounded-xl border border-ink-200 px-4 py-3 text-left text-sm font-medium text-ink-700 transition-colors hover:border-ink-400 hover:bg-ink-50 dark:border-ink-700 dark:text-ink-200 dark:hover:bg-ink-800"
-                    >
-                      {opt}
-                    </button>
-                  ))}
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  <div className={clsx('rounded-xl p-4 text-sm', result.isBest ? 'bg-profit-50 text-profit-700 dark:bg-profit-500/10 dark:text-profit-400' : 'bg-loss-50 text-loss-600 dark:bg-loss-500/10 dark:text-loss-400')}>
-                    {result.feedback}
-                  </div>
-                  <Button icon={TrendingUp} onClick={nextScenario}>
-                    Next scenario
+                <div className="flex items-center gap-2">
+                  <Button variant="secondary" size="sm" icon={SkipForward} onClick={advanceOneStep} disabled={playing}>
+                    Step
+                  </Button>
+                  <Button variant={playing ? 'secondary' : 'primary'} size="sm" icon={playing ? Pause : Play} onClick={() => setPlaying((p) => !p)}>
+                    {playing ? 'Pause' : 'Play'}
+                  </Button>
+                  <Button variant="ghost" size="sm" icon={RotateCcw} onClick={newSession}>
+                    New session
                   </Button>
                 </div>
-              )}
+              }
+            />
+            <CardBody>
+              <CandlestickChart
+                bars={session.bars}
+                entryPrice={openTrade?.entryPrice}
+                entryBarIndex={openTrade?.entryBarIndex}
+                stopLoss={openTrade?.stopLoss}
+                takeProfit={openTrade?.takeProfit}
+              />
             </CardBody>
           </Card>
 
-          <Card>
-            <CardHeader title="Decision Score" subtitle={result ? `Overall: ${result.overall}/100` : 'Make a decision to see scoring'} />
-            <CardBody className="space-y-4">
-              {result ? (
-                result.scores.map((s) => (
-                  <div key={s.label}>
-                    <div className="mb-1 flex items-center justify-between text-xs">
-                      <span className="text-ink-600 dark:text-ink-300">{s.label}</span>
-                      <span className="font-medium text-ink-400">{s.value}</span>
-                    </div>
-                    <div className="h-1.5 w-full overflow-hidden rounded-full bg-ink-100 dark:bg-ink-800">
-                      <div
-                        className={clsx('h-full rounded-full', s.value >= 70 ? 'bg-profit-500' : s.value >= 45 ? 'bg-amber-400' : 'bg-loss-500')}
-                        style={{ width: `${s.value}%` }}
-                      />
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <p className="text-sm text-ink-400">Choose an action on the left to receive a full breakdown across timing, risk, execution, discipline, psychology, patience, and market reading.</p>
-              )}
-              {result ? <Badge tone={result.isBest ? 'profit' : 'loss'}>{result.isBest ? 'Optimal decision' : 'Suboptimal decision'}</Badge> : null}
-            </CardBody>
-          </Card>
+          <div className="space-y-6">
+            <OrderTicket currentPrice={currentBar?.c} disabled={!!openTrade} onSubmit={placeTrade} />
+          </div>
+
+          <div className="lg:col-span-3">
+            <TradeLog openTrade={openTrade} closedTrades={closedTrades} currentPrice={currentBar?.c} onCloseTrade={closeOpenTrade} />
+          </div>
         </div>
       )}
     </div>

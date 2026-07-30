@@ -6,7 +6,7 @@ import { usePersistedState } from '../../lib/usePersistedState';
 
 const defaultFlags = [
   { id: 'f1', name: 'Replay Engine v2', description: 'Improved annotation tools and AI critique depth.', tier: 'Institutional', enabled: true },
-  { id: 'f2', name: 'Institutional Chaos difficulty', description: 'Simulator difficulty tier with flash-volatility scenarios.', tier: 'Premium', enabled: true },
+  { id: 'f2', name: 'Simulator intraday replay', description: 'Real 5-minute historical price replay in the Trading Simulator.', tier: 'Premium', enabled: true },
   { id: 'f3', name: 'Kotka AI Vision (chart uploads)', description: 'Allow image uploads for AI chart analysis.', tier: 'All', enabled: true },
   { id: 'f4', name: 'Correlation matrix (beta)', description: 'Cross-asset correlation view on Market Intelligence.', tier: 'Premium', enabled: false },
   { id: 'f5', name: 'Multi-account journal sync', description: 'Sync journal entries across multiple broker accounts.', tier: 'Institutional', enabled: false },
