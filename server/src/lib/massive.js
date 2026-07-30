@@ -19,6 +19,7 @@ export async function massiveTestConnection(apiKey) {
 // display symbol -> [Massive ticker, market label]
 export const MASSIVE_SYMBOLS = {
   'EUR/USD': ['C:EURUSD', 'Forex'],
+  'GBP/USD': ['C:GBPUSD', 'Forex'],
   'GBP/JPY': ['C:GBPJPY', 'Forex'],
   'XAU/USD': ['C:XAUUSD', 'Metals'],
   'NAS100': ['I:NDX', 'Indices'],

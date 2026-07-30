@@ -20,7 +20,30 @@ const TEST_CONNECTIONS = {
       messages: [{ role: 'user', content: 'Reply with the single word: pong' }],
       maxTokens: 10,
     });
-    return `Model replied: "${reply.trim()}"`;
+    let message = `Chat model replied: "${reply.trim()}"`;
+
+    if (row.config?.visionModel) {
+      try {
+        const visionReply = await nvidiaChatCompletion({
+          apiKey: decryptSecret(row.secretCipher),
+          baseUrl: row.config?.baseUrl,
+          model: row.config.visionModel,
+          messages: [{
+            role: 'user',
+            content: [
+              { type: 'text', text: 'What color is this image? One word.' },
+              { type: 'image_url', image_url: { url: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC' } },
+            ],
+          }],
+          maxTokens: 10,
+        });
+        message += ` · Vision model replied: "${visionReply.trim()}"`;
+      } catch (err) {
+        message += ` · Vision model check FAILED: ${err.message}`;
+      }
+    }
+
+    return message;
   },
   paystack: async (row) => paystackTestConnection(decryptSecret(row.secretCipher)),
   finnhub: async (row) => finnhubTestConnection(decryptSecret(row.secretCipher)),

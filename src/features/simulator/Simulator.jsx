@@ -5,7 +5,7 @@ import Card, { CardHeader, CardBody } from '../../components/ui/Card';
 import Button from '../../components/ui/Button';
 import { api } from '../../lib/api';
 import SymbolPicker from './components/SymbolPicker';
-import CandlestickChart from './components/CandlestickChart';
+import CandlestickChart from '../../components/charts/CandlestickChart';
 import OrderTicket from './components/OrderTicket';
 import TradeLog from './components/TradeLog';
 import SessionSummary from './components/SessionSummary';

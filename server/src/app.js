@@ -20,7 +20,7 @@ import { prisma } from './lib/prisma.js';
 export const app = express();
 
 app.use(cors({ origin: process.env.CLIENT_ORIGIN, credentials: true }));
-app.use(express.json());
+app.use(express.json({ limit: '10mb' }));
 app.use(cookieParser());
 
 const requireAdmin = [requireAuth, requireRole('admin', 'super_admin')];

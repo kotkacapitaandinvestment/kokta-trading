@@ -6,17 +6,25 @@ export const INTEGRATION_PROVIDERS = [
     name: 'NVIDIA',
     category: 'Artificial Intelligence',
     icon: Sparkles,
-    description: 'NVIDIA NIM / build.nvidia.com — powers live Kotka AI chat completions.',
-    fallbackNote: 'When disabled or unconfigured, Kotka AI automatically falls back to its scripted mentor responses.',
+    description: 'NVIDIA NIM / build.nvidia.com — powers live Kotka AI chat completions and chart image analysis.',
+    fallbackNote: 'When disabled or unconfigured, Kotka AI automatically falls back to its scripted mentor responses. Without a vision model configured, uploaded chart images are rejected with a clear message instead of being sent to a text-only model.',
     fields: [
       { key: 'secret', label: 'API Key', type: 'password', placeholder: 'nvapi-…' },
       {
         key: 'config.model',
-        label: 'Model',
+        label: 'Chat Model',
         type: 'text',
         placeholder: 'meta/llama-3.1-70b-instruct',
         hint: 'e.g. meta/llama-3.1-70b-instruct, nvidia/llama-3.1-nemotron-70b-instruct',
         default: 'meta/llama-3.1-70b-instruct',
+      },
+      {
+        key: 'config.visionModel',
+        label: 'Vision Model',
+        type: 'text',
+        placeholder: 'meta/llama-3.2-90b-vision-instruct',
+        hint: 'Used when a trader uploads a chart image. Must be a vision-capable NIM model — confirmed working: meta/llama-3.2-90b-vision-instruct, meta/llama-3.2-11b-vision-instruct.',
+        default: 'meta/llama-3.2-90b-vision-instruct',
       },
       {
         key: 'config.baseUrl',

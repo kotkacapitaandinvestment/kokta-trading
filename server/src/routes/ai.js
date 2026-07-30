@@ -30,9 +30,21 @@ function logUsage(userId, source, model, startedAt) {
   });
 }
 
+function toNvidiaMessage(m) {
+  if (!m.image) return { role: m.role, content: m.content };
+  return {
+    role: m.role,
+    content: [
+      { type: 'text', text: m.content },
+      { type: 'image_url', image_url: { url: m.image } },
+    ],
+  };
+}
+
 aiRouter.post('/chat', asyncHandler(async (req, res) => {
   const { market = 'Forex', timeframe = '15m', messages = [] } = req.body ?? {};
   const startedAt = Date.now();
+  const hasImage = messages.some((m) => m.image);
 
   const integration = await prisma.integration.findUnique({ where: { provider: 'nvidia' } });
   if (!integration || !integration.enabled || !integration.secretCipher) {
@@ -40,7 +52,15 @@ aiRouter.post('/chat', asyncHandler(async (req, res) => {
     return res.json({ source: 'mock' });
   }
 
-  const model = integration.config?.model;
+  if (hasImage && !integration.config?.visionModel) {
+    logUsage(req.userId, 'vision_unconfigured', 'none', startedAt);
+    return res.json({
+      source: 'vision_unconfigured',
+      reply: "Chart image analysis isn't configured yet — ask your admin to set a vision model for NVIDIA in Integrations.",
+    });
+  }
+
+  const model = hasImage ? integration.config.visionModel : integration.config?.model;
   try {
     const reply = await nvidiaChatCompletion({
       apiKey: decryptSecret(integration.secretCipher),
@@ -48,7 +68,7 @@ aiRouter.post('/chat', asyncHandler(async (req, res) => {
       model,
       messages: [
         { role: 'system', content: systemPromptFor(market, timeframe) },
-        ...messages.map((m) => ({ role: m.role, content: m.content })),
+        ...messages.map(toNvidiaMessage),
       ],
     });
     logUsage(req.userId, 'nvidia', model, startedAt);

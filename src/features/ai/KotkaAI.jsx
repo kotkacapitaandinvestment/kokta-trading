@@ -65,10 +65,13 @@ export default function KotkaAI() {
     const userText = input.trim() || 'Chart attached for review.';
     const userMsg = { role: 'user', content: userText, image: pendingImage };
     const nextTitle = active.messages.length === 0 ? input.slice(0, 48) || 'Chart review' : active.title;
-    const historyForApi = [...active.messages, userMsg].map((m) => ({
-      role: m.role,
-      content: m.image ? `${m.content}\n[Trader attached a chart screenshot for this message.]` : m.content,
-    }));
+    const allMessages = [...active.messages, userMsg];
+    const historyForApi = allMessages.map((m, i) => {
+      const isLatest = i === allMessages.length - 1;
+      if (m.image && isLatest) return { role: m.role, content: m.content, image: m.image };
+      if (m.image) return { role: m.role, content: `${m.content}\n[Trader attached a chart screenshot for this message.]` };
+      return { role: m.role, content: m.content };
+    });
 
     updateActive((c) => ({
       ...c,
@@ -85,7 +88,7 @@ export default function KotkaAI() {
     try {
       const { source, reply } = await api.post('/ai/chat', { market, timeframe, messages: historyForApi });
       setLastSource(source);
-      const finalReply = source === 'nvidia' && reply ? reply : generateAssistantReply(userText, market);
+      const finalReply = reply && (source === 'nvidia' || source === 'vision_unconfigured') ? reply : generateAssistantReply(userText, market);
       updateActive((c) => ({
         ...c,
         messages: [...c.messages, { role: 'assistant', content: finalReply }],
@@ -137,8 +140,8 @@ export default function KotkaAI() {
             </div>
             <div className="flex items-center gap-3">
               {lastSource ? (
-                <Badge tone={lastSource === 'nvidia' ? 'profit' : 'neutral'}>
-                  {lastSource === 'nvidia' ? 'Live · NVIDIA' : 'Scripted mentor'}
+                <Badge tone={lastSource === 'nvidia' ? 'profit' : lastSource === 'vision_unconfigured' ? 'warning' : 'neutral'}>
+                  {lastSource === 'nvidia' ? 'Live · NVIDIA' : lastSource === 'vision_unconfigured' ? 'Vision not configured' : 'Scripted mentor'}
                 </Badge>
               ) : null}
               {!isPremium ? (
