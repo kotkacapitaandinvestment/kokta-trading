@@ -1,6 +1,6 @@
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  Flame,
   ShieldAlert,
   NotebookPen,
   ListChecks,
@@ -9,28 +9,21 @@ import {
   ArrowDownRight,
   Calendar,
   Brain,
-  Target,
   ChevronRight,
+  NotebookText,
 } from 'lucide-react';
 import Card, { CardHeader, CardBody } from '../../components/ui/Card';
 import Badge from '../../components/ui/Badge';
 import Button from '../../components/ui/Button';
 import ProgressRing from '../../components/ui/ProgressRing';
 import { useAuth } from '../../context/AuthContext';
+import { api } from '../../lib/api';
 import WeeklyPerformanceChart from './widgets/WeeklyPerformanceChart';
 import {
   watchlist,
   economicEvents,
-  recentTrades,
-  psychologyInsights,
-  weeklyGoals,
   marketSentiment,
 } from '../../lib/mockData';
-
-const disciplineScore = 84;
-const riskUsed = 0.6; // R used today
-const riskLimit = 2; // R daily limit
-const currentStreak = 5;
 
 function greeting() {
   const hour = new Date().getHours();
@@ -42,6 +35,17 @@ function greeting() {
 export default function Dashboard() {
   const { user } = useAuth();
   const firstName = user?.name?.split(' ')[0] ?? 'Trader';
+  const [data, setData] = useState(null);
+  const [checklist, setChecklist] = useState({});
+
+  useEffect(() => {
+    const today = new Date().toISOString().slice(0, 10);
+    api.get('/me/dashboard').then(setData);
+    api.get(`/checklist/${today}`).then(({ items }) => setChecklist(items));
+  }, []);
+
+  const checklistTotal = 8;
+  const checklistDone = Object.values(checklist).filter(Boolean).length;
 
   return (
     <div className="space-y-6">
@@ -64,10 +68,10 @@ export default function Dashboard() {
       {/* Hero stat row */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Card className="flex items-center gap-4 p-5">
-          <ProgressRing value={disciplineScore} size={64} strokeWidth={6} label={disciplineScore} color="#4a5df0" />
+          <ProgressRing value={data?.disciplineScore ?? 0} size={64} strokeWidth={6} label={data?.disciplineScore ?? '—'} color="#4a5df0" />
           <div>
             <p className="text-xs font-medium uppercase tracking-wide text-ink-400">Discipline Score</p>
-            <p className="mt-0.5 text-sm text-ink-600 dark:text-ink-300">Trending up this week</p>
+            <p className="mt-0.5 text-sm text-ink-600 dark:text-ink-300">Checklist completion rate</p>
           </div>
         </Card>
 
@@ -77,13 +81,13 @@ export default function Dashboard() {
             <ShieldAlert className="h-4 w-4 text-ink-300" strokeWidth={1.75} />
           </div>
           <div className="mt-2 flex items-baseline gap-1">
-            <span className="text-2xl font-semibold text-ink-900 dark:text-ink-50">{riskUsed}R</span>
-            <span className="text-sm text-ink-400">/ {riskLimit}R used</span>
+            <span className="text-2xl font-semibold text-ink-900 dark:text-ink-50">{data?.riskUsedToday ?? 0}R</span>
+            <span className="text-sm text-ink-400">/ {data?.dailyLossLimit ?? 2}R used</span>
           </div>
           <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-ink-100 dark:bg-ink-800">
             <div
               className="h-full rounded-full bg-accent-500"
-              style={{ width: `${Math.min((riskUsed / riskLimit) * 100, 100)}%` }}
+              style={{ width: `${Math.min(((data?.riskUsedToday ?? 0) / (data?.dailyLossLimit ?? 2)) * 100, 100)}%` }}
             />
           </div>
         </Card>
@@ -91,27 +95,22 @@ export default function Dashboard() {
         <Card className="p-5">
           <div className="flex items-center justify-between">
             <span className="text-xs font-medium uppercase tracking-wide text-ink-400">Current Streak</span>
-            <Flame className="h-4 w-4 text-amber-500" strokeWidth={1.75} />
+            <ShieldAlert className="h-4 w-4 text-amber-500" strokeWidth={1.75} />
           </div>
           <div className="mt-2 flex items-baseline gap-1">
-            <span className="text-2xl font-semibold text-ink-900 dark:text-ink-50">{currentStreak}</span>
-            <span className="text-sm text-ink-400">days of rule-following</span>
+            <span className="text-2xl font-semibold text-ink-900 dark:text-ink-50">{data?.streak ?? 0}</span>
+            <span className="text-sm text-ink-400">days within risk limit</span>
           </div>
-          <p className="mt-3 text-xs text-ink-400">Best this quarter: 11 days</p>
         </Card>
 
         <Card className="p-5">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-medium uppercase tracking-wide text-ink-400">Open Positions</span>
-            <Target className="h-4 w-4 text-ink-300" strokeWidth={1.75} />
+            <span className="text-xs font-medium uppercase tracking-wide text-ink-400">Trades Logged</span>
+            <NotebookText className="h-4 w-4 text-ink-300" strokeWidth={1.75} />
           </div>
           <div className="mt-2 flex items-baseline gap-1">
-            <span className="text-2xl font-semibold text-ink-900 dark:text-ink-50">2</span>
-            <span className="text-sm text-ink-400">across Forex, Indices</span>
-          </div>
-          <div className="mt-3 flex -space-x-1">
-            <Badge tone="profit">EUR/USD +0.8R</Badge>
-            <Badge tone="loss">US30 -0.3R</Badge>
+            <span className="text-2xl font-semibold text-ink-900 dark:text-ink-50">{data?.totalEntries ?? 0}</span>
+            <span className="text-sm text-ink-400">all-time in your journal</span>
           </div>
         </Card>
       </div>
@@ -130,25 +129,23 @@ export default function Dashboard() {
               }
             />
             <CardBody>
-              <WeeklyPerformanceChart />
+              {data ? <WeeklyPerformanceChart data={data.weeklyPerformance} /> : null}
             </CardBody>
           </Card>
 
           <Card>
             <CardHeader
-              title="Kotka AI Briefing"
-              subtitle="Generated 06:45 based on your open positions and market structure"
+              title="Talk to Kotka AI"
+              subtitle="Your institutional trading mentor"
               action={<Sparkles className="mt-0.5 h-4 w-4 text-accent-500" />}
             />
             <CardBody className="space-y-3">
               <p className="text-sm leading-relaxed text-ink-600 dark:text-ink-300">
-                EUR/USD remains inside yesterday's range with no clear displacement — treat any entry as counter-trend
-                until London liquidity is taken. Gold is approaching a daily order block; watch for reaction rather
-                than anticipating a break. Your discipline score dipped slightly after Tuesday's early exit — review
-                that trade before sizing up today.
+                Bring Kotka AI your thesis before you take the trade. It will challenge your bias, question your risk,
+                and push you toward process over impulse — not hand you a signal.
               </p>
               <Button as={Link} to="/app/ai" variant="secondary" size="sm">
-                Open full briefing
+                Open Kotka AI
               </Button>
             </CardBody>
           </Card>
@@ -156,32 +153,36 @@ export default function Dashboard() {
           <Card>
             <CardHeader title="Recent Trades" subtitle="Last 5 logged entries" />
             <CardBody className="overflow-x-auto">
-              <table className="w-full min-w-[480px] text-sm">
-                <thead>
-                  <tr className="border-b border-ink-100 text-left text-xs uppercase tracking-wide text-ink-400 dark:border-ink-800">
-                    <th className="pb-2 font-medium">Symbol</th>
-                    <th className="pb-2 font-medium">Direction</th>
-                    <th className="pb-2 font-medium">Session</th>
-                    <th className="pb-2 font-medium">R:R</th>
-                    <th className="pb-2 text-right font-medium">P&L</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {recentTrades.map((t) => (
-                    <tr key={t.id} className="border-b border-ink-50 last:border-0 dark:border-ink-800/60">
-                      <td className="py-2.5 font-medium text-ink-800 dark:text-ink-100">{t.symbol}</td>
-                      <td className="py-2.5 text-ink-500 dark:text-ink-400">{t.direction}</td>
-                      <td className="py-2.5 text-ink-500 dark:text-ink-400">{t.session}</td>
-                      <td className="py-2.5 text-ink-500 dark:text-ink-400">{t.rr > 0 ? `${t.rr}R` : `${t.rr}R`}</td>
-                      <td className="py-2.5 text-right font-medium">
-                        <span className={t.pnl >= 0 ? 'text-profit-600 dark:text-profit-400' : 'text-loss-500'}>
-                          {t.pnl >= 0 ? '+' : ''}${t.pnl}
-                        </span>
-                      </td>
+              {!data?.recentTrades?.length ? (
+                <p className="py-6 text-center text-sm text-ink-400">No trades logged yet.</p>
+              ) : (
+                <table className="w-full min-w-[480px] text-sm">
+                  <thead>
+                    <tr className="border-b border-ink-100 text-left text-xs uppercase tracking-wide text-ink-400 dark:border-ink-800">
+                      <th className="pb-2 font-medium">Symbol</th>
+                      <th className="pb-2 font-medium">Direction</th>
+                      <th className="pb-2 font-medium">Session</th>
+                      <th className="pb-2 font-medium">R:R</th>
+                      <th className="pb-2 text-right font-medium">P&L</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {data.recentTrades.map((t) => (
+                      <tr key={t.id} className="border-b border-ink-50 last:border-0 dark:border-ink-800/60">
+                        <td className="py-2.5 font-medium text-ink-800 dark:text-ink-100">{t.symbol}</td>
+                        <td className="py-2.5 text-ink-500 dark:text-ink-400">{t.direction}</td>
+                        <td className="py-2.5 text-ink-500 dark:text-ink-400">{t.session}</td>
+                        <td className="py-2.5 text-ink-500 dark:text-ink-400">{t.rr}R</td>
+                        <td className="py-2.5 text-right font-medium">
+                          <span className={t.pnl >= 0 ? 'text-profit-600 dark:text-profit-400' : 'text-loss-500'}>
+                            {t.pnl >= 0 ? '+' : ''}${t.pnl}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
             </CardBody>
           </Card>
         </div>
@@ -189,10 +190,10 @@ export default function Dashboard() {
         {/* Side column */}
         <div className="space-y-6">
           <Card>
-            <CardHeader title="Today's Checklist" subtitle="3 of 8 complete" />
+            <CardHeader title="Today's Checklist" subtitle={`${checklistDone} of ${checklistTotal} complete`} />
             <CardBody>
               <div className="mb-3 h-2 w-full overflow-hidden rounded-full bg-ink-100 dark:bg-ink-800">
-                <div className="h-full w-[38%] rounded-full bg-accent-500" />
+                <div className="h-full rounded-full bg-accent-500" style={{ width: `${(checklistDone / checklistTotal) * 100}%` }} />
               </div>
               <Button as={Link} to="/app/checklist" variant="secondary" size="sm" icon={ListChecks} className="w-full">
                 Complete checklist
@@ -204,10 +205,12 @@ export default function Dashboard() {
             <CardHeader title="Journal Reminder" />
             <CardBody className="space-y-3">
               <p className="text-sm text-ink-500 dark:text-ink-400">
-                You have 1 trade from this morning that hasn't been journaled yet.
+                {data?.hasJournaledToday
+                  ? "You've logged at least one entry today. Nice discipline."
+                  : "You haven't logged a journal entry yet today."}
               </p>
               <Button as={Link} to="/app/journal" variant="secondary" size="sm" icon={NotebookPen} className="w-full">
-                Log trade
+                {data?.hasJournaledToday ? 'View journal' : 'Log trade'}
               </Button>
             </CardBody>
           </Card>
@@ -272,14 +275,18 @@ export default function Dashboard() {
           <Card>
             <CardHeader title="Psychology Insights" action={<Brain className="mt-0.5 h-4 w-4 text-accent-500" />} />
             <CardBody>
-              <p className="text-sm leading-relaxed text-ink-600 dark:text-ink-300">{psychologyInsights[0]}</p>
+              {data?.insights?.length ? (
+                <p className="text-sm leading-relaxed text-ink-600 dark:text-ink-300">{data.insights[0]}</p>
+              ) : (
+                <p className="text-sm text-ink-400">Log a few more trades and Kotka will start surfacing real patterns in your behavior here.</p>
+              )}
             </CardBody>
           </Card>
 
           <Card>
             <CardHeader title="Weekly Goals" />
             <CardBody className="space-y-4">
-              {weeklyGoals.map((g) => (
+              {data?.weeklyGoals?.map((g) => (
                 <div key={g.id}>
                   <div className="mb-1.5 flex items-center justify-between text-xs">
                     <span className="text-ink-600 dark:text-ink-300">{g.label}</span>

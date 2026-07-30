@@ -1,21 +1,49 @@
+import { useEffect, useState } from 'react';
 import { Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, ResponsiveContainer } from 'recharts';
 import { Trophy, TrendingDown, Flame, Target, Gem, ShieldAlert } from 'lucide-react';
 import PageHeader from '../../components/ui/PageHeader';
 import Card, { CardHeader, CardBody } from '../../components/ui/Card';
-import { traderDNA } from '../../lib/mockData';
+import EmptyState from '../../components/ui/EmptyState';
+import { Dna } from 'lucide-react';
+import { api } from '../../lib/api';
 
-const identity = [
-  { icon: Trophy, label: 'Best Session', value: traderDNA.bestSession, tone: 'profit' },
-  { icon: TrendingDown, label: 'Worst Session', value: traderDNA.worstSession, tone: 'loss' },
-  { icon: Target, label: 'Best Strategy', value: traderDNA.bestStrategy, tone: 'profit' },
-  { icon: ShieldAlert, label: 'Worst Habit', value: traderDNA.worstHabit, tone: 'loss' },
-  { icon: Flame, label: 'Emotional Trigger', value: traderDNA.emotionalTrigger, tone: 'loss' },
-  { icon: Gem, label: 'Most Profitable Setup', value: traderDNA.mostProfitableSetup, tone: 'profit' },
-  { icon: Trophy, label: 'Strongest Market', value: traderDNA.strongestMarket, tone: 'profit' },
-  { icon: TrendingDown, label: 'Weakest Market', value: traderDNA.weakestMarket, tone: 'loss' },
+const identityMeta = [
+  { key: 'bestSession', icon: Trophy, label: 'Best Session', tone: 'profit' },
+  { key: 'worstSession', icon: TrendingDown, label: 'Worst Session', tone: 'loss' },
+  { key: 'bestStrategy', icon: Target, label: 'Best Strategy', tone: 'profit' },
+  { key: 'worstHabit', icon: ShieldAlert, label: 'Recent Mistake Pattern', tone: 'loss' },
+  { key: 'emotionalTrigger', icon: Flame, label: 'Emotional Trigger', tone: 'loss' },
+  { key: 'mostProfitableSetup', icon: Gem, label: 'Most Profitable Setup', tone: 'profit' },
+  { key: 'strongestMarket', icon: Trophy, label: 'Strongest Market', tone: 'profit' },
+  { key: 'weakestMarket', icon: TrendingDown, label: 'Weakest Market', tone: 'loss' },
 ];
 
 export default function TraderDNA() {
+  const [data, setData] = useState(null);
+
+  useEffect(() => {
+    api.get('/me/dna').then(setData);
+  }, []);
+
+  if (!data) return null;
+
+  if (!data.hasData) {
+    return (
+      <div className="space-y-6">
+        <PageHeader
+          eyebrow="Premium · Intelligence Engine"
+          title="Trader DNA"
+          description="A living profile of your patience, discipline, execution, and psychology — scored from your actual behavior."
+        />
+        <EmptyState
+          icon={Dna}
+          title="No journal data yet"
+          description="Log a few trades in your Journal and Trader DNA will start scoring your real behavior — patience, discipline, execution, and more."
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -30,7 +58,7 @@ export default function TraderDNA() {
           <CardBody>
             <div className="h-80 w-full">
               <ResponsiveContainer width="100%" height="100%">
-                <RadarChart data={traderDNA.scores} outerRadius="75%">
+                <RadarChart data={data.scores} outerRadius="75%">
                   <PolarGrid stroke="#e6e9ef" />
                   <PolarAngleAxis dataKey="label" tick={{ fontSize: 11, fill: '#585f70' }} />
                   <PolarRadiusAxis angle={30} domain={[0, 100]} tick={{ fontSize: 10, fill: '#a3aabb' }} />
@@ -44,7 +72,7 @@ export default function TraderDNA() {
         <Card>
           <CardHeader title="Score Breakdown" />
           <CardBody className="space-y-4">
-            {traderDNA.scores.map((s) => (
+            {data.scores.map((s) => (
               <div key={s.label}>
                 <div className="mb-1 flex items-center justify-between text-xs">
                   <span className="text-ink-600 dark:text-ink-300">{s.label}</span>
@@ -60,15 +88,18 @@ export default function TraderDNA() {
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {identity.map((item) => (
-          <Card key={item.label} className="p-5">
-            <div className={`mb-3 flex h-9 w-9 items-center justify-center rounded-lg ${item.tone === 'profit' ? 'bg-profit-50 dark:bg-profit-500/10' : 'bg-loss-50 dark:bg-loss-500/10'}`}>
-              <item.icon className={`h-4 w-4 ${item.tone === 'profit' ? 'text-profit-600 dark:text-profit-400' : 'text-loss-500'}`} strokeWidth={1.75} />
-            </div>
-            <p className="text-xs font-medium uppercase tracking-wide text-ink-400">{item.label}</p>
-            <p className="mt-1 text-sm font-semibold text-ink-900 dark:text-ink-50">{item.value}</p>
-          </Card>
-        ))}
+        {identityMeta.map((item) => {
+          const value = data.identity?.[item.key];
+          return (
+            <Card key={item.key} className="p-5">
+              <div className={`mb-3 flex h-9 w-9 items-center justify-center rounded-lg ${item.tone === 'profit' ? 'bg-profit-50 dark:bg-profit-500/10' : 'bg-loss-50 dark:bg-loss-500/10'}`}>
+                <item.icon className={`h-4 w-4 ${item.tone === 'profit' ? 'text-profit-600 dark:text-profit-400' : 'text-loss-500'}`} strokeWidth={1.75} />
+              </div>
+              <p className="text-xs font-medium uppercase tracking-wide text-ink-400">{item.label}</p>
+              <p className="mt-1 text-sm font-semibold text-ink-900 dark:text-ink-50">{value ?? 'Not enough data yet'}</p>
+            </Card>
+          );
+        })}
       </div>
     </div>
   );

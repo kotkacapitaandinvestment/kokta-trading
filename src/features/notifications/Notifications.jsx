@@ -1,22 +1,39 @@
-import { useState } from 'react';
-import { ListChecks, NotebookPen, ShieldAlert, Sparkles, CalendarClock, CheckCheck } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { ListChecks, NotebookPen, ShieldAlert, Sparkles, CheckCheck } from 'lucide-react';
 import PageHeader from '../../components/ui/PageHeader';
 import Card from '../../components/ui/Card';
 import Button from '../../components/ui/Button';
 import EmptyState from '../../components/ui/EmptyState';
 import { usePersistedState } from '../../lib/usePersistedState';
-import { notifications as seed } from '../../lib/mockData';
+import { api } from '../../lib/api';
 
-const iconFor = { checklist: ListChecks, journal: NotebookPen, risk: ShieldAlert, review: CalendarClock, ai: Sparkles };
+const iconFor = { checklist: ListChecks, journal: NotebookPen, risk: ShieldAlert };
 
 export default function Notifications() {
-  const [items, setItems] = usePersistedState('notifications.items', seed);
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [readIds, setReadIds] = usePersistedState('notifications.readIds', []);
   const [filter, setFilter] = useState('all');
+
+  useEffect(() => {
+    api
+      .get('/me/notifications')
+      .then(({ notifications }) => setItems(notifications.map((n) => ({ ...n, read: readIds.includes(n.id) }))))
+      .finally(() => setLoading(false));
+  }, []);
 
   const filtered = filter === 'all' ? items : items.filter((n) => (filter === 'unread' ? !n.read : n.type === filter));
 
-  const markAllRead = () => setItems((prev) => prev.map((n) => ({ ...n, read: true })));
-  const markRead = (id) => setItems((prev) => prev.map((n) => (n.id === id ? { ...n, read: true } : n)));
+  const markAllRead = () => {
+    const ids = items.map((n) => n.id);
+    setReadIds((prev) => [...new Set([...prev, ...ids])]);
+    setItems((prev) => prev.map((n) => ({ ...n, read: true })));
+  };
+
+  const markRead = (id) => {
+    setReadIds((prev) => (prev.includes(id) ? prev : [...prev, id]));
+    setItems((prev) => prev.map((n) => (n.id === id ? { ...n, read: true } : n)));
+  };
 
   const tabs = [
     { id: 'all', label: 'All' },
@@ -31,7 +48,7 @@ export default function Notifications() {
       <PageHeader
         eyebrow="Alerts"
         title="Notifications"
-        description="Checklist reminders, journal nudges, risk warnings, and AI insights — all in one feed."
+        description="Checklist reminders, journal nudges, and risk warnings — computed live from today's activity."
         actions={
           <Button variant="secondary" size="sm" icon={CheckCheck} onClick={markAllRead}>
             Mark all read
@@ -51,7 +68,7 @@ export default function Notifications() {
         ))}
       </div>
 
-      {filtered.length === 0 ? (
+      {!loading && filtered.length === 0 ? (
         <EmptyState icon={Sparkles} title="You're all caught up" description="No notifications match this filter." />
       ) : (
         <Card className="divide-y divide-ink-50 dark:divide-ink-800/60">
