@@ -4,12 +4,11 @@ import { requireAuth } from '../middleware/auth.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 import { decryptSecret } from '../lib/crypto.js';
 import { fetchWatchlistQuotes, fetchEconomicCalendar } from '../lib/finnhub.js';
+import { fetchMassiveQuotes } from '../lib/massive.js';
 import { watchlist as mockWatchlist, economicEvents as mockEconomicEvents, marketSentiment as mockSentiment } from '../lib/mockMarketData.js';
 
 export const marketDataRouter = Router();
 marketDataRouter.use(requireAuth);
-
-const mockBySymbol = Object.fromEntries(mockWatchlist.map((w) => [w.symbol, w]));
 
 function computeSentiment(liveItems) {
   const avgChange = liveItems.reduce((s, i) => s + i.change, 0) / liveItems.length;
@@ -21,40 +20,52 @@ function computeSentiment(liveItems) {
   return { overall, breakdown };
 }
 
+async function getEnabledIntegration(provider) {
+  const row = await prisma.integration.findUnique({ where: { provider } });
+  return row && row.enabled && row.secretCipher ? row : null;
+}
+
 marketDataRouter.get('/snapshot', asyncHandler(async (req, res) => {
-  const integration = await prisma.integration.findUnique({ where: { provider: 'finnhub' } });
-  if (!integration || !integration.enabled || !integration.secretCipher) {
-    return res.json({
-      watchlist: mockWatchlist,
-      economicEvents: mockEconomicEvents,
-      economicEventsLive: false,
-      sentiment: mockSentiment,
-      sentimentLive: false,
-    });
+  const [massiveRow, finnhubRow] = await Promise.all([
+    getEnabledIntegration('massive'),
+    getEnabledIntegration('finnhub'),
+  ]);
+
+  let massiveItems = [];
+  if (massiveRow) {
+    try {
+      massiveItems = await fetchMassiveQuotes(decryptSecret(massiveRow.secretCipher));
+    } catch (err) {
+      console.error('Massive watchlist fetch failed:', err.message);
+    }
   }
 
-  const apiKey = decryptSecret(integration.secretCipher);
-
-  let fetched;
-  try {
-    fetched = await fetchWatchlistQuotes(apiKey);
-  } catch (err) {
-    console.error('Finnhub watchlist fetch failed:', err.message);
-    fetched = { items: [] };
+  let finnhubItems = [];
+  if (finnhubRow) {
+    try {
+      const result = await fetchWatchlistQuotes(decryptSecret(finnhubRow.secretCipher));
+      finnhubItems = result.items;
+    } catch (err) {
+      console.error('Finnhub watchlist fetch failed:', err.message);
+    }
   }
 
-  // Merge: use the real quote where Finnhub returned one, otherwise fall back to that
-  // symbol's illustrative value (still labeled live:false so the UI can be honest about it).
+  // Prefer Massive per-symbol (broader free-tier coverage), fall back to Finnhub, then sample data.
   const watchlist = mockWatchlist.map((mockItem) => {
-    const real = fetched.items.find((i) => i.symbol === mockItem.symbol && i.live);
-    return real ?? { ...mockItem, live: false };
+    const fromMassive = massiveItems.find((i) => i.symbol === mockItem.symbol && i.live);
+    if (fromMassive) return { ...fromMassive, source: 'massive' };
+    const fromFinnhub = finnhubItems.find((i) => i.symbol === mockItem.symbol && i.live);
+    if (fromFinnhub) return { ...fromFinnhub, source: 'finnhub' };
+    return { ...mockItem, live: false };
   });
 
   let economicEvents = null;
-  try {
-    economicEvents = await fetchEconomicCalendar(apiKey);
-  } catch (err) {
-    console.error('Finnhub economic calendar fetch failed:', err.message);
+  if (finnhubRow) {
+    try {
+      economicEvents = await fetchEconomicCalendar(decryptSecret(finnhubRow.secretCipher));
+    } catch (err) {
+      console.error('Finnhub economic calendar fetch failed:', err.message);
+    }
   }
 
   const liveItems = watchlist.filter((w) => w.live);

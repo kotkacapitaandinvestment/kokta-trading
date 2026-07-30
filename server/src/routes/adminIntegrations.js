@@ -5,6 +5,7 @@ import { encryptSecret, decryptSecret, maskSecret } from '../lib/crypto.js';
 import { nvidiaChatCompletion } from '../lib/nvidia.js';
 import { paystackTestConnection } from '../lib/paystack.js';
 import { finnhubTestConnection } from '../lib/finnhub.js';
+import { massiveTestConnection } from '../lib/massive.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 
 export const adminIntegrationsRouter = Router();
@@ -23,6 +24,7 @@ const TEST_CONNECTIONS = {
   },
   paystack: async (row) => paystackTestConnection(decryptSecret(row.secretCipher)),
   finnhub: async (row) => finnhubTestConnection(decryptSecret(row.secretCipher)),
+  massive: async (row) => massiveTestConnection(decryptSecret(row.secretCipher)),
 };
 
 function toPublicIntegration(row) {

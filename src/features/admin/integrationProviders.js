@@ -47,4 +47,13 @@ export const INTEGRATION_PROVIDERS = [
     fallbackNote: 'Without an active Finnhub connection, Watchlist, Economic Events, and Sentiment show illustrative sample data instead of live figures.',
     fields: [{ key: 'secret', label: 'API Key', type: 'password', placeholder: 'Finnhub API key' }],
   },
+  {
+    id: 'massive',
+    name: 'Massive',
+    category: 'Market Data',
+    icon: Globe2,
+    description: 'Formerly Polygon.io — forex, metals, indices, and crypto previous-close data for the Watchlist.',
+    fallbackNote: 'Without an active Massive connection, symbols it would otherwise cover fall back to sample data.',
+    fields: [{ key: 'secret', label: 'API Key', type: 'password', placeholder: 'Massive API key' }],
+  },
 ];
