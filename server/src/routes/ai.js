@@ -154,7 +154,7 @@ aiRouter.post('/conversations/:id/messages', asyncHandler(async (req, res) => {
   const hasImage = priorMessages.some((m) => m.image);
 
   if (!integration || !integration.enabled || !integration.secretCipher) {
-    const reply = "Kotka AI isn't connected right now — an admin needs to configure the NVIDIA integration.";
+    const reply = "Kotka AI isn't connected right now — an admin needs to configure the AI integration.";
     writeEvent(res, { type: 'meta', source: 'mock' });
     writeEvent(res, { type: 'delta', text: reply });
     const saved = await prisma.aIMessage.create({ data: { conversationId: conversation.id, role: 'assistant', content: reply } });
@@ -165,7 +165,7 @@ aiRouter.post('/conversations/:id/messages', asyncHandler(async (req, res) => {
   }
 
   if (hasImage && !integration.config?.visionModel) {
-    const reply = "Chart image analysis isn't configured yet — ask your admin to set a vision model for NVIDIA in Integrations.";
+    const reply = "Chart image analysis isn't configured yet — ask your admin to set a vision model in Integrations.";
     writeEvent(res, { type: 'meta', source: 'vision_unconfigured' });
     writeEvent(res, { type: 'delta', text: reply });
     const saved = await prisma.aIMessage.create({ data: { conversationId: conversation.id, role: 'assistant', content: reply } });

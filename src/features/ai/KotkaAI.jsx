@@ -208,7 +208,7 @@ export default function KotkaAI() {
                 <div className="flex items-center gap-3">
                   {lastSource ? (
                     <Badge tone={lastSource === 'nvidia' ? 'profit' : lastSource === 'vision_unconfigured' ? 'warning' : 'neutral'}>
-                      {lastSource === 'nvidia' ? 'Live · NVIDIA' : lastSource === 'vision_unconfigured' ? 'Vision not configured' : 'Scripted mentor'}
+                      {lastSource === 'nvidia' ? 'Live' : lastSource === 'vision_unconfigured' ? 'Vision not configured' : 'Scripted mentor'}
                     </Badge>
                   ) : null}
                   {usage ? (
