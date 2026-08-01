@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { AlertCircle } from 'lucide-react';
 import AuthLayout from '../../components/layout/AuthLayout';
 import Input from '../../components/ui/Input';
 import Button from '../../components/ui/Button';
@@ -10,24 +11,43 @@ export default function Login() {
   const navigate = useNavigate();
   const [form, setForm] = useState({ email: '', password: '' });
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setError(null);
     setLoading(true);
-    await login(form);
-    setLoading(false);
-    navigate('/app/dashboard');
+    try {
+      await login(form);
+      navigate('/app/dashboard');
+    } catch (err) {
+      setError(err.message || 'Could not sign in. Check your details and try again.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleProvider = async (provider) => {
+    setError(null);
     setLoading(true);
-    await loginWithProvider(provider);
-    setLoading(false);
-    navigate('/app/dashboard');
+    try {
+      await loginWithProvider(provider);
+      navigate('/app/dashboard');
+    } catch (err) {
+      setError(err.message || 'Could not sign in. Try again.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
     <AuthLayout title="Welcome back" subtitle="Sign in to continue your trading process.">
+      {error ? (
+        <div className="mb-4 flex items-start gap-2 rounded-xl border border-loss-500/20 bg-loss-50 p-3 text-sm text-loss-600 dark:bg-loss-500/10 dark:text-loss-400">
+          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+          <span>{error}</span>
+        </div>
+      ) : null}
       <form onSubmit={handleSubmit} className="space-y-4">
         <Input
           label="Email"

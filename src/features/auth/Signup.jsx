@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { AlertCircle } from 'lucide-react';
 import AuthLayout from '../../components/layout/AuthLayout';
 import Input from '../../components/ui/Input';
 import Button from '../../components/ui/Button';
@@ -10,24 +11,43 @@ export default function Signup() {
   const navigate = useNavigate();
   const [form, setForm] = useState({ name: '', email: '', password: '' });
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setError(null);
     setLoading(true);
-    await signup(form);
-    setLoading(false);
-    navigate('/app/dashboard');
+    try {
+      await signup(form);
+      navigate('/app/dashboard');
+    } catch (err) {
+      setError(err.message || 'Could not create your account. Try again.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleProvider = async (provider) => {
+    setError(null);
     setLoading(true);
-    await loginWithProvider(provider);
-    setLoading(false);
-    navigate('/app/dashboard');
+    try {
+      await loginWithProvider(provider);
+      navigate('/app/dashboard');
+    } catch (err) {
+      setError(err.message || 'Could not sign up. Try again.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
     <AuthLayout title="Create your account" subtitle="Start building institutional discipline today.">
+      {error ? (
+        <div className="mb-4 flex items-start gap-2 rounded-xl border border-loss-500/20 bg-loss-50 p-3 text-sm text-loss-600 dark:bg-loss-500/10 dark:text-loss-400">
+          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+          <span>{error}</span>
+        </div>
+      ) : null}
       <form onSubmit={handleSubmit} className="space-y-4">
         <Input
           label="Full name"
