@@ -3,6 +3,7 @@ import PageHeader from '../../components/ui/PageHeader';
 import Card, { CardHeader, CardBody } from '../../components/ui/Card';
 import StatTile from '../../components/ui/StatTile';
 import { revenueByMonth } from '../../lib/mockData';
+import { CHART_COLORS } from '../../lib/chartColors';
 
 export default function AdminRevenue() {
   return (
@@ -24,15 +25,15 @@ export default function AdminRevenue() {
               <AreaChart data={revenueByMonth} margin={{ top: 8, right: 8, left: -20, bottom: 0 }}>
                 <defs>
                   <linearGradient id="revFill" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#10b981" stopOpacity={0.25} />
-                    <stop offset="100%" stopColor="#10b981" stopOpacity={0} />
+                    <stop offset="0%" stopColor={CHART_COLORS.profit} stopOpacity={0.25} />
+                    <stop offset="100%" stopColor={CHART_COLORS.profit} stopOpacity={0} />
                   </linearGradient>
                 </defs>
-                <CartesianGrid vertical={false} stroke="#e6e9ef" strokeDasharray="3 3" />
-                <XAxis dataKey="month" tickLine={false} axisLine={false} tick={{ fontSize: 12, fill: '#a3aabb' }} />
-                <YAxis tickLine={false} axisLine={false} tick={{ fontSize: 12, fill: '#a3aabb' }} />
-                <Tooltip contentStyle={{ borderRadius: 12, border: '1px solid #e6e9ef', fontSize: 12 }} formatter={(v) => [`$${v.toLocaleString()}`, 'MRR']} />
-                <Area type="monotone" dataKey="revenue" stroke="#10b981" strokeWidth={2.5} fill="url(#revFill)" />
+                <CartesianGrid vertical={false} stroke={CHART_COLORS.grid.light} strokeDasharray="3 3" />
+                <XAxis dataKey="month" tickLine={false} axisLine={false} tick={{ fontSize: 12, fill: CHART_COLORS.tick.light }} />
+                <YAxis tickLine={false} axisLine={false} tick={{ fontSize: 12, fill: CHART_COLORS.tick.light }} />
+                <Tooltip contentStyle={{ borderRadius: 12, border: `1px solid ${CHART_COLORS.grid.light}`, fontSize: 12 }} formatter={(v) => [`$${v.toLocaleString()}`, 'MRR']} />
+                <Area type="monotone" dataKey="revenue" stroke={CHART_COLORS.profit} strokeWidth={2.5} fill="url(#revFill)" />
               </AreaChart>
             </ResponsiveContainer>
           </div>

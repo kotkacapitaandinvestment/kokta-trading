@@ -1,3 +1,5 @@
+import { CHART_COLORS } from '../../../lib/chartColors';
+
 export const Y_AXIS_WIDTH = 70;
 export const MARGIN = { top: 8, right: 8, bottom: 0, left: 0 };
 
@@ -5,24 +7,24 @@ export const CHART_THEMES = {
   app: {
     bg: null,
     grid: null,
-    up: '#16a34a',
-    down: '#ef4444',
-    volUp: 'rgba(22,163,74,0.5)',
-    volDown: 'rgba(239,68,68,0.5)',
-    axisText: '#a3aabb',
-    crosshair: '#a3aabb',
+    up: CHART_COLORS.profit,
+    down: CHART_COLORS.loss,
+    volUp: 'rgba(61,153,112,0.5)',
+    volDown: 'rgba(194,74,63,0.5)',
+    axisText: CHART_COLORS.tick.light,
+    crosshair: CHART_COLORS.tick.light,
     tooltipClassName: 'border border-ink-100 bg-white text-ink-800 dark:border-ink-800 dark:bg-ink-900 dark:text-ink-100',
   },
   terminal: {
-    bg: '#0d1117',
-    grid: '#1e2530',
-    up: '#26a69a',
-    down: '#ef5350',
-    volUp: 'rgba(38,166,154,0.5)',
-    volDown: 'rgba(239,83,80,0.5)',
-    axisText: '#8b93a7',
-    crosshair: '#758696',
-    tooltipClassName: 'border border-[#2a2e39] bg-[#161b26] text-[#d1d4dc]',
+    bg: '#0C0C0E',
+    grid: '#262320',
+    up: CHART_COLORS.profit,
+    down: CHART_COLORS.loss,
+    volUp: 'rgba(61,153,112,0.5)',
+    volDown: 'rgba(194,74,63,0.5)',
+    axisText: '#B8AE9F',
+    crosshair: '#948A7D',
+    tooltipClassName: 'border border-[#262320] bg-[#171512] text-[#EDE8DD]',
   },
 };
 
@@ -33,4 +35,4 @@ export function formatTime(t) {
 
 export const FIB_LEVELS = [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1];
 
-export const INDICATOR_COLORS = ['#3b82f6', '#f59e0b', '#a855f7', '#14b8a6'];
+export const INDICATOR_COLORS = [CHART_COLORS.accent, CHART_COLORS.accentLight, CHART_COLORS.accentBronze, CHART_COLORS.accentDeep];

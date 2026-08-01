@@ -1,4 +1,6 @@
-export default function ProgressRing({ value = 0, size = 96, strokeWidth = 8, label, sublabel, color = '#4a5df0' }) {
+import { CHART_COLORS } from '../../lib/chartColors';
+
+export default function ProgressRing({ value = 0, size = 96, strokeWidth = 8, label, sublabel, color = CHART_COLORS.accent }) {
   const radius = (size - strokeWidth) / 2;
   const circumference = 2 * Math.PI * radius;
   const offset = circumference - (Math.min(Math.max(value, 0), 100) / 100) * circumference;

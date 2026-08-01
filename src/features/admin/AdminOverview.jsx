@@ -6,6 +6,7 @@ import Card, { CardHeader, CardBody } from '../../components/ui/Card';
 import StatTile from '../../components/ui/StatTile';
 import { api } from '../../lib/api';
 import { revenueByMonth } from '../../lib/mockData';
+import { CHART_COLORS } from '../../lib/chartColors';
 
 export default function AdminOverview() {
   const [stats, setStats] = useState(null);
@@ -36,15 +37,15 @@ export default function AdminOverview() {
                 <AreaChart data={stats.dailyActive} margin={{ top: 8, right: 8, left: -20, bottom: 0 }}>
                   <defs>
                     <linearGradient id="dauFill" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#4a5df0" stopOpacity={0.25} />
-                      <stop offset="100%" stopColor="#4a5df0" stopOpacity={0} />
+                      <stop offset="0%" stopColor={CHART_COLORS.accent} stopOpacity={0.25} />
+                      <stop offset="100%" stopColor={CHART_COLORS.accent} stopOpacity={0} />
                     </linearGradient>
                   </defs>
-                  <CartesianGrid vertical={false} stroke="#e6e9ef" strokeDasharray="3 3" />
-                  <XAxis dataKey="day" tickLine={false} axisLine={false} tick={{ fontSize: 12, fill: '#a3aabb' }} />
-                  <YAxis tickLine={false} axisLine={false} tick={{ fontSize: 12, fill: '#a3aabb' }} allowDecimals={false} />
-                  <Tooltip contentStyle={{ borderRadius: 12, border: '1px solid #e6e9ef', fontSize: 12 }} />
-                  <Area type="monotone" dataKey="dau" stroke="#4a5df0" strokeWidth={2.5} fill="url(#dauFill)" />
+                  <CartesianGrid vertical={false} stroke={CHART_COLORS.grid.light} strokeDasharray="3 3" />
+                  <XAxis dataKey="day" tickLine={false} axisLine={false} tick={{ fontSize: 12, fill: CHART_COLORS.tick.light }} />
+                  <YAxis tickLine={false} axisLine={false} tick={{ fontSize: 12, fill: CHART_COLORS.tick.light }} allowDecimals={false} />
+                  <Tooltip contentStyle={{ borderRadius: 12, border: `1px solid ${CHART_COLORS.grid.light}`, fontSize: 12 }} />
+                  <Area type="monotone" dataKey="dau" stroke={CHART_COLORS.accent} strokeWidth={2.5} fill="url(#dauFill)" />
                 </AreaChart>
               </ResponsiveContainer>
             </div>
@@ -82,11 +83,11 @@ export default function AdminOverview() {
           <div className="h-56 w-full">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={revenueByMonth} margin={{ top: 8, right: 8, left: -20, bottom: 0 }}>
-                <CartesianGrid vertical={false} stroke="#e6e9ef" strokeDasharray="3 3" />
-                <XAxis dataKey="month" tickLine={false} axisLine={false} tick={{ fontSize: 12, fill: '#a3aabb' }} />
-                <YAxis tickLine={false} axisLine={false} tick={{ fontSize: 12, fill: '#a3aabb' }} />
-                <Tooltip contentStyle={{ borderRadius: 12, border: '1px solid #e6e9ef', fontSize: 12 }} formatter={(v) => [`$${v.toLocaleString()}`, 'Revenue']} />
-                <Bar dataKey="revenue" radius={[6, 6, 0, 0]} fill="#4a5df0" />
+                <CartesianGrid vertical={false} stroke={CHART_COLORS.grid.light} strokeDasharray="3 3" />
+                <XAxis dataKey="month" tickLine={false} axisLine={false} tick={{ fontSize: 12, fill: CHART_COLORS.tick.light }} />
+                <YAxis tickLine={false} axisLine={false} tick={{ fontSize: 12, fill: CHART_COLORS.tick.light }} />
+                <Tooltip contentStyle={{ borderRadius: 12, border: `1px solid ${CHART_COLORS.grid.light}`, fontSize: 12 }} formatter={(v) => [`$${v.toLocaleString()}`, 'Revenue']} />
+                <Bar dataKey="revenue" radius={[6, 6, 0, 0]} fill={CHART_COLORS.accent} />
               </BarChart>
             </ResponsiveContainer>
           </div>

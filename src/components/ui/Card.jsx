@@ -4,8 +4,8 @@ export default function Card({ className, hover = false, children, ...props }) {
   return (
     <div
       className={clsx(
-        'rounded-2xl border border-ink-100 bg-white shadow-card dark:border-ink-800 dark:bg-ink-900',
-        hover && 'transition-shadow duration-200 hover:shadow-card-hover',
+        'rounded-2xl border border-ink-100 bg-white shadow-card dark:border-ink-700 dark:bg-ink-900 dark:shadow-none',
+        hover && 'transition-colors duration-200 hover:shadow-card-hover dark:hover:border-ink-600',
         className,
       )}
       {...props}

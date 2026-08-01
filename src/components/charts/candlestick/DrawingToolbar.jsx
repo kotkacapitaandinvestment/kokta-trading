@@ -15,7 +15,7 @@ export default function DrawingToolbar({ activeTool, onSelectTool, onClearAll, h
     <div
       className={clsx(
         'mb-2 flex items-center gap-1 rounded-lg p-1',
-        isTerminal ? 'bg-[#161b26]' : 'bg-ink-50 dark:bg-ink-800',
+        isTerminal ? 'bg-[#171512]' : 'bg-ink-50 dark:bg-ink-800',
       )}
     >
       {TOOLS.map((tool) => {
@@ -31,9 +31,9 @@ export default function DrawingToolbar({ activeTool, onSelectTool, onClearAll, h
             className={clsx(
               'flex h-8 w-8 items-center justify-center rounded-md transition-colors',
               active
-                ? 'bg-accent-500 text-white'
+                ? 'bg-accent-500 text-ink-950'
                 : isTerminal
-                  ? 'text-[#8b93a7] hover:bg-[#1e2530] hover:text-white'
+                  ? 'text-[#948A7D] hover:bg-[#262320] hover:text-white'
                   : 'text-ink-500 hover:bg-ink-100 hover:text-ink-800 dark:text-ink-400 dark:hover:bg-ink-700',
             )}
           >
@@ -41,7 +41,7 @@ export default function DrawingToolbar({ activeTool, onSelectTool, onClearAll, h
           </button>
         );
       })}
-      <div className={clsx('mx-1 h-5 w-px', isTerminal ? 'bg-[#2a2e39]' : 'bg-ink-200 dark:bg-ink-700')} />
+      <div className={clsx('mx-1 h-5 w-px', isTerminal ? 'bg-[#262320]' : 'bg-ink-200 dark:bg-ink-700')} />
       <button
         type="button"
         title="Clear all drawings"
@@ -50,7 +50,7 @@ export default function DrawingToolbar({ activeTool, onSelectTool, onClearAll, h
         disabled={!hasDrawings}
         className={clsx(
           'flex h-8 w-8 items-center justify-center rounded-md transition-colors disabled:cursor-not-allowed disabled:opacity-40',
-          isTerminal ? 'text-[#8b93a7] hover:bg-[#1e2530] hover:text-loss-400' : 'text-ink-500 hover:bg-ink-100 hover:text-loss-500 dark:text-ink-400 dark:hover:bg-ink-700',
+          isTerminal ? 'text-[#948A7D] hover:bg-[#262320] hover:text-loss-400' : 'text-ink-500 hover:bg-ink-100 hover:text-loss-500 dark:text-ink-400 dark:hover:bg-ink-700',
         )}
       >
         <Trash2 className="h-4 w-4" strokeWidth={1.75} />

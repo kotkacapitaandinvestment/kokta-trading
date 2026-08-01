@@ -11,13 +11,13 @@ export default function ChatMessage({ role, content, image }) {
       <div
         className={clsx(
           'flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold',
-          isUser ? 'bg-accent-500 text-white' : 'bg-ink-900 text-white dark:bg-white dark:text-ink-900',
+          isUser ? 'bg-accent-500 text-ink-950' : 'bg-ink-900 text-white dark:bg-white dark:text-ink-900',
         )}
       >
         {isUser ? (user?.initials ?? 'U') : <Sparkles className="h-4 w-4" />}
       </div>
-      <div className={clsx('max-w-[75%] rounded-2xl px-4 py-3 text-sm leading-relaxed', isUser
-        ? 'bg-accent-500 text-white'
+      <div className={clsx('max-w-[75%] rounded-xl px-4 py-3 text-sm leading-relaxed', isUser
+        ? 'border-l-2 border-accent-500 bg-ink-100 text-ink-800 dark:bg-ink-800 dark:text-ink-100'
         : 'bg-ink-50 text-ink-700 dark:bg-ink-800 dark:text-ink-200')}
       >
         {image ? (

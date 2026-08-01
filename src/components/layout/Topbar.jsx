@@ -40,7 +40,7 @@ export default function Topbar({ title, right }) {
             onClick={() => setOpen((o) => !o)}
             className="flex items-center gap-2 rounded-lg py-1.5 pl-1.5 pr-2 transition-colors hover:bg-ink-100 dark:hover:bg-ink-800"
           >
-            <div className="flex h-7 w-7 items-center justify-center rounded-full bg-accent-500 text-xs font-semibold text-white">
+            <div className="flex h-7 w-7 items-center justify-center rounded-full bg-accent-500 text-xs font-semibold text-ink-950">
               {user?.initials ?? 'KT'}
             </div>
             <ChevronDown className="h-3.5 w-3.5 text-ink-400" />
@@ -49,7 +49,7 @@ export default function Topbar({ title, right }) {
           {open ? (
             <>
               <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
-              <div className="absolute right-0 z-20 mt-2 w-56 rounded-xl border border-ink-100 bg-white p-1.5 shadow-pop dark:border-ink-800 dark:bg-ink-800">
+              <div className="absolute right-0 z-20 mt-2 w-56 rounded-xl border border-ink-100 bg-white p-1.5 shadow-pop dark:border-ink-700 dark:bg-ink-800 dark:shadow-none">
                 <div className="px-3 py-2">
                   <p className="truncate text-sm font-medium text-ink-900 dark:text-ink-50">{user?.name}</p>
                   <p className="truncate text-xs text-ink-400">{user?.email}</p>

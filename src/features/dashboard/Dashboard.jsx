@@ -18,6 +18,7 @@ import Button from '../../components/ui/Button';
 import ProgressRing from '../../components/ui/ProgressRing';
 import { useAuth } from '../../context/AuthContext';
 import { api } from '../../lib/api';
+import { CHART_COLORS } from '../../lib/chartColors';
 import WeeklyPerformanceChart from './widgets/WeeklyPerformanceChart';
 
 function greeting() {
@@ -47,14 +48,14 @@ export default function Dashboard() {
   const checklistDone = Object.values(checklist).filter(Boolean).length;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       {/* Greeting */}
       <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight text-ink-900 dark:text-ink-50">
             {greeting()}, {firstName}.
           </h1>
-          <p className="mt-1 text-sm text-ink-500 dark:text-ink-400">
+          <p className="mt-1.5 text-sm text-ink-500 dark:text-ink-400">
             Here's what you need to know before you trade today.
           </p>
         </div>
@@ -65,25 +66,25 @@ export default function Dashboard() {
       </div>
 
       {/* Hero stat row */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Card className="flex items-center gap-4 p-5">
-          <ProgressRing value={data?.disciplineScore ?? 0} size={64} strokeWidth={6} label={data?.disciplineScore ?? '—'} color="#4a5df0" />
+      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
+        <Card className="flex items-center gap-5 p-6">
+          <ProgressRing value={data?.disciplineScore ?? 0} size={72} strokeWidth={6} label={data?.disciplineScore ?? '—'} color={CHART_COLORS.accent} />
           <div>
             <p className="text-xs font-medium uppercase tracking-wide text-ink-400">Discipline Score</p>
             <p className="mt-0.5 text-sm text-ink-600 dark:text-ink-300">Checklist completion rate</p>
           </div>
         </Card>
 
-        <Card className="p-5">
+        <Card className="p-6">
           <div className="flex items-center justify-between">
             <span className="text-xs font-medium uppercase tracking-wide text-ink-400">Today's Risk Limit</span>
             <ShieldAlert className="h-4 w-4 text-ink-300" strokeWidth={1.75} />
           </div>
-          <div className="mt-2 flex items-baseline gap-1">
+          <div className="mt-3 flex items-baseline gap-1">
             <span className="text-2xl font-semibold text-ink-900 dark:text-ink-50">{data?.riskUsedToday ?? 0}R</span>
             <span className="text-sm text-ink-400">/ {data?.dailyLossLimit ?? 2}R used</span>
           </div>
-          <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-ink-100 dark:bg-ink-800">
+          <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-ink-100 dark:bg-ink-800">
             <div
               className="h-full rounded-full bg-accent-500"
               style={{ width: `${Math.min(((data?.riskUsedToday ?? 0) / (data?.dailyLossLimit ?? 2)) * 100, 100)}%` }}
@@ -91,23 +92,23 @@ export default function Dashboard() {
           </div>
         </Card>
 
-        <Card className="p-5">
+        <Card className="p-6">
           <div className="flex items-center justify-between">
             <span className="text-xs font-medium uppercase tracking-wide text-ink-400">Current Streak</span>
             <ShieldAlert className="h-4 w-4 text-amber-500" strokeWidth={1.75} />
           </div>
-          <div className="mt-2 flex items-baseline gap-1">
+          <div className="mt-3 flex items-baseline gap-1">
             <span className="text-2xl font-semibold text-ink-900 dark:text-ink-50">{data?.streak ?? 0}</span>
             <span className="text-sm text-ink-400">days within risk limit</span>
           </div>
         </Card>
 
-        <Card className="p-5">
+        <Card className="p-6">
           <div className="flex items-center justify-between">
             <span className="text-xs font-medium uppercase tracking-wide text-ink-400">Open Positions</span>
             <Target className="h-4 w-4 text-ink-300" strokeWidth={1.75} />
           </div>
-          <div className="mt-2 flex items-baseline gap-1">
+          <div className="mt-3 flex items-baseline gap-1">
             <span className="text-2xl font-semibold text-ink-900 dark:text-ink-50">{data?.openPositions?.length ?? 0}</span>
             <span className="text-sm text-ink-400">logged, not yet closed</span>
           </div>

@@ -8,7 +8,7 @@ export default function Sidebar({ brandTo, items, secondaryItems, secondaryLabel
     <aside className="hidden w-64 shrink-0 flex-col border-r border-ink-100 bg-white lg:flex dark:border-ink-800 dark:bg-ink-900">
       <div className="flex h-16 items-center gap-2.5 border-b border-ink-100 px-6 dark:border-ink-800">
         <NavLink to={brandTo} className="flex items-center gap-2.5">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-ink-900 text-sm font-bold text-white dark:bg-white dark:text-ink-900">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent-500 text-sm font-bold text-ink-950 dark:bg-accent-400">
             K
           </div>
           <div className="leading-tight">
@@ -29,12 +29,12 @@ export default function Sidebar({ brandTo, items, secondaryItems, secondaryLabel
                   onClick={(e) => locked && e.preventDefault()}
                   className={({ isActive }) =>
                     clsx(
-                      'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+                      'flex items-center gap-3 rounded-lg border-l-2 px-3 py-2 text-sm font-medium transition-colors',
                       locked
-                        ? 'cursor-not-allowed text-ink-300 dark:text-ink-600'
+                        ? 'border-transparent cursor-not-allowed text-ink-300 dark:text-ink-600'
                         : isActive
-                          ? 'bg-ink-900 text-white dark:bg-white dark:text-ink-900'
-                          : 'text-ink-600 hover:bg-ink-50 dark:text-ink-300 dark:hover:bg-ink-800',
+                          ? 'border-accent-500 bg-ink-100 text-ink-900 dark:bg-ink-800 dark:text-white'
+                          : 'border-transparent text-ink-600 hover:bg-ink-50 dark:text-ink-300 dark:hover:bg-ink-800',
                     )
                   }
                 >
@@ -67,10 +67,10 @@ export default function Sidebar({ brandTo, items, secondaryItems, secondaryLabel
                     to={item.to}
                     className={({ isActive }) =>
                       clsx(
-                        'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+                        'flex items-center gap-3 rounded-lg border-l-2 px-3 py-2 text-sm font-medium transition-colors',
                         isActive
-                          ? 'bg-ink-900 text-white dark:bg-white dark:text-ink-900'
-                          : 'text-ink-600 hover:bg-ink-50 dark:text-ink-300 dark:hover:bg-ink-800',
+                          ? 'border-accent-500 bg-ink-100 text-ink-900 dark:bg-ink-800 dark:text-white'
+                          : 'border-transparent text-ink-600 hover:bg-ink-50 dark:text-ink-300 dark:hover:bg-ink-800',
                       )
                     }
                   >

@@ -6,6 +6,7 @@ import Card, { CardHeader, CardBody } from '../../components/ui/Card';
 import EmptyState from '../../components/ui/EmptyState';
 import { Dna } from 'lucide-react';
 import { api } from '../../lib/api';
+import { CHART_COLORS } from '../../lib/chartColors';
 
 const identityMeta = [
   { key: 'bestSession', icon: Trophy, label: 'Best Session', tone: 'profit' },
@@ -59,10 +60,10 @@ export default function TraderDNA() {
             <div className="h-80 w-full">
               <ResponsiveContainer width="100%" height="100%">
                 <RadarChart data={data.scores} outerRadius="75%">
-                  <PolarGrid stroke="#e6e9ef" />
-                  <PolarAngleAxis dataKey="label" tick={{ fontSize: 11, fill: '#585f70' }} />
-                  <PolarRadiusAxis angle={30} domain={[0, 100]} tick={{ fontSize: 10, fill: '#a3aabb' }} />
-                  <Radar dataKey="value" stroke="#4a5df0" fill="#4a5df0" fillOpacity={0.25} strokeWidth={2} />
+                  <PolarGrid stroke={CHART_COLORS.grid.light} />
+                  <PolarAngleAxis dataKey="label" tick={{ fontSize: 11, fill: CHART_COLORS.tick.light }} />
+                  <PolarRadiusAxis angle={30} domain={[0, 100]} tick={{ fontSize: 10, fill: CHART_COLORS.tick.light }} />
+                  <Radar dataKey="value" stroke={CHART_COLORS.accent} fill={CHART_COLORS.accent} fillOpacity={0.25} strokeWidth={2} />
                 </RadarChart>
               </ResponsiveContainer>
             </div>

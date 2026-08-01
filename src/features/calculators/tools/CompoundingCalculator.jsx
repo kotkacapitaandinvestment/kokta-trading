@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { LineChart, Line, ResponsiveContainer, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
 import Input from '../../../components/ui/Input';
 import Card from '../../../components/ui/Card';
+import { CHART_COLORS } from '../../../lib/chartColors';
 
 export default function CompoundingCalculator() {
   const [balance, setBalance] = useState(10000);
@@ -36,11 +37,11 @@ export default function CompoundingCalculator() {
       <div className="h-56 w-full">
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={series} margin={{ top: 8, right: 8, left: -20, bottom: 0 }}>
-            <CartesianGrid vertical={false} stroke="#e6e9ef" strokeDasharray="3 3" />
-            <XAxis dataKey="month" tickLine={false} axisLine={false} tick={{ fontSize: 12, fill: '#a3aabb' }} />
-            <YAxis tickLine={false} axisLine={false} tick={{ fontSize: 12, fill: '#a3aabb' }} />
-            <Tooltip contentStyle={{ borderRadius: 12, border: '1px solid #e6e9ef', fontSize: 12 }} formatter={(v) => [`$${v.toLocaleString()}`, 'Balance']} />
-            <Line type="monotone" dataKey="balance" stroke="#4a5df0" strokeWidth={2.5} dot={false} />
+            <CartesianGrid vertical={false} stroke={CHART_COLORS.grid.light} strokeDasharray="3 3" />
+            <XAxis dataKey="month" tickLine={false} axisLine={false} tick={{ fontSize: 12, fill: CHART_COLORS.tick.light }} />
+            <YAxis tickLine={false} axisLine={false} tick={{ fontSize: 12, fill: CHART_COLORS.tick.light }} />
+            <Tooltip contentStyle={{ borderRadius: 12, border: `1px solid ${CHART_COLORS.grid.light}`, fontSize: 12 }} formatter={(v) => [`$${v.toLocaleString()}`, 'Balance']} />
+            <Line type="monotone" dataKey="balance" stroke={CHART_COLORS.accent} strokeWidth={2.5} dot={false} />
           </LineChart>
         </ResponsiveContainer>
       </div>

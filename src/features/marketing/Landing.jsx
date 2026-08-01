@@ -41,7 +41,7 @@ export default function Landing() {
     <div className="min-h-screen bg-white dark:bg-ink-950">
       <header className="mx-auto flex max-w-7xl items-center justify-between px-6 py-6">
         <div className="flex items-center gap-2.5">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-ink-900 text-sm font-bold text-white dark:bg-white dark:text-ink-900">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent-500 text-sm font-bold text-ink-950 dark:bg-accent-400">
             K
           </div>
           <span className="text-sm font-semibold text-ink-900 dark:text-ink-50">Kotka Trading</span>

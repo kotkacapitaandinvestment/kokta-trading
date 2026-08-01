@@ -5,7 +5,7 @@ const variants = {
     'bg-ink-900 text-white hover:bg-ink-800 dark:bg-white dark:text-ink-900 dark:hover:bg-ink-100',
   secondary:
     'bg-white text-ink-900 border border-ink-200 hover:bg-ink-50 dark:bg-ink-800 dark:text-ink-100 dark:border-ink-700 dark:hover:bg-ink-700',
-  accent: 'bg-accent-500 text-white hover:bg-accent-600',
+  accent: 'bg-accent-500 text-ink-950 hover:bg-accent-600',
   ghost: 'text-ink-600 hover:bg-ink-100 dark:text-ink-300 dark:hover:bg-ink-800',
   danger: 'bg-loss-500 text-white hover:bg-loss-600',
 };

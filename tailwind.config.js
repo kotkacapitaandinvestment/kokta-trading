@@ -18,42 +18,50 @@ export default {
         mono: ['"JetBrains Mono"', 'ui-monospace', 'SFMono-Regular', 'Menlo', 'monospace'],
       },
       colors: {
+        // Warm, bronze-tinted neutral scale anchored at the exact brand
+        // blacks (950/900) — ties the grayscale to the gold identity in
+        // both light and dark mode instead of a cool blue-gray.
         ink: {
-          950: '#0a0b0d',
-          900: '#111318',
-          800: '#1a1d24',
-          700: '#282c35',
-          600: '#3d4250',
-          500: '#585f70',
-          400: '#7a8195',
-          300: '#a3aabb',
-          200: '#ccd1dd',
-          100: '#e6e9ef',
-          50: '#f5f6f9',
+          950: '#050504', // Primary Background (brand-exact)
+          900: '#0C0C0E', // Secondary Surface (brand-exact)
+          800: '#171512',
+          700: '#262320',
+          600: '#3D3833',
+          500: '#6B6259',
+          400: '#948A7D',
+          300: '#B8AE9F',
+          200: '#DDD6C9',
+          100: '#EDE8DD',
+          50: '#F7F4EE',
         },
+        // Gold scale — 400-900 anchor the 6 given brand golds/bronzes
+        // exactly; 50-300 are generated lighter tints for badges/backgrounds.
         accent: {
-          50: '#eef3ff',
-          100: '#dfe8ff',
-          200: '#c1d1ff',
-          300: '#96aeff',
-          400: '#6b84fb',
-          500: '#4a5df0',
-          600: '#3a42d6',
-          700: '#3033ac',
-          800: '#282c88',
-          900: '#25286c',
+          50: '#FBF3E4',
+          100: '#F6E7CB',
+          200: '#EDD4A0',
+          300: '#E4C078',
+          400: '#F4D48E', // Highlight Gold
+          500: '#D1A85B', // Primary Gold
+          600: '#B58637', // Supporting Gold
+          700: '#936E33', // Bronze
+          800: '#654F2F', // Deep Bronze
+          900: '#49351E', // Dark Bronze
         },
+        // Deepened toward institutional restraint (forest green / brick red)
+        // rather than bright saturated defaults — gold stays reserved for
+        // accents/CTAs, not overloaded onto win/loss semantics.
         profit: {
-          50: '#ecfdf5',
-          400: '#34d399',
-          500: '#10b981',
-          600: '#059669',
+          50: '#EAF6F0',
+          400: '#5AB98C',
+          500: '#3D9970',
+          600: '#2F7A56',
         },
         loss: {
-          50: '#fef2f2',
-          400: '#f87171',
-          500: '#ef4444',
-          600: '#dc2626',
+          50: '#FBEEEC',
+          400: '#DB7269',
+          500: '#C24A3F',
+          600: '#A83B32',
         },
       },
       boxShadow: {
@@ -62,9 +70,9 @@ export default {
         pop: '0 8px 30px rgba(17, 19, 24, 0.12)',
       },
       borderRadius: {
-        xl: '0.875rem',
-        '2xl': '1.25rem',
-        '3xl': '1.75rem',
+        xl: '0.625rem',
+        '2xl': '0.875rem',
+        '3xl': '1.125rem',
       },
       animation: {
         'fade-in': 'fadeIn 0.35s ease-out',

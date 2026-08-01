@@ -12,7 +12,7 @@ export const Input = forwardRef(function Input({ label, hint, error, className, 
         ref={ref}
         id={inputId}
         className={clsx(
-          'h-10 w-full rounded-lg border border-ink-200 bg-white px-3 text-sm text-ink-900 placeholder:text-ink-400 outline-none transition-colors focus:border-ink-400 focus:ring-2 focus:ring-ink-100 dark:border-ink-700 dark:bg-ink-800 dark:text-ink-50 dark:focus:ring-ink-700',
+          'h-10 w-full rounded-lg border border-ink-200 bg-white px-3 text-sm text-ink-900 placeholder:text-ink-400 outline-none transition-colors focus:border-accent-500 focus:ring-2 focus:ring-accent-100 dark:border-ink-700 dark:bg-ink-800 dark:text-ink-50 dark:focus:ring-accent-900/40',
           error && 'border-loss-400 focus:border-loss-400 focus:ring-loss-50',
           className,
         )}
@@ -35,7 +35,7 @@ export const Select = forwardRef(function Select({ label, className, id, childre
         ref={ref}
         id={selectId}
         className={clsx(
-          'h-10 w-full rounded-lg border border-ink-200 bg-white px-3 text-sm text-ink-900 outline-none transition-colors focus:border-ink-400 focus:ring-2 focus:ring-ink-100 dark:border-ink-700 dark:bg-ink-800 dark:text-ink-50',
+          'h-10 w-full rounded-lg border border-ink-200 bg-white px-3 text-sm text-ink-900 outline-none transition-colors focus:border-accent-500 focus:ring-2 focus:ring-accent-100 dark:border-ink-700 dark:bg-ink-800 dark:text-ink-50 dark:focus:ring-accent-900/40',
           className,
         )}
         {...props}

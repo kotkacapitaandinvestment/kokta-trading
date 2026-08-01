@@ -10,8 +10,9 @@ import StatTile from '../../components/ui/StatTile';
 import Badge from '../../components/ui/Badge';
 import PerformanceHeatmap from './widgets/PerformanceHeatmap';
 import { api } from '../../lib/api';
+import { CHART_COLORS } from '../../lib/chartColors';
 
-const pieColors = ['#4a5df0', '#10b981', '#f59e0b', '#ef4444', '#a3aabb'];
+const pieColors = [CHART_COLORS.accent, CHART_COLORS.profit, '#f59e0b', CHART_COLORS.loss, CHART_COLORS.tick.light];
 
 export default function Analytics() {
   const [data, setData] = useState(null);
@@ -57,15 +58,15 @@ export default function Analytics() {
                     <AreaChart data={data.equityCurve} margin={{ top: 8, right: 8, left: -20, bottom: 0 }}>
                       <defs>
                         <linearGradient id="equityFill" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" stopColor="#4a5df0" stopOpacity={0.25} />
-                          <stop offset="100%" stopColor="#4a5df0" stopOpacity={0} />
+                          <stop offset="0%" stopColor={CHART_COLORS.accent} stopOpacity={0.25} />
+                          <stop offset="100%" stopColor={CHART_COLORS.accent} stopOpacity={0} />
                         </linearGradient>
                       </defs>
-                      <CartesianGrid vertical={false} stroke="#e6e9ef" strokeDasharray="3 3" />
-                      <XAxis dataKey="day" tickLine={false} axisLine={false} tick={{ fontSize: 12, fill: '#a3aabb' }} />
-                      <YAxis tickLine={false} axisLine={false} tick={{ fontSize: 12, fill: '#a3aabb' }} />
-                      <Tooltip contentStyle={{ borderRadius: 12, border: '1px solid #e6e9ef', fontSize: 12 }} formatter={(v) => [`$${Math.round(v).toLocaleString()}`, 'Equity']} />
-                      <Area type="monotone" dataKey="equity" stroke="#4a5df0" strokeWidth={2.5} fill="url(#equityFill)" />
+                      <CartesianGrid vertical={false} stroke={CHART_COLORS.grid.light} strokeDasharray="3 3" />
+                      <XAxis dataKey="day" tickLine={false} axisLine={false} tick={{ fontSize: 12, fill: CHART_COLORS.tick.light }} />
+                      <YAxis tickLine={false} axisLine={false} tick={{ fontSize: 12, fill: CHART_COLORS.tick.light }} />
+                      <Tooltip contentStyle={{ borderRadius: 12, border: `1px solid ${CHART_COLORS.grid.light}`, fontSize: 12 }} formatter={(v) => [`$${Math.round(v).toLocaleString()}`, 'Equity']} />
+                      <Area type="monotone" dataKey="equity" stroke={CHART_COLORS.accent} strokeWidth={2.5} fill="url(#equityFill)" />
                     </AreaChart>
                   </ResponsiveContainer>
                 </div>
@@ -81,7 +82,7 @@ export default function Analytics() {
                       <Pie data={data.emotionBreakdown} dataKey="value" nameKey="emotion" innerRadius={45} outerRadius={70} paddingAngle={2}>
                         {data.emotionBreakdown.map((_, i) => <Cell key={i} fill={pieColors[i % pieColors.length]} />)}
                       </Pie>
-                      <Tooltip contentStyle={{ borderRadius: 12, border: '1px solid #e6e9ef', fontSize: 12 }} />
+                      <Tooltip contentStyle={{ borderRadius: 12, border: `1px solid ${CHART_COLORS.grid.light}`, fontSize: 12 }} />
                     </PieChart>
                   </ResponsiveContainer>
                 </div>
@@ -107,11 +108,11 @@ export default function Analytics() {
                 <div className="h-56 w-full">
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={data.strategyPerformance} layout="vertical" margin={{ top: 0, right: 16, left: 8, bottom: 0 }}>
-                      <CartesianGrid horizontal={false} stroke="#e6e9ef" strokeDasharray="3 3" />
-                      <XAxis type="number" tickLine={false} axisLine={false} tick={{ fontSize: 12, fill: '#a3aabb' }} />
-                      <YAxis type="category" dataKey="strategy" width={130} tickLine={false} axisLine={false} tick={{ fontSize: 12, fill: '#585f70' }} />
-                      <Tooltip contentStyle={{ borderRadius: 12, border: '1px solid #e6e9ef', fontSize: 12 }} formatter={(v) => [`${v}%`, 'Win rate']} />
-                      <Bar dataKey="winRate" radius={[0, 6, 6, 0]} fill="#4a5df0" />
+                      <CartesianGrid horizontal={false} stroke={CHART_COLORS.grid.light} strokeDasharray="3 3" />
+                      <XAxis type="number" tickLine={false} axisLine={false} tick={{ fontSize: 12, fill: CHART_COLORS.tick.light }} />
+                      <YAxis type="category" dataKey="strategy" width={130} tickLine={false} axisLine={false} tick={{ fontSize: 12, fill: CHART_COLORS.tick.light }} />
+                      <Tooltip contentStyle={{ borderRadius: 12, border: `1px solid ${CHART_COLORS.grid.light}`, fontSize: 12 }} formatter={(v) => [`${v}%`, 'Win rate']} />
+                      <Bar dataKey="winRate" radius={[0, 6, 6, 0]} fill={CHART_COLORS.accent} />
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
@@ -124,11 +125,11 @@ export default function Analytics() {
                 <div className="h-56 w-full">
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={data.sessionPerformance} margin={{ top: 8, right: 8, left: -20, bottom: 0 }}>
-                      <CartesianGrid vertical={false} stroke="#e6e9ef" strokeDasharray="3 3" />
-                      <XAxis dataKey="session" tickLine={false} axisLine={false} tick={{ fontSize: 12, fill: '#a3aabb' }} />
-                      <YAxis tickLine={false} axisLine={false} tick={{ fontSize: 12, fill: '#a3aabb' }} />
-                      <Tooltip contentStyle={{ borderRadius: 12, border: '1px solid #e6e9ef', fontSize: 12 }} formatter={(v) => [`${v}%`, 'Win rate']} />
-                      <Bar dataKey="winRate" radius={[6, 6, 0, 0]} fill="#10b981" />
+                      <CartesianGrid vertical={false} stroke={CHART_COLORS.grid.light} strokeDasharray="3 3" />
+                      <XAxis dataKey="session" tickLine={false} axisLine={false} tick={{ fontSize: 12, fill: CHART_COLORS.tick.light }} />
+                      <YAxis tickLine={false} axisLine={false} tick={{ fontSize: 12, fill: CHART_COLORS.tick.light }} />
+                      <Tooltip contentStyle={{ borderRadius: 12, border: `1px solid ${CHART_COLORS.grid.light}`, fontSize: 12 }} formatter={(v) => [`${v}%`, 'Win rate']} />
+                      <Bar dataKey="winRate" radius={[6, 6, 0, 0]} fill={CHART_COLORS.accent} />
                     </BarChart>
                   </ResponsiveContainer>
                 </div>

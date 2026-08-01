@@ -10,7 +10,7 @@ export default function Tabs({ tabs, active, onChange }) {
           className={clsx(
             'rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
             active === tab.value
-              ? 'bg-white text-ink-900 shadow-sm dark:bg-ink-700 dark:text-ink-50'
+              ? 'bg-white text-ink-900 shadow-sm dark:bg-ink-700 dark:text-ink-50 dark:shadow-none'
               : 'text-ink-500 hover:text-ink-800 dark:text-ink-400 dark:hover:text-ink-100',
           )}
         >

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef } from 'react';
 import { ComposedChart, Bar, Line, XAxis, YAxis, ResponsiveContainer, ReferenceLine, ReferenceDot, Tooltip, CartesianGrid } from 'recharts';
 import { CHART_THEMES, MARGIN, Y_AXIS_WIDTH, INDICATOR_COLORS, formatTime } from './candlestick/theme';
+import { CHART_COLORS } from '../../lib/chartColors';
 import { useChartZoomPan } from './candlestick/useChartZoomPan';
 import { useChartCrosshair } from './candlestick/useChartCrosshair';
 import { useChartDrawings } from './candlestick/useChartDrawings';
@@ -209,11 +210,11 @@ export default function CandlestickChart({
                 connectNulls={false}
               />
             ))}
-            {typeof stopLoss === 'number' ? <ReferenceLine y={stopLoss} stroke="#ef4444" strokeDasharray="4 4" label={{ value: 'SL', position: 'insideTopLeft', fontSize: 10, fill: '#ef4444' }} /> : null}
-            {typeof takeProfit === 'number' ? <ReferenceLine y={takeProfit} stroke="#16a34a" strokeDasharray="4 4" label={{ value: 'TP', position: 'insideTopLeft', fontSize: 10, fill: '#16a34a' }} /> : null}
-            {typeof entryPrice === 'number' ? <ReferenceLine y={entryPrice} stroke="#64748b" strokeDasharray="2 2" label={{ value: 'Entry', position: 'insideTopLeft', fontSize: 10, fill: '#64748b' }} /> : null}
+            {typeof stopLoss === 'number' ? <ReferenceLine y={stopLoss} stroke={CHART_COLORS.loss} strokeDasharray="4 4" label={{ value: 'SL', position: 'insideTopLeft', fontSize: 10, fill: CHART_COLORS.loss }} /> : null}
+            {typeof takeProfit === 'number' ? <ReferenceLine y={takeProfit} stroke={CHART_COLORS.profit} strokeDasharray="4 4" label={{ value: 'TP', position: 'insideTopLeft', fontSize: 10, fill: CHART_COLORS.profit }} /> : null}
+            {typeof entryPrice === 'number' ? <ReferenceLine y={entryPrice} stroke={CHART_COLORS.tick.dark} strokeDasharray="2 2" label={{ value: 'Entry', position: 'insideTopLeft', fontSize: 10, fill: CHART_COLORS.tick.dark }} /> : null}
             {typeof entryPrice === 'number' && typeof entryBarIndex === 'number' ? (
-              <ReferenceDot x={entryBarIndex} y={entryPrice} r={4} fill="#64748b" stroke="none" />
+              <ReferenceDot x={entryBarIndex} y={entryPrice} r={4} fill={CHART_COLORS.tick.dark} stroke="none" />
             ) : null}
           </ComposedChart>
         </ResponsiveContainer>

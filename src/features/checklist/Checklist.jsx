@@ -5,6 +5,7 @@ import Card, { CardBody, CardHeader } from '../../components/ui/Card';
 import Button from '../../components/ui/Button';
 import ProgressRing from '../../components/ui/ProgressRing';
 import { api } from '../../lib/api';
+import { CHART_COLORS } from '../../lib/chartColors';
 
 const items = [
   { id: 'trend', label: 'Trend confirmed?', hint: 'Higher timeframe bias matches your intended direction.' },
@@ -100,7 +101,7 @@ export default function Checklist() {
                 size={140}
                 strokeWidth={10}
                 label={`${baseScore}%`}
-                color={baseScore >= 100 ? '#10b981' : baseScore >= 60 ? '#f59e0b' : '#ef4444'}
+                color={baseScore >= 100 ? CHART_COLORS.profit : baseScore >= 60 ? '#f59e0b' : CHART_COLORS.loss}
               />
             </div>
             <p className={`mt-4 text-sm font-semibold ${readiness.tone}`}>{readiness.label}</p>
