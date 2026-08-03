@@ -4,6 +4,7 @@ import { requireAuth } from '../middleware/auth.js';
 import { decryptSecret } from '../lib/crypto.js';
 import { nvidiaChatCompletionStream } from '../lib/nvidia.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
+import { TOOL_DEFINITIONS, executeToolCall } from '../lib/aiTools.js';
 
 export const aiRouter = Router();
 aiRouter.use(requireAuth);
@@ -180,18 +181,66 @@ aiRouter.post('/conversations/:id/messages', asyncHandler(async (req, res) => {
 
   let full = '';
   try {
-    for await (const delta of nvidiaChatCompletionStream({
-      apiKey: decryptSecret(integration.secretCipher),
-      baseUrl: integration.config?.baseUrl,
-      model,
-      messages: [
-        { role: 'system', content: systemPromptFor(conversation.market, timeframe) },
-        ...priorMessages.map(toNvidiaMessage),
-      ],
-    })) {
-      full += delta;
-      writeEvent(res, { type: 'delta', text: delta });
+    const conversationMessages = [
+      { role: 'system', content: systemPromptFor(conversation.market, timeframe) },
+      ...priorMessages.map(toNvidiaMessage),
+    ];
+
+    const MAX_TOOL_ROUNDS = 3;
+    let round = 0;
+    let finalReached = false;
+
+    while (!finalReached && round < MAX_TOOL_ROUNDS) {
+      round += 1;
+      const isLastAllowedRound = round === MAX_TOOL_ROUNDS;
+      let roundText = '';
+      let toolCalls = null;
+
+      for await (const event of nvidiaChatCompletionStream({
+        apiKey: decryptSecret(integration.secretCipher),
+        baseUrl: integration.config?.baseUrl,
+        model,
+        messages: conversationMessages,
+        tools: hasImage || isLastAllowedRound ? undefined : TOOL_DEFINITIONS,
+      })) {
+        if (event.type === 'text') {
+          roundText += event.text;
+          full += event.text;
+          writeEvent(res, { type: 'delta', text: event.text });
+        } else if (event.type === 'tool_calls') {
+          toolCalls = event.toolCalls;
+        }
+      }
+
+      if (toolCalls?.length && !isLastAllowedRound) {
+        conversationMessages.push({
+          role: 'assistant',
+          content: roundText || null,
+          tool_calls: toolCalls.map((tc) => ({
+            id: tc.id,
+            type: 'function',
+            function: { name: tc.name, arguments: tc.arguments },
+          })),
+        });
+        for (const tc of toolCalls) {
+          let args = {};
+          try {
+            args = tc.arguments ? JSON.parse(tc.arguments) : {};
+          } catch {
+            args = {};
+          }
+          const result = await executeToolCall(tc.name, args, req.userId);
+          conversationMessages.push({
+            role: 'tool',
+            tool_call_id: tc.id,
+            content: JSON.stringify(result),
+          });
+        }
+      } else {
+        finalReached = true;
+      }
     }
+
     const saved = await prisma.aIMessage.create({ data: { conversationId: conversation.id, role: 'assistant', content: full } });
     await prisma.aIConversation.update({ where: { id: conversation.id }, data: { updatedAt: new Date() } });
     logUsage(req.userId, 'nvidia', model, startedAt);

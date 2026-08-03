@@ -28,7 +28,12 @@ export async function nvidiaChatCompletion({ apiKey, baseUrl, model, messages, m
   return data.choices?.[0]?.message?.content ?? '';
 }
 
-export async function* nvidiaChatCompletionStream({ apiKey, baseUrl, model, messages, maxTokens = 600 }) {
+// Yields { type: 'text', text } for content deltas, and — if the model
+// requests one or more function calls — a single { type: 'tool_calls',
+// toolCalls: [{id, name, arguments}] } event once the stream finishes.
+// `arguments` arrives fragmented as partial JSON strings across many chunks
+// (keyed by index) and must be concatenated; this accumulates that for you.
+export async function* nvidiaChatCompletionStream({ apiKey, baseUrl, model, messages, maxTokens = 600, tools }) {
   const res = await fetch(`${baseUrl}/chat/completions`, {
     method: 'POST',
     headers: {
@@ -43,6 +48,7 @@ export async function* nvidiaChatCompletionStream({ apiKey, baseUrl, model, mess
       top_p: 0.9,
       max_tokens: maxTokens,
       stream: true,
+      ...(tools?.length ? { tools, tool_choice: 'auto' } : {}),
     }),
   });
 
@@ -54,6 +60,14 @@ export async function* nvidiaChatCompletionStream({ apiKey, baseUrl, model, mess
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
   let buffer = '';
+  const toolCallsAcc = {};
+  let finishReason = null;
+
+  const flushToolCalls = function* () {
+    if (finishReason === 'tool_calls' && Object.keys(toolCallsAcc).length) {
+      yield { type: 'tool_calls', toolCalls: Object.values(toolCallsAcc) };
+    }
+  };
 
   while (true) {
     const { done, value } = await reader.read();
@@ -67,15 +81,34 @@ export async function* nvidiaChatCompletionStream({ apiKey, baseUrl, model, mess
       const line = event.trim();
       if (!line.startsWith('data:')) continue;
       const payload = line.slice(5).trim();
-      if (payload === '[DONE]') return;
+      if (payload === '[DONE]') {
+        yield* flushToolCalls();
+        return;
+      }
       let parsed;
       try {
         parsed = JSON.parse(payload);
       } catch {
         continue;
       }
-      const delta = parsed.choices?.[0]?.delta?.content;
-      if (delta) yield delta;
+      const choice = parsed.choices?.[0];
+      if (!choice) continue;
+      if (choice.finish_reason) finishReason = choice.finish_reason;
+
+      const delta = choice.delta;
+      if (delta?.content) yield { type: 'text', text: delta.content };
+
+      if (delta?.tool_calls) {
+        for (const tc of delta.tool_calls) {
+          const idx = tc.index ?? 0;
+          if (!toolCallsAcc[idx]) toolCallsAcc[idx] = { id: '', name: '', arguments: '' };
+          if (tc.id) toolCallsAcc[idx].id = tc.id;
+          if (tc.function?.name) toolCallsAcc[idx].name = tc.function.name;
+          if (tc.function?.arguments) toolCallsAcc[idx].arguments += tc.function.arguments;
+        }
+      }
     }
   }
+
+  yield* flushToolCalls();
 }
