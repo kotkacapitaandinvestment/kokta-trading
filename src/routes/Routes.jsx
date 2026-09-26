@@ -9,6 +9,7 @@ import NotFound from '../features/marketing/NotFound';
 import Login from '../features/auth/Login';
 import Signup from '../features/auth/Signup';
 import ForgotPassword from '../features/auth/ForgotPassword';
+import VerifyIdentity from '../features/verification/VerifyIdentity';
 
 import Dashboard from '../features/dashboard/Dashboard';
 import KotkaAI from '../features/ai/KotkaAI';
@@ -40,6 +41,7 @@ import AdminApiUsage from '../features/admin/AdminApiUsage';
 import AdminSettings from '../features/admin/AdminSettings';
 import AdminIntegrations from '../features/admin/AdminIntegrations';
 import AdminResearch from '../features/admin/AdminResearch';
+import AdminVerifications from '../features/admin/AdminVerifications';
 
 export default function AppRoutes() {
   return (
@@ -48,6 +50,7 @@ export default function AppRoutes() {
       <Route path="/login" element={<Login />} />
       <Route path="/signup" element={<Signup />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
+      <Route path="/verify" element={<VerifyIdentity />} />
 
       <Route
         path="/app"
@@ -73,6 +76,7 @@ export default function AppRoutes() {
         <Route index element={<Navigate to="overview" replace />} />
         <Route path="overview" element={<AdminOverview />} />
         <Route path="users" element={<AdminUsers />} />
+        <Route path="verifications" element={<AdminVerifications />} />
         <Route path="subscriptions" element={<AdminSubscriptions />} />
         <Route path="ai-usage" element={<AdminAIUsage />} />
         <Route path="trading-stats" element={<AdminTradingStats />} />

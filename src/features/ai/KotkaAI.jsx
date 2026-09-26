@@ -41,7 +41,10 @@ export default function KotkaAI() {
 
   const active = conversations?.find((c) => c.id === activeId) ?? null;
   const activeMessages = activeId ? messagesCache[activeId] ?? [] : [];
-  const limitReached = usage && !usage.isPremium && usage.usageToday >= usage.usageLimit;
+  const limitReached = usage && usage.usageLimit != null && usage.usageToday >= usage.usageLimit;
+  const limitMessage = usage?.limitKind === 'plan'
+    ? `You've used today's ${usage.usageLimit} free messages. They reset at midnight UTC.`
+    : `You've reached today's fair-use limit of ${usage?.usageLimit} messages. It resets at midnight UTC.`;
 
   const handleNew = () => {
     api.post('/ai/conversations', { market }).then(({ conversation }) => {
@@ -92,10 +95,10 @@ export default function KotkaAI() {
 
       if (res.status === 429) {
         const data = await res.json().catch(() => ({}));
-        setUsage((prev) => ({ ...(prev ?? {}), usageToday: data.usageToday ?? prev?.usageToday, usageLimit: data.usageLimit ?? prev?.usageLimit, isPremium: false }));
+        setUsage((prev) => ({ ...(prev ?? {}), usageToday: data.usageToday ?? prev?.usageToday, usageLimit: data.usageLimit ?? prev?.usageLimit, limitKind: data.limitKind ?? prev?.limitKind }));
         setMessagesCache((prev) => ({
           ...prev,
-          [conversationId]: [...prev[conversationId], { id: `local-limit-${Date.now()}`, role: 'assistant', content: "You've hit today's message limit. Upgrade to Premium for unlimited access." }],
+          [conversationId]: [...prev[conversationId], { id: `local-limit-${Date.now()}`, role: 'assistant', content: "You've reached today's message limit. It resets at midnight UTC." }],
         }));
         return;
       }
@@ -151,7 +154,7 @@ export default function KotkaAI() {
         });
       }
     } catch {
-      setLastSource('mock');
+      setLastSource('error');
       setMessagesCache((prev) => ({
         ...prev,
         [conversationId]: [...prev[conversationId], { id: `local-err-${Date.now()}`, role: 'assistant', content: "Couldn't reach Kotka AI right now. Try again shortly." }],
@@ -206,17 +209,13 @@ export default function KotkaAI() {
                   </Select>
                 </div>
                 <div className="flex items-center gap-3">
-                  {lastSource ? (
-                    <Badge tone={lastSource === 'nvidia' ? 'profit' : lastSource === 'vision_unconfigured' ? 'warning' : 'neutral'}>
-                      {lastSource === 'nvidia' ? 'Live' : lastSource === 'vision_unconfigured' ? 'Vision not configured' : 'Scripted mentor'}
-                    </Badge>
+                  {lastSource && lastSource !== 'nvidia' ? (
+                    <Badge tone="warning">{lastSource === 'vision_unconfigured' ? 'Vision not configured' : 'AI unavailable'}</Badge>
                   ) : null}
-                  {usage ? (
-                    usage.isPremium ? (
-                      <span className="text-xs font-medium text-accent-600 dark:text-accent-400">Unlimited</span>
-                    ) : (
-                      <span className="text-xs text-ink-400">{usage.usageToday}/{usage.usageLimit} today</span>
-                    )
+                  {usage && usage.usageLimit != null ? (
+                    <span className="text-xs tabular-nums text-ink-400" title={usage.limitKind === 'plan' ? 'Free plan daily messages' : 'Daily fair-use limit'}>
+                      {usage.usageToday}/{usage.usageLimit} today
+                    </span>
                   ) : null}
                   <button onClick={handleToggleFavorite} className="text-ink-300 hover:text-amber-400">
                     <Star className={active.favorite ? 'h-4 w-4 fill-amber-400 text-amber-400' : 'h-4 w-4'} />
@@ -251,9 +250,7 @@ export default function KotkaAI() {
 
               <div className="border-t border-ink-100 p-3 dark:border-ink-800">
                 {limitReached ? (
-                  <p className="mb-2 text-xs text-loss-500">
-                    You've reached today's {usage.usageLimit}-message limit. Upgrade to Premium for unlimited access.
-                  </p>
+                  <p className="mb-2 text-xs text-loss-500">{limitMessage}</p>
                 ) : null}
                 {pendingImage ? (
                   <div className="mb-2 flex items-center gap-2">

@@ -23,7 +23,7 @@ adminStatsRouter.get('/ai-usage', asyncHandler(async (req, res) => {
 
   const byModel = {};
   for (const l of logs30d) {
-    const key = `${l.source === 'nvidia' ? l.model : 'Scripted mentor (fallback)'}`;
+    const key = `${l.source === 'nvidia' ? l.model : 'Not answered (AI unavailable or error)'}`;
     if (!byModel[key]) byModel[key] = { model: key, requests: 0, totalLatency: 0 };
     byModel[key].requests += 1;
     byModel[key].totalLatency += l.latencyMs;

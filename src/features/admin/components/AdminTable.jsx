@@ -4,7 +4,24 @@ import Card from '../../../components/ui/Card';
 import Button from '../../../components/ui/Button';
 import EmptyState from '../../../components/ui/EmptyState';
 
-export default function AdminTable({ columns, rows, searchKeys, exportable = true, emptyLabel = 'No records found' }) {
+function csvCell(value) {
+  const text = value == null ? '' : typeof value === 'object' ? JSON.stringify(value) : String(value);
+  return /[",\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+}
+
+// Exports what's on screen (after search). Columns without plain data, like
+// action buttons, are skipped unless they provide csv(row).
+function downloadCsv(columns, rows, filename) {
+  const cols = columns.filter((c) => c.key !== 'actions' && c.csv !== false);
+  const lines = [cols.map((c) => csvCell(c.label)).join(',')];
+  for (const row of rows) lines.push(cols.map((c) => csvCell(typeof c.csv === 'function' ? c.csv(row) : row[c.key])).join(','));
+  const url = URL.createObjectURL(new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8' }));
+  const a = Object.assign(document.createElement('a'), { href: url, download: `${filename}-${new Date().toISOString().slice(0, 10)}.csv` });
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+export default function AdminTable({ columns, rows, searchKeys, exportable = true, exportName = 'kotka-export', emptyLabel = 'No records found' }) {
   const [query, setQuery] = useState('');
 
   const filtered = useMemo(() => {
@@ -26,7 +43,7 @@ export default function AdminTable({ columns, rows, searchKeys, exportable = tru
           />
         </div>
         {exportable ? (
-          <Button variant="secondary" size="sm" icon={Download}>
+          <Button variant="secondary" size="sm" icon={Download} disabled={!filtered.length} onClick={() => downloadCsv(columns, filtered, exportName)}>
             Export CSV
           </Button>
         ) : null}

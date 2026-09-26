@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { prisma } from '../lib/prisma.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 import { forgetUserAccess } from '../middleware/auth.js';
+import { audit } from '../lib/audit.js';
 
 export const adminUsersRouter = Router();
 
@@ -15,11 +16,12 @@ function toAdminUser(user) {
     status: user.status,
     joined: user.createdAt.toISOString().slice(0, 10),
     lastActive: user.lastLoginAt ? user.lastLoginAt.toISOString().slice(0, 10) : null,
+    kycStatus: user.kyc?.status ?? 'none',
   };
 }
 
 adminUsersRouter.get('/', asyncHandler(async (req, res) => {
-  const users = await prisma.user.findMany({ orderBy: { createdAt: 'desc' } });
+  const users = await prisma.user.findMany({ orderBy: { createdAt: 'desc' }, include: { kyc: { select: { status: true } } } });
   res.json({ users: users.map(toAdminUser) });
 }));
 
@@ -49,6 +51,7 @@ adminUsersRouter.patch('/:id', asyncHandler(async (req, res) => {
 
   const user = await prisma.user.update({
     where: { id: target.id },
+    include: { kyc: { select: { status: true } } },
     data: {
       ...(status ? { status } : {}),
       ...(role ? { role } : {}),
@@ -56,5 +59,10 @@ adminUsersRouter.patch('/:id', asyncHandler(async (req, res) => {
     },
   });
   forgetUserAccess(user.id);
+  const changed = {};
+  if (status && status !== target.status) changed.status = { from: target.status, to: status };
+  if (role && role !== target.role) changed.role = { from: target.role, to: role };
+  if (user.plan !== target.plan) changed.plan = { from: target.plan, to: user.plan };
+  if (Object.keys(changed).length) await audit(req, 'user.updated', { targetType: 'user', targetId: user.id, detail: { email: user.email, ...changed } });
   res.json({ user: toAdminUser(user) });
 }));

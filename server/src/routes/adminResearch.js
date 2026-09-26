@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { prisma } from '../lib/prisma.js';
 import { requireAuth, requireRole } from '../middleware/auth.js';
+import { audit } from '../lib/audit.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 import { CURRENCIES, SUPPORTED_CURRENCY_CODES, FACTORS } from '../lib/research/currencies.js';
 import { loadSettings, sanitizeSettings, saveSettings, generateCronToken, saveCronToken, SOURCE_KEYS } from '../lib/research/settings.js';
@@ -72,6 +73,7 @@ adminResearchRouter.put('/settings', requireRole('super_admin'), asyncHandler(as
   const current = await loadSettings();
   const next = sanitizeSettings(req.body ?? {}, current);
   const saved = await saveSettings(next, req.userId);
+  await audit(req, 'research.settings_updated', { targetType: 'research_settings', detail: { keys: Object.keys(req.body ?? {}) } });
   res.json({ settings: adminView(saved) });
 }));
 
@@ -98,11 +100,13 @@ adminResearchRouter.post('/cron-token', requireRole('super_admin'), asyncHandler
       return res.status(502).json({ error: `cron-job.org could not be updated, so the token was not changed: ${err.message}` });
     }
     await saveCronToken(token, req.userId, { jobId: sync.jobId });
+    await audit(req, 'research.cron_token_rotated', { targetType: 'cron_job', targetId: String(sync.jobId), detail: { managed: true, created: sync.created } });
     const fresh = await loadSettings();
     return res.json({ managed: true, jobId: sync.jobId, created: sync.created, cronJob: await cronJobView(fresh, { fresh: true }) });
   }
 
   await saveCronToken(token, req.userId);
+  await audit(req, 'research.cron_token_rotated', { targetType: 'cron_job', detail: { managed: false } });
   res.json({ managed: false, token, url: `${url}?token=${token}`, header: `Authorization: Bearer ${token}` });
 }));
 
@@ -198,6 +202,7 @@ adminResearchRouter.post('/assessments', asyncHandler(async (req, res) => {
   const { errors, data } = validateAssessment(req.body ?? {});
   if (errors.length) return res.status(400).json({ error: errors.join(' ') });
   const item = await prisma.sourceAssessment.create({ data: { ...data, createdById: req.userId } });
+  await audit(req, 'research.assessment_created', { targetType: 'source_assessment', targetId: item.id, detail: { currency: item.currency, factor: item.factor } });
   res.status(201).json({ item });
 }));
 
@@ -207,10 +212,12 @@ adminResearchRouter.patch('/assessments/:id', asyncHandler(async (req, res) => {
   const { errors, data } = validateAssessment({ ...existing, ...req.body });
   if (errors.length) return res.status(400).json({ error: errors.join(' ') });
   const item = await prisma.sourceAssessment.update({ where: { id: existing.id }, data });
+  await audit(req, 'research.assessment_updated', { targetType: 'source_assessment', targetId: item.id, detail: { currency: item.currency, factor: item.factor } });
   res.json({ item });
 }));
 
 adminResearchRouter.delete('/assessments/:id', asyncHandler(async (req, res) => {
-  await prisma.sourceAssessment.delete({ where: { id: req.params.id } }).catch(() => null);
+  const removed = await prisma.sourceAssessment.delete({ where: { id: req.params.id } }).catch(() => null);
+  if (removed) await audit(req, 'research.assessment_deleted', { targetType: 'source_assessment', targetId: removed.id, detail: { currency: removed.currency, factor: removed.factor } });
   res.status(204).end();
 }));

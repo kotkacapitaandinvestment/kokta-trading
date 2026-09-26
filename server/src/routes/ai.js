@@ -5,12 +5,10 @@ import { nvidiaChatCompletionStream } from '../lib/nvidia.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 import { TOOL_DEFINITIONS, executeToolCall } from '../lib/aiTools.js';
 import { connection, openStreamWithFallback } from '../lib/aiModels.js';
+import { loadAppSettings, aiDailyLimitFor } from '../lib/appSettings.js';
 
 export const aiRouter = Router();
 aiRouter.use(requireAuth);
-
-const DAILY_LIMIT = 10;
-const PREMIUM_ROLES = ['premium', 'admin', 'super_admin'];
 
 function systemPromptFor(market, timeframe) {
   return `You are Kotka AI, an institutional trading mentor inside the Kotka Trading platform. You are not a signal provider, broker, or copy-trading bot, and you must never behave like one.
@@ -42,8 +40,20 @@ function logUsage(userId, source, model, startedAt) {
   });
 }
 
+// Daily limits reset at midnight UTC.
 function startOfDay(d = new Date()) {
-  return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+}
+
+const TONES = {
+  'Direct & challenging': 'Be direct and challenging: name weak reasoning plainly and push back hard on bias.',
+  'Supportive & measured': 'Be supportive and measured: still challenge weak reasoning, but in a calm, encouraging way.',
+  'Purely analytical': 'Be purely analytical: stick to structure, probability and risk, with minimal commentary on psychology unless asked.',
+};
+
+async function tonePreference(userId) {
+  const settings = await prisma.userSettings.findUnique({ where: { userId }, select: { aiPreferences: true } }).catch(() => null);
+  return TONES[settings?.aiPreferences?.tone] ?? null;
 }
 
 function toNvidiaMessage(m) {
@@ -62,11 +72,15 @@ async function getUserRole(userId) {
   return user?.role ?? 'trader';
 }
 
+// usageLimit is null when uncapped. limitKind says why a cap applies: 'plan'
+// (free tier, only once paid plans are switched on) or 'fair_use' (everyone,
+// to protect the shared model quota).
 async function usageSnapshot(userId) {
-  const role = await getUserRole(userId);
-  const isPremium = PREMIUM_ROLES.includes(role);
-  const usageToday = await prisma.aIUsageLog.count({ where: { userId, createdAt: { gte: startOfDay() } } });
-  return { usageToday, usageLimit: isPremium ? null : DAILY_LIMIT, isPremium };
+  const [role, settings] = await Promise.all([getUserRole(userId), loadAppSettings()]);
+  const usageLimit = aiDailyLimitFor(role, settings);
+  const usageToday = await prisma.aIUsageLog.count({ where: { userId, source: 'nvidia', createdAt: { gte: startOfDay() } } });
+  const onFreePlan = settings.paidPlansEnabled && !['premium', 'admin', 'super_admin'].includes(role);
+  return { usageToday, usageLimit, limitKind: usageLimit === null ? null : onFreePlan ? 'plan' : 'fair_use', paidPlansEnabled: settings.paidPlansEnabled };
 }
 
 async function loadOwnedConversation(id, userId) {
@@ -132,9 +146,9 @@ aiRouter.post('/conversations/:id/messages', asyncHandler(async (req, res) => {
   const { content, image, timeframe = '15m' } = req.body ?? {};
   if (!content && !image) return res.status(400).json({ error: 'A message or image is required.' });
 
-  const { usageToday, usageLimit, isPremium } = await usageSnapshot(req.userId);
-  if (!isPremium && usageToday >= DAILY_LIMIT) {
-    return res.status(429).json({ error: 'daily_limit_reached', usageToday, usageLimit });
+  const usage = await usageSnapshot(req.userId);
+  if (usage.usageLimit !== null && usage.usageToday >= usage.usageLimit) {
+    return res.status(429).json({ error: 'daily_limit_reached', ...usage });
   }
 
   await prisma.aIMessage.create({
@@ -156,11 +170,11 @@ aiRouter.post('/conversations/:id/messages', asyncHandler(async (req, res) => {
 
   if (!integration || !integration.enabled || !integration.secretCipher) {
     const reply = "Kotka AI isn't connected right now — an admin needs to configure the AI integration.";
-    writeEvent(res, { type: 'meta', source: 'mock' });
+    writeEvent(res, { type: 'meta', source: 'unavailable' });
     writeEvent(res, { type: 'delta', text: reply });
     const saved = await prisma.aIMessage.create({ data: { conversationId: conversation.id, role: 'assistant', content: reply } });
     await prisma.aIConversation.update({ where: { id: conversation.id }, data: { updatedAt: new Date() } });
-    logUsage(req.userId, 'mock', 'scripted-mentor', startedAt);
+    logUsage(req.userId, 'unavailable', 'none', startedAt);
     writeEvent(res, { type: 'done', messageId: saved.id });
     return res.end();
   }
@@ -176,7 +190,7 @@ aiRouter.post('/conversations/:id/messages', asyncHandler(async (req, res) => {
   let full = '';
   try {
     const conversationMessages = [
-      { role: 'system', content: systemPromptFor(conversation.market, timeframe) },
+      { role: 'system', content: [systemPromptFor(conversation.market, timeframe), await tonePreference(req.userId)].filter(Boolean).join('\n\nCoaching style: ') },
       ...priorMessages.map(toNvidiaMessage),
     ];
 
@@ -266,7 +280,7 @@ aiRouter.post('/conversations/:id/messages', asyncHandler(async (req, res) => {
       const reply = 'Kotka AI ran into an error reaching the model. Try again shortly.';
       writeEvent(res, { type: 'delta', text: reply });
       const saved = await prisma.aIMessage.create({ data: { conversationId: conversation.id, role: 'assistant', content: reply } });
-      logUsage(req.userId, 'mock', 'scripted-mentor', startedAt);
+      logUsage(req.userId, 'error', model ?? 'none', startedAt);
       writeEvent(res, { type: 'done', messageId: saved.id });
     } else {
       const saved = await prisma.aIMessage.create({ data: { conversationId: conversation.id, role: 'assistant', content: full } });

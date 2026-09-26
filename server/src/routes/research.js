@@ -7,10 +7,10 @@ import { CURRENCIES, parseSubject } from '../lib/research/currencies.js';
 import { loadSettings, publicSettings, verifyCronToken } from '../lib/research/settings.js';
 import { latestReport, freshnessOf, activeRun, runResearch, reportHistory, runCronBatch, ResearchError } from '../lib/research/engine.js';
 import { checkModelHealth } from '../lib/aiModels.js';
+import { loadAppSettings, paidFeatureLocked } from '../lib/appSettings.js';
 
 export const researchRouter = Router();
 
-const PREMIUM_ROLES = ['premium', 'admin', 'super_admin'];
 const ADMIN_ROLES = ['admin', 'super_admin'];
 
 // ── Scheduled maintenance (cron-job.org) — token auth, no session ─────────
@@ -42,7 +42,10 @@ async function accessFor(userId, settings) {
   const role = user?.role ?? 'trader';
   const isAdmin = ADMIN_ROLES.includes(role);
   if (!settings.enabled && !isAdmin) return { allowed: false, isAdmin, reason: 'Fundamental Research is currently disabled by an administrator.' };
-  if (settings.availability === 'premium' && !PREMIUM_ROLES.includes(role)) return { allowed: false, isAdmin, reason: 'Fundamental Research is available on Premium plans.' };
+  // "Premium only" has no effect until paid plans are switched on.
+  if (settings.availability === 'premium' && paidFeatureLocked(role, await loadAppSettings())) {
+    return { allowed: false, isAdmin, reason: 'Fundamental Research is available on Premium plans.' };
+  }
   return { allowed: true, isAdmin };
 }
 

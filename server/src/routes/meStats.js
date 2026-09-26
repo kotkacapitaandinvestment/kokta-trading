@@ -20,7 +20,8 @@ async function getUserContext(userId) {
   const openPositions = allEntries.filter((e) => e.positionStatus === 'open');
   const defaultRisk = settings?.tradingPreferences?.defaultRisk ?? 1;
   const dailyLossLimit = settings?.tradingPreferences?.dailyLossLimit ?? 2;
-  return { entries, openPositions, defaultRisk, dailyLossLimit };
+  const notify = { checklist: true, journal: true, riskWarnings: true, ...(settings?.notifications ?? {}) };
+  return { entries, openPositions, defaultRisk, dailyLossLimit, notify };
 }
 
 meStatsRouter.get('/analytics', asyncHandler(async (req, res) => {
@@ -113,7 +114,7 @@ meStatsRouter.get('/dashboard', asyncHandler(async (req, res) => {
 }));
 
 meStatsRouter.get('/notifications', asyncHandler(async (req, res) => {
-  const { entries, dailyLossLimit } = await getUserContext(req.userId);
+  const { entries, dailyLossLimit, notify } = await getUserContext(req.userId);
   const today = todayStr();
   const checklist = await prisma.checklistDay.findUnique({ where: { userId_date: { userId: req.userId, date: today } } });
   const items = checklist?.items ?? {};
@@ -124,7 +125,7 @@ meStatsRouter.get('/notifications', asyncHandler(async (req, res) => {
   const riskUsedToday = todayEntries.filter((e) => e.result === 'loss').reduce((s, e) => s + e.risk, 0);
 
   const notifications = [];
-  if (checklistDone < checklistTotal) {
+  if (notify.checklist && checklistDone < checklistTotal) {
     notifications.push({
       id: 'n-checklist',
       type: 'checklist',
@@ -133,7 +134,7 @@ meStatsRouter.get('/notifications', asyncHandler(async (req, res) => {
       time: 'Today',
     });
   }
-  if (riskUsedToday >= dailyLossLimit * 0.75 && riskUsedToday < dailyLossLimit) {
+  if (notify.riskWarnings && riskUsedToday >= dailyLossLimit * 0.75 && riskUsedToday < dailyLossLimit) {
     notifications.push({
       id: 'n-risk-warning',
       type: 'risk',
@@ -142,7 +143,7 @@ meStatsRouter.get('/notifications', asyncHandler(async (req, res) => {
       time: 'Today',
     });
   }
-  if (riskUsedToday >= dailyLossLimit) {
+  if (notify.riskWarnings && riskUsedToday >= dailyLossLimit) {
     notifications.push({
       id: 'n-risk-breach',
       type: 'risk',
@@ -151,7 +152,7 @@ meStatsRouter.get('/notifications', asyncHandler(async (req, res) => {
       time: 'Today',
     });
   }
-  if (todayEntries.length === 0) {
+  if (notify.journal && todayEntries.length === 0) {
     notifications.push({
       id: 'n-journal',
       type: 'journal',

@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { prisma } from '../lib/prisma.js';
 import { requireAuth, requireRole } from '../middleware/auth.js';
+import { audit } from '../lib/audit.js';
 import { encryptSecret, decryptSecret, maskSecret } from '../lib/crypto.js';
 import { nvidiaChatCompletion } from '../lib/nvidia.js';
 import { connection, withModelFallback, effectiveModels, checkModelHealth, VETTED_MODELS } from '../lib/aiModels.js';
@@ -97,6 +98,11 @@ adminIntegrationsRouter.put('/:provider', asyncHandler(async (req, res) => {
     },
   });
 
+  await audit(req, existing ? 'integration.updated' : 'integration.created', {
+    targetType: 'integration',
+    targetId: provider,
+    detail: { secretChanged: !!secret, ...(typeof enabled === 'boolean' ? { enabled } : {}), ...(config ? { configKeys: Object.keys(config) } : {}) },
+  });
   res.json({ integration: toPublicIntegration(row, { narrativePreferred: await narrativePreference() }) });
 }));
 

@@ -38,6 +38,7 @@ model User {
   aiUsageLogs       AIUsageLog[]
   simulatorSessions SimulatorSession[]
   aiConversations   AIConversation[]
+  kyc               KycProfile?
 }
 
 model JournalEntry {
@@ -295,4 +296,60 @@ model SourceAssessment {
   updatedAt      DateTime @updatedAt
 
   @@index([currency, factor])
+}
+
+// ── Platform ──────────────────────────────────────────────────────────────
+// Platform-wide switches (paid plans, sign-ups, KYC, AI fair use). Singleton.
+model AppSettings {
+  id        String   @id @default("singleton")
+  config    Json     @default("{}")
+  updatedAt DateTime @updatedAt
+  updatedBy String?
+}
+
+// Identity verification. Personal details are stored AES-256-GCM encrypted
+// (detailsCipher); only country and review state are kept in the clear.
+model KycProfile {
+  id            String    @id @default(cuid())
+  userId        String    @unique
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  detailsCipher String
+  country       String
+  status        String    @default("pending") // pending | approved | rejected
+  reviewNote    String?
+  reviewedById  String?
+  reviewedAt    DateTime?
+  submittedAt   DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([status, submittedAt])
+}
+
+// Record of administrative and security-relevant actions.
+model AuditLog {
+  id         String   @id @default(cuid())
+  actorId    String?
+  actorEmail String?
+  action     String
+  targetType String?
+  targetId   String?
+  detail     Json     @default("{}")
+  ip         String?
+  createdAt  DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([action, createdAt])
+}
+
+// Sign-in / sign-up attempts, used for rate limiting.
+model AuthAttempt {
+  id        String   @id @default(cuid())
+  kind      String // login | signup
+  email     String?
+  ip        String?
+  success   Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([kind, email, createdAt])
+  @@index([kind, ip, createdAt])
 }

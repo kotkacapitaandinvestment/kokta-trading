@@ -1,3 +1,13 @@
+export class ApiError extends Error {
+  constructor(message, { status, code, fields, data } = {}) {
+    super(message);
+    this.status = status;
+    this.code = code;
+    this.fields = fields;
+    this.data = data;
+  }
+}
+
 async function request(path, options = {}) {
   const res = await fetch(`/api${path}`, {
     credentials: 'include',
@@ -7,7 +17,10 @@ async function request(path, options = {}) {
 
   const data = await res.json().catch(() => null);
   if (!res.ok) {
-    throw new Error(data?.error || `Request failed (${res.status})`);
+    // The server gates app features until identity details are submitted;
+    // the app shell listens for this and routes to the verification form.
+    if (data?.code === 'kyc_required') window.dispatchEvent(new CustomEvent('kotka:kyc-required'));
+    throw new ApiError(data?.error || `Request failed (${res.status})`, { status: res.status, code: data?.code, fields: data?.fields, data });
   }
   return data;
 }
@@ -17,5 +30,5 @@ export const api = {
   post: (path, body) => request(path, { method: 'POST', body: JSON.stringify(body) }),
   put: (path, body) => request(path, { method: 'PUT', body: JSON.stringify(body) }),
   patch: (path, body) => request(path, { method: 'PATCH', body: JSON.stringify(body) }),
-  delete: (path) => request(path, { method: 'DELETE' }),
+  delete: (path, body) => request(path, { method: 'DELETE', ...(body ? { body: JSON.stringify(body) } : {}) }),
 };

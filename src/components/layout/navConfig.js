@@ -25,6 +25,7 @@ import {
   SlidersHorizontal,
   Plug,
   Landmark,
+  BadgeCheck,
 } from 'lucide-react';
 
 export const traderNav = [
@@ -45,6 +46,7 @@ export const traderNavSecondary = [
 export const adminNav = [
   { to: '/admin/overview', label: 'Overview', icon: LayoutDashboard },
   { to: '/admin/users', label: 'Users', icon: Users },
+  { to: '/admin/verifications', label: 'Verifications', icon: BadgeCheck },
   { to: '/admin/subscriptions', label: 'Subscriptions', icon: CreditCard },
   { to: '/admin/ai-usage', label: 'AI Usage', icon: Cpu },
   { to: '/admin/trading-stats', label: 'Trading Statistics', icon: LineChart },
@@ -58,9 +60,9 @@ export const adminNav = [
   { to: '/admin/research', label: 'Fundamental Research', icon: Landmark },
   { to: '/admin/feature-flags', label: 'Feature Flags', icon: Flag },
   { to: '/admin/support', label: 'Support Tickets', icon: LifeBuoy },
-  { to: '/admin/audit-logs', label: 'Audit Logs', icon: ShieldCheck },
+  { to: '/admin/audit-logs', label: 'Audit Log', icon: ShieldCheck },
   { to: '/admin/system-health', label: 'System Health', icon: Activity },
   { to: '/admin/api-usage', label: 'API Usage', icon: Server },
   { to: '/admin/integrations', label: 'Integrations', icon: Plug, superAdminOnly: true },
-  { to: '/admin/settings', label: 'Settings', icon: SlidersHorizontal, superAdminOnly: true },
+  { to: '/admin/settings', label: 'Platform Settings', icon: SlidersHorizontal, superAdminOnly: true },
 ];

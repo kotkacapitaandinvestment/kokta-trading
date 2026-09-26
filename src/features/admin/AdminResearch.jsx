@@ -182,7 +182,7 @@ function SettingsCard({ data, canEdit, onSaved }) {
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <Select label="Available to" value={form.availability} onChange={(e) => set('availability', e.target.value)} disabled={!canEdit}>
             <option value="all">All traders</option>
-            <option value="premium">Premium and above</option>
+            <option value="premium">Premium and above (once paid plans are on)</option>
           </Select>
           <Input label="Refresh every (hours)" type="number" min={1} max={168} value={form.refreshHours} onChange={(e) => set('refreshHours', e.target.value)} disabled={!canEdit} />
           <Input label="Refreshes per trader per day" type="number" min={0} value={form.userRefreshLimitPerDay} onChange={(e) => set('userRefreshLimitPerDay', e.target.value)} disabled={!canEdit} />

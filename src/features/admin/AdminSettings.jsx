@@ -1,20 +1,28 @@
+import { useEffect, useState } from 'react';
 import clsx from 'clsx';
+import { AlertCircle, CheckCircle2 } from 'lucide-react';
 import PageHeader from '../../components/ui/PageHeader';
 import Card, { CardHeader, CardBody } from '../../components/ui/Card';
-import Input, { Select } from '../../components/ui/Input';
+import Input from '../../components/ui/Input';
 import Button from '../../components/ui/Button';
-import { usePersistedState } from '../../lib/usePersistedState';
+import Badge from '../../components/ui/Badge';
+import { api } from '../../lib/api';
 
-function Toggle({ checked, onChange, label, hint }) {
+function Toggle({ checked, onChange, label, hint, disabled }) {
   return (
-    <div className="flex items-center justify-between py-2.5">
+    <div className="flex items-center justify-between gap-6 py-3">
       <div>
         <p className="text-sm font-medium text-ink-700 dark:text-ink-200">{label}</p>
-        {hint ? <p className="text-xs text-ink-400">{hint}</p> : null}
+        {hint ? <p className="mt-0.5 max-w-lg text-xs leading-relaxed text-ink-400">{hint}</p> : null}
       </div>
       <button
+        type="button"
+        role="switch"
+        aria-checked={checked}
+        aria-label={label}
+        disabled={disabled}
         onClick={() => onChange(!checked)}
-        className={clsx('h-6 w-11 shrink-0 rounded-full transition-colors', checked ? 'bg-ink-900 dark:bg-white' : 'bg-ink-200 dark:bg-ink-700')}
+        className={clsx('h-6 w-11 shrink-0 rounded-full transition-colors disabled:opacity-50', checked ? 'bg-ink-900 dark:bg-white' : 'bg-ink-200 dark:bg-ink-700')}
       >
         <span className={clsx('block h-5 w-5 translate-y-0.5 rounded-full bg-white shadow transition-transform dark:bg-ink-900', checked ? 'translate-x-5' : 'translate-x-0.5')} />
       </button>
@@ -23,63 +31,152 @@ function Toggle({ checked, onChange, label, hint }) {
 }
 
 export default function AdminSettings() {
-  const [config, setConfig] = usePersistedState('admin.systemConfig', {
-    platformName: 'Kotka Trading',
-    supportEmail: 'support@kotka.trading',
-    defaultModel: 'Kotka Reasoning (default)',
-    freeAiLimit: 10,
-    maintenanceMode: false,
-    signupsOpen: true,
-  });
+  const [saved, setSaved] = useState(null);
+  const [draft, setDraft] = useState(null);
+  const [meta, setMeta] = useState({});
+  const [state, setState] = useState(null);
+
+  useEffect(() => {
+    api
+      .get('/admin/platform/settings')
+      .then(({ settings, updatedAt, updatedBy, canEdit }) => {
+        setSaved(settings);
+        setDraft(settings);
+        setMeta({ updatedAt, updatedBy, canEdit });
+      })
+      .catch((err) => setState({ error: err.message }));
+  }, []);
+
+  if (!draft) {
+    return (
+      <div>
+        <PageHeader eyebrow="Admin" title="Platform Settings" />
+        {state?.error ? <p className="text-sm text-loss-500">{state.error}</p> : <div className="h-96 animate-pulse rounded-2xl bg-white dark:bg-ink-900" />}
+      </div>
+    );
+  }
+
+  const set = (key, value) => {
+    setDraft((d) => ({ ...d, [key]: value }));
+    setState(null);
+  };
+  const dirty = Object.keys(draft).some((k) => draft[k] !== saved[k]);
+  const disabled = !meta.canEdit;
+
+  const save = async () => {
+    setState({ saving: true });
+    try {
+      const res = await api.put('/admin/platform/settings', draft);
+      setSaved(res.settings);
+      setDraft(res.settings);
+      setMeta((m) => ({ ...m, updatedAt: res.updatedAt, updatedBy: res.updatedBy }));
+      setState({ ok: 'Saved. Changes reach every server within about a minute.' });
+    } catch (err) {
+      setState({ error: err.message });
+    }
+  };
 
   return (
-    <div className="space-y-6">
-      <PageHeader eyebrow="Admin" title="System Settings" description="Global platform configuration and defaults." />
+    <div className="space-y-6 pb-24">
+      <PageHeader
+        eyebrow="Admin"
+        title="Platform Settings"
+        description="Switches that apply to every account. Every change is recorded in the audit log."
+      />
 
       <Card>
-        <CardHeader title="General" />
-        <CardBody className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Input label="Platform name" value={config.platformName} onChange={(e) => setConfig((c) => ({ ...c, platformName: e.target.value }))} />
-          <Input label="Support email" value={config.supportEmail} onChange={(e) => setConfig((c) => ({ ...c, supportEmail: e.target.value }))} />
-        </CardBody>
-      </Card>
-
-      <Card>
-        <CardHeader title="Kotka AI Defaults" />
-        <CardBody className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Select label="Default model" value={config.defaultModel} onChange={(e) => setConfig((c) => ({ ...c, defaultModel: e.target.value }))}>
-            <option>Kotka Reasoning (default)</option>
-            <option>Kotka Vision (chart analysis)</option>
-            <option>Kotka Coaching (psychology)</option>
-          </Select>
-          <Input
-            label="Free tier AI requests / day"
-            type="number"
-            value={config.freeAiLimit}
-            onChange={(e) => setConfig((c) => ({ ...c, freeAiLimit: e.target.value }))}
-          />
-        </CardBody>
-      </Card>
-
-      <Card>
-        <CardHeader title="Platform Controls" />
-        <CardBody className="divide-y divide-ink-50 dark:divide-ink-800/60">
+        <CardHeader title="Access" subtitle="Who can join and what they need to do first." />
+        <CardBody className="divide-y divide-ink-100 dark:divide-ink-800">
           <Toggle
-            checked={config.signupsOpen}
-            onChange={(v) => setConfig((c) => ({ ...c, signupsOpen: v }))}
-            label="New signups open"
-            hint="Allow new traders to create accounts."
+            label="Accept new sign-ups"
+            hint="When off, the sign-up page says sign-ups are paused. Existing accounts are unaffected."
+            checked={draft.signupsOpen}
+            onChange={(v) => set('signupsOpen', v)}
+            disabled={disabled}
           />
           <Toggle
-            checked={config.maintenanceMode}
-            onChange={(v) => setConfig((c) => ({ ...c, maintenanceMode: v }))}
-            label="Maintenance mode"
-            hint="Show a maintenance banner and block new trading actions."
+            label="Require identity verification"
+            hint="Traders must submit legal name, date of birth, country, phone and address before using the app. They keep access while it is in review. Admins are exempt."
+            checked={draft.kycRequired}
+            onChange={(v) => set('kycRequired', v)}
+            disabled={disabled}
           />
         </CardBody>
       </Card>
 
-      <Button>Save configuration</Button>
+      <Card>
+        <CardHeader
+          title="Plans"
+          subtitle="Everything is free while paid plans are off."
+          action={<Badge tone={draft.paidPlansEnabled ? 'accent' : 'profit'}>{draft.paidPlansEnabled ? 'Paid plans on' : 'All features free'}</Badge>}
+        />
+        <CardBody className="space-y-5">
+          <Toggle
+            label="Enable paid plans"
+            hint="Turns on the free-plan AI limit below and lets features marked Premium (such as Fundamental Research, if set that way) be restricted to Premium accounts. Leave off until billing is ready."
+            checked={draft.paidPlansEnabled}
+            onChange={(v) => set('paidPlansEnabled', v)}
+            disabled={disabled}
+          />
+          <div className="grid grid-cols-1 gap-4 border-t border-ink-100 pt-5 dark:border-ink-800 sm:grid-cols-2">
+            <Input
+              label="Kotka AI fair-use limit"
+              type="number"
+              min="0"
+              max="10000"
+              hint="Messages per person per UTC day, for everyone. 0 means no cap. Admins are never capped."
+              value={draft.aiFairUseDailyLimit}
+              onChange={(e) => set('aiFairUseDailyLimit', e.target.value === '' ? '' : Number(e.target.value))}
+              disabled={disabled}
+            />
+            <Input
+              label="Free-plan AI limit"
+              type="number"
+              min="0"
+              max="10000"
+              hint={draft.paidPlansEnabled ? 'Messages per day on the free plan.' : 'Only applies once paid plans are enabled.'}
+              value={draft.aiDailyLimitFree}
+              onChange={(e) => set('aiDailyLimitFree', e.target.value === '' ? '' : Number(e.target.value))}
+              disabled={disabled}
+            />
+          </div>
+        </CardBody>
+      </Card>
+
+      <Card>
+        <CardHeader title="Support" subtitle="Shown on the sign-in help page and the verification form." />
+        <CardBody>
+          <div className="max-w-sm">
+            <Input
+              label="Support email"
+              type="email"
+              placeholder="support@yourdomain.com"
+              value={draft.supportEmail}
+              onChange={(e) => set('supportEmail', e.target.value)}
+              disabled={disabled}
+            />
+          </div>
+        </CardBody>
+      </Card>
+
+      <div className="sticky bottom-0 -mx-4 flex flex-wrap items-center justify-between gap-3 border-t border-ink-100 bg-ink-50/95 px-4 py-3 backdrop-blur dark:border-ink-800 dark:bg-ink-950/95 lg:-mx-8 lg:px-8">
+        <p className="text-xs text-ink-400">
+          {meta.updatedAt ? `Last changed ${new Date(meta.updatedAt).toLocaleString()}${meta.updatedBy ? ` by ${meta.updatedBy.name}` : ''}.` : 'Using defaults. Nothing has been changed yet.'}
+          {disabled ? ' Only a Super Admin can change these.' : ''}
+        </p>
+        <div className="flex items-center gap-3">
+          {state?.ok ? (
+            <span className="flex items-center gap-1.5 text-xs text-profit-600 dark:text-profit-400"><CheckCircle2 className="h-3.5 w-3.5" />{state.ok}</span>
+          ) : null}
+          {state?.error ? (
+            <span role="alert" className="flex items-center gap-1.5 text-xs text-loss-500"><AlertCircle className="h-3.5 w-3.5" />{state.error}</span>
+          ) : null}
+          {dirty ? <Button variant="ghost" size="sm" onClick={() => setDraft(saved)}>Discard</Button> : null}
+          <Button size="sm" disabled={disabled || !dirty || state?.saving} onClick={save}>
+            {state?.saving ? 'Saving…' : 'Save changes'}
+          </Button>
+        </div>
+      </div>
     </div>
   );
 }

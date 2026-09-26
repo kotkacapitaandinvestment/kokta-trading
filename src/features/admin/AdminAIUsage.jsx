@@ -24,13 +24,13 @@ export default function AdminAIUsage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader eyebrow="Admin" title="AI Usage" description="Monitor Kotka AI volume, latency, and how often it falls back to the scripted mentor." />
+      <PageHeader eyebrow="Admin" title="AI Usage" description="Monitor Kotka AI volume, latency, and how often a reply fails because the AI is unavailable." />
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <StatTile label="Requests (30d)" value={stats.totalRequests30d.toLocaleString()} />
         <StatTile label="Requests Today" value={stats.requestsToday.toLocaleString()} />
         <StatTile label="Avg Response Time" value={`${(stats.avgLatencyMs / 1000).toFixed(2)}s`} />
-        <StatTile label="Live (NVIDIA) Share" value={`${stats.liveSharePct}%`} hint="vs. scripted fallback" />
+        <StatTile label="Live (NVIDIA) Share" value={`${stats.liveSharePct}%`} hint="answered by the model" />
       </div>
 
       <Card>

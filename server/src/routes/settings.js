@@ -15,8 +15,42 @@ settingsRouter.get('/', asyncHandler(async (req, res) => {
   res.json({ settings });
 }));
 
+const TONES = ['Direct & challenging', 'Supportive & measured', 'Purely analytical'];
+const CURRENCIES = ['USD', 'EUR', 'GBP'];
+
+const num = (v, min, max) => (typeof v === 'number' && Number.isFinite(v) && v >= min && v <= max ? v : undefined);
+const bool = (v) => (typeof v === 'boolean' ? v : undefined);
+const pick = (obj) => Object.fromEntries(Object.entries(obj).filter(([, v]) => v !== undefined));
+
+// Only known keys with sane values are stored; anything else is dropped so a
+// half-typed number can't zero out a loss limit.
+function clean(body, current) {
+  const out = {};
+  if (body.notifications && typeof body.notifications === 'object') {
+    const n = body.notifications;
+    out.notifications = { ...current.notifications, ...pick({ checklist: bool(n.checklist), journal: bool(n.journal), riskWarnings: bool(n.riskWarnings) }) };
+  }
+  if (body.aiPreferences && typeof body.aiPreferences === 'object') {
+    const a = body.aiPreferences;
+    out.aiPreferences = { ...current.aiPreferences, ...pick({ tone: TONES.includes(a.tone) ? a.tone : undefined }) };
+  }
+  if (body.tradingPreferences && typeof body.tradingPreferences === 'object') {
+    const t = body.tradingPreferences;
+    out.tradingPreferences = {
+      ...current.tradingPreferences,
+      ...pick({
+        baseCurrency: CURRENCIES.includes(t.baseCurrency) ? t.baseCurrency : undefined,
+        dailyLossLimit: num(t.dailyLossLimit, 0.1, 100),
+        defaultRisk: num(t.defaultRisk, 0.01, 100),
+      }),
+    };
+  }
+  return out;
+}
+
 settingsRouter.put('/', asyncHandler(async (req, res) => {
-  const { notifications, aiPreferences, tradingPreferences } = req.body ?? {};
+  const current = await prisma.userSettings.upsert({ where: { userId: req.userId }, update: {}, create: { userId: req.userId } });
+  const { notifications, aiPreferences, tradingPreferences } = clean(req.body ?? {}, current);
   const settings = await prisma.userSettings.upsert({
     where: { userId: req.userId },
     update: {

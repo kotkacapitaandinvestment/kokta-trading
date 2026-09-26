@@ -5,9 +5,11 @@ import AuthLayout from '../../components/layout/AuthLayout';
 import Input from '../../components/ui/Input';
 import Button from '../../components/ui/Button';
 import { useAuth } from '../../context/AuthContext';
+import { useAppConfig } from '../../context/AppConfigContext';
 
 export default function Signup() {
   const { signup } = useAuth();
+  const config = useAppConfig();
   const navigate = useNavigate();
   const [form, setForm] = useState({ name: '', email: '', password: '' });
   const [loading, setLoading] = useState(false);
@@ -19,7 +21,7 @@ export default function Signup() {
     setLoading(true);
     try {
       await signup(form);
-      navigate('/app/dashboard');
+      navigate(config.kycRequired ? '/verify' : '/app/dashboard');
     } catch (err) {
       setError(err.message || 'Could not create your account. Try again.');
     } finally {
@@ -27,8 +29,24 @@ export default function Signup() {
     }
   };
 
+  if (config.loaded && !config.signupsOpen) {
+    return (
+      <AuthLayout title="Sign-ups are paused" subtitle="We're not accepting new accounts right now. Please check back soon.">
+        <p className="text-sm text-ink-500 dark:text-ink-400">
+          Already have an account?{' '}
+          <Link to="/login" className="font-medium text-accent-600 hover:underline dark:text-accent-400">
+            Sign in
+          </Link>
+        </p>
+      </AuthLayout>
+    );
+  }
+
   return (
-    <AuthLayout title="Create your account" subtitle="Start building institutional discipline today.">
+    <AuthLayout
+      title="Create your account"
+      subtitle={config.kycRequired ? 'Free to use. After this, a two-minute identity check and you are in.' : 'Free to use. Start building institutional discipline today.'}
+    >
       {error ? (
         <div className="mb-4 flex items-start gap-2 rounded-xl border border-loss-500/20 bg-loss-50 p-3 text-sm text-loss-600 dark:bg-loss-500/10 dark:text-loss-400">
           <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />

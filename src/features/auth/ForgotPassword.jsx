@@ -1,46 +1,34 @@
-import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { CheckCircle2 } from 'lucide-react';
+import { LifeBuoy } from 'lucide-react';
 import AuthLayout from '../../components/layout/AuthLayout';
-import Input from '../../components/ui/Input';
-import Button from '../../components/ui/Button';
+import { useAppConfig } from '../../context/AppConfigContext';
 
+// Kotka has no email provider yet, so there is no self-serve reset link.
+// Say so plainly instead of pretending one was sent.
 export default function ForgotPassword() {
-  const [email, setEmail] = useState('');
-  const [sent, setSent] = useState(false);
-
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    setSent(true);
-  };
+  const { supportEmail } = useAppConfig();
 
   return (
-    <AuthLayout title="Reset your password" subtitle="We'll send a secure reset link to your email.">
-      {sent ? (
-        <div className="rounded-xl border border-profit-500/20 bg-profit-50 p-4 text-sm text-profit-600 dark:bg-profit-500/10 dark:text-profit-400">
-          <div className="flex items-center gap-2 font-medium">
-            <CheckCircle2 className="h-4 w-4" /> Check your inbox
-          </div>
-          <p className="mt-1 text-ink-500 dark:text-ink-400">
-            If an account exists for <strong>{email}</strong>, a reset link is on its way.
-          </p>
+    <AuthLayout title="Forgot your password?" subtitle="Self-serve reset by email is not available yet.">
+      <div className="rounded-xl border border-ink-100 bg-ink-50 p-4 text-sm text-ink-600 dark:border-ink-800 dark:bg-ink-900 dark:text-ink-300">
+        <div className="flex items-center gap-2 font-medium text-ink-800 dark:text-ink-100">
+          <LifeBuoy className="h-4 w-4 text-accent-600 dark:text-accent-400" /> Contact support
         </div>
-      ) : (
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <Input
-            label="Email"
-            type="email"
-            name="email"
-            placeholder="you@example.com"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-          />
-          <Button type="submit" className="w-full">
-            Send reset link
-          </Button>
-        </form>
-      )}
+        <p className="mt-1.5 leading-relaxed">
+          {supportEmail ? (
+            <>
+              Email{' '}
+              <a href={`mailto:${supportEmail}?subject=Password%20reset`} className="font-medium text-accent-600 hover:underline dark:text-accent-400">
+                {supportEmail}
+              </a>{' '}
+              from the address you signed up with and we will help you get back in.
+            </>
+          ) : (
+            'Contact the Kotka team from the address you signed up with and we will help you get back in.'
+          )}
+        </p>
+        <p className="mt-2 text-xs text-ink-400">If you are still signed in on another device, you can change your password in Settings.</p>
+      </div>
 
       <p className="mt-8 text-center text-sm text-ink-500 dark:text-ink-400">
         <Link to="/login" className="font-medium text-accent-600 hover:underline dark:text-accent-400">
