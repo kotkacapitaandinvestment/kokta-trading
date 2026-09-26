@@ -10,6 +10,8 @@ import { checkModelHealth } from '../lib/aiModels.js';
 import { loadAppSettings, paidFeatureLocked } from '../lib/appSettings.js';
 import { warmInstrumentBars } from '../lib/marketPulse.js';
 import { runCommunityJobs } from '../lib/community/jobs.js';
+import { cryptoContext, CRYPTO } from '../lib/research/crypto.js';
+import { instrument } from '../lib/instruments.js';
 
 export const researchRouter = Router();
 
@@ -78,8 +80,19 @@ researchRouter.get('/config', asyncHandler(async (req, res) => {
     settings: publicSettings(settings),
     access,
     currencies: settings.currencies.map((c) => ({ code: c, name: CURRENCIES[c].name, economy: CURRENCIES[c].economy, centralBank: CURRENCIES[c].centralBank.name })),
+    // Crypto has no issuing economy, so it gets a data context, not a score.
+    crypto: Object.keys(CRYPTO).map((s) => ({ symbol: s, display: instrument(s).display, name: instrument(s).name })),
     usage: { refreshesToday: await refreshesToday(req.userId), limit: access.isAdmin ? null : settings.userRefreshLimitPerDay },
   });
+}));
+
+researchRouter.get('/crypto/:symbol', asyncHandler(async (req, res) => {
+  const settings = await loadSettings();
+  const access = await accessFor(req.userId, settings);
+  if (!access.allowed) return res.status(403).json({ error: access.reason });
+  const ctx = await cryptoContext(req.params.symbol);
+  if (!ctx) return res.status(404).json({ error: 'Unknown crypto pair.' });
+  res.json(ctx);
 }));
 
 researchRouter.get('/:subject', asyncHandler(async (req, res) => {

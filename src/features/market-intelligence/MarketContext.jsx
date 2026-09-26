@@ -40,18 +40,20 @@ function Sparkline({ closes, label }) {
 }
 
 function PulseTile({ item, onSelect }) {
-  const interactive = !!item.research && !!onSelect;
+  // Pairs open their research report; crypto opens its data view.
+  const target = item.research ?? (item.market === 'Crypto' ? item.key : null);
+  const interactive = !!target && !!onSelect;
   const Comp = interactive ? 'button' : 'div';
   const up = item.changePct > 0;
   return (
     <Comp
       type={interactive ? 'button' : undefined}
-      onClick={interactive ? () => onSelect(item.research) : undefined}
+      onClick={interactive ? () => onSelect(target) : undefined}
       className={clsx(
         'group flex min-w-0 flex-col rounded-xl border border-ink-100 bg-white p-3.5 text-left dark:border-ink-800 dark:bg-ink-900',
         interactive && 'transition-colors hover:border-accent-300 active:scale-[0.99] dark:hover:border-accent-700',
       )}
-      title={interactive ? `Open fundamental research for ${item.symbol}` : undefined}
+      title={interactive ? `Open ${item.market === 'Crypto' ? 'market context' : 'fundamental research'} for ${item.symbol}` : undefined}
     >
       <div className="flex items-baseline justify-between gap-2">
         <span className="font-mono text-xs font-semibold text-ink-900 dark:text-ink-50">{item.symbol}</span>

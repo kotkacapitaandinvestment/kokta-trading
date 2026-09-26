@@ -16,6 +16,7 @@ import TrendSection from './TrendSection';
 import SourcesSection, { FreshnessStrip } from './SourcesSection';
 import { Chapter, txt } from './primitives';
 import { ReadingGuide, ReportNav } from './ReportNav';
+import CryptoView from './CryptoView';
 
 function InstrumentPicker({ config, value, onChange }) {
   const pill = (subject, label) => (
@@ -37,6 +38,15 @@ function InstrumentPicker({ config, value, onChange }) {
       <div className="-mx-1 flex gap-1 overflow-x-auto px-1 pb-1 scrollbar-thin lg:flex-wrap lg:overflow-visible lg:pb-0">{config.settings.pairs.map((p) => pill(p, `${p.slice(0, 3)}/${p.slice(3)}`))}</div>
       <div className="hidden h-5 w-px bg-ink-200 dark:bg-ink-700 lg:block" />
       <div className="-mx-1 flex gap-1 overflow-x-auto px-1 pb-1 scrollbar-thin lg:flex-wrap lg:overflow-visible lg:pb-0">{config.currencies.map((c) => pill(c.code, c.code))}</div>
+      {config.crypto?.length ? (
+        <>
+          <div className="hidden h-5 w-px bg-ink-200 dark:bg-ink-700 lg:block" />
+          <div className="-mx-1 flex items-center gap-1 overflow-x-auto px-1 pb-1 scrollbar-thin lg:overflow-visible lg:pb-0">
+            <span className="shrink-0 px-1 text-[10px] font-semibold uppercase tracking-wide text-ink-400">Crypto</span>
+            {config.crypto.map((c) => pill(c.symbol, c.display))}
+          </div>
+        </>
+      ) : null}
     </div>
   );
 }
@@ -160,7 +170,8 @@ export default function FundamentalResearch({ instrument, onInstrumentChange }) 
   }, []);
 
   const allowed = config?.access?.allowed;
-  const available = config ? [...config.settings.pairs, ...config.settings.currencies] : [];
+  const crypto = config?.crypto?.map((c) => c.symbol) ?? [];
+  const available = config ? [...config.settings.pairs, ...config.settings.currencies, ...crypto] : [];
   const subject = available.includes(instrument) ? instrument : config?.settings.pairs[0] ?? config?.settings.currencies[0];
 
   if (configError) return <EmptyState icon={AlertTriangle} title="Fundamental Research is unavailable" description={configError} />;
@@ -168,6 +179,16 @@ export default function FundamentalResearch({ instrument, onInstrumentChange }) 
   if (!allowed) return <EmptyState icon={Landmark} title="Fundamental Research" description={config.access.reason} />;
   if (!subject) return <EmptyState icon={Landmark} title="No instruments enabled" description="An administrator has not enabled any currencies or pairs for Fundamental Research yet." />;
 
+  if (crypto.includes(subject)) {
+    return (
+      <div className="space-y-5">
+        <div className="rounded-2xl border border-ink-100 bg-white p-4 dark:border-ink-700 dark:bg-ink-900">
+          <InstrumentPicker config={config} value={subject} onChange={onInstrumentChange} />
+        </div>
+        <CryptoView key={subject} symbol={subject} onInstrumentChange={onInstrumentChange} />
+      </div>
+    );
+  }
   return <ResearchView key={subject} config={config} subject={subject} onInstrumentChange={onInstrumentChange} />;
 }
 
