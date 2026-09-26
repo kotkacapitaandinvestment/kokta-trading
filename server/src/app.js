@@ -24,6 +24,7 @@ import { communityRouter } from './routes/community/index.js';
 import { realtimeRouter } from './routes/realtime.js';
 import { mediaRouter } from './routes/media.js';
 import { adminCommunityRouter } from './routes/adminCommunity.js';
+import { pushRouter } from './routes/push.js';
 import { requireAuth, requireRole } from './middleware/auth.js';
 
 export const app = express();
@@ -42,6 +43,7 @@ app.use('/api/kyc', kycRouter);
 app.use('/api/community', communityRouter);
 app.use('/api/realtime', realtimeRouter);
 app.use('/api/media', mediaRouter);
+app.use('/api/push', pushRouter);
 app.use('/api/journal', journalRouter);
 app.use('/api/checklist', checklistRouter);
 app.use('/api/settings', settingsRouter);

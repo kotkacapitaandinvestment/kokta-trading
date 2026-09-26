@@ -1,12 +1,26 @@
 {
+  "id": "/app/dashboard",
   "name": "Kotka Trading",
   "short_name": "Kotka",
-  "icons": [
-    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" },
-    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png" }
-  ],
+  "description": "A professional routine for your trading: checklist, risk limit, journal, research and a market community.",
+  "start_url": "/app/dashboard?source=pwa",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
+  "orientation": "any",
   "theme_color": "#0C0C0E",
   "background_color": "#050504",
-  "display": "standalone",
-  "start_url": "/app/dashboard"
+  "categories": ["finance", "productivity", "education"],
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-maskable-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Dashboard", "url": "/app/dashboard?source=shortcut", "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Community", "url": "/app/community?source=shortcut", "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Messages", "url": "/app/community/messages?source=shortcut", "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Log a trade", "url": "/app/journal?source=shortcut", "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }] }
+  ]
 }

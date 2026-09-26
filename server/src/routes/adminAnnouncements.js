@@ -2,6 +2,9 @@ import { Router } from 'express';
 import { prisma } from '../lib/prisma.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 import { audit } from '../lib/audit.js';
+import { waitUntil } from '@vercel/functions';
+import { sendPush } from '../lib/push.js';
+import { prefsFor } from '../lib/community/users.js';
 
 // Mounted behind requireAuth + requireRole('admin', 'super_admin'). Published
 // announcements appear in traders' notifications and on their dashboard.
@@ -46,6 +49,7 @@ adminAnnouncementsRouter.post('/', asyncHandler(async (req, res) => {
   if (errors.length) return res.status(400).json({ error: errors.join(' ') });
   const item = await prisma.announcement.create({ data: { audience: 'All users', status: 'draft', ...data } });
   await audit(req, 'announcement.created', { targetType: 'announcement', targetId: item.id, detail: { title: item.title } });
+  if (item.status === 'published') waitUntil(pushAnnouncement(item));
   res.status(201).json({ item });
 }));
 
@@ -57,6 +61,7 @@ adminAnnouncementsRouter.patch('/:id', asyncHandler(async (req, res) => {
   const item = await prisma.announcement.update({ where: { id: existing.id }, data });
   const action = data.status && data.status !== existing.status ? (data.status === 'published' ? 'announcement.published' : 'announcement.unpublished') : 'announcement.updated';
   await audit(req, action, { targetType: 'announcement', targetId: item.id, detail: { title: item.title } });
+  if (action === 'announcement.published') waitUntil(pushAnnouncement(item));
   res.json({ item });
 }));
 
@@ -65,6 +70,25 @@ adminAnnouncementsRouter.delete('/:id', asyncHandler(async (req, res) => {
   if (removed) await audit(req, 'announcement.deleted', { targetType: 'announcement', targetId: removed.id, detail: { title: removed.title } });
   res.status(204).end();
 }));
+
+function audienceIncludes(audience, role) {
+  if (audience === 'All users' || ['admin', 'super_admin'].includes(role)) return true;
+  return audience === (role === 'premium' ? 'Premium' : 'Traders');
+}
+
+// Push a newly published announcement to devices of everyone in its audience
+// who has push on and hasn't switched announcements off.
+async function pushAnnouncement(item) {
+  try {
+    const subs = await prisma.pushSubscription.findMany({ where: { user: { status: 'active' } }, select: { userId: true, user: { select: { role: true } } } });
+    const ids = [...new Set(subs.filter((s) => audienceIncludes(item.audience, s.user.role)).map((s) => s.userId))];
+    if (!ids.length) return;
+    const prefOf = await prefsFor(ids);
+    await sendPush(ids.filter((id) => prefOf(id).push.announcements !== false).map((userId) => ({ userId, title: item.title, body: item.body ?? '', link: '/app/notifications', tag: `announcement:${item.id}` })));
+  } catch (err) {
+    console.warn('[push] announcement', err.message);
+  }
+}
 
 // Announcements a given role should see, newest first.
 export async function announcementsFor(role, { sinceDays = 30 } = {}) {

@@ -235,30 +235,33 @@ export default function MarketRoom() {
   const up = d?.changePct > 0;
   return (
     <div className="space-y-4">
-      <header className="rounded-2xl border border-ink-100 bg-white p-5 dark:border-ink-800 dark:bg-ink-900">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div>
+      <header className="rounded-2xl border border-ink-100 bg-white p-4 dark:border-ink-800 dark:bg-ink-900 sm:p-5">
+        {/* Phones: name and Follow on one row, price below. Wider: one row. */}
+        <div className="flex flex-wrap items-start justify-between gap-x-5 gap-y-3">
+          <div className="min-w-0 flex-1">
             <p className="text-[11px] uppercase tracking-wide text-ink-400">{room.instrument.market} · {room.counts.followers} following</p>
-            <h1 className="mt-0.5 font-mono text-2xl font-semibold tracking-tight text-ink-900 dark:text-ink-50">{room.instrument.display}</h1>
-            <p className="text-sm text-ink-500 dark:text-ink-400">{room.instrument.name}</p>
+            <h1 className="mt-0.5 font-mono text-xl font-semibold tracking-tight text-ink-900 dark:text-ink-50 sm:text-2xl">{room.instrument.display}</h1>
+            <p className="truncate text-sm text-ink-500 dark:text-ink-400">{room.instrument.name}</p>
           </div>
-          <div className="flex items-center gap-5">
+          <div className={clsx('order-last w-full sm:order-none sm:w-auto sm:text-right', tab !== 'overview' && 'hidden sm:block')}>
             {d?.available ? (
-              <div className="text-right">
-                <p className="font-mono text-2xl font-semibold tabular-nums text-ink-900 dark:text-ink-50">{price(d.close, room.instrument.decimals)}</p>
-                <p className={clsx('inline-flex items-center gap-0.5 font-mono text-sm tabular-nums', up ? 'text-profit-600 dark:text-profit-400' : d.changePct < 0 ? 'text-loss-500' : 'text-ink-400')}>{up ? <ArrowUpRight className="h-4 w-4" /> : d.changePct < 0 ? <ArrowDownRight className="h-4 w-4" /> : null}{signedPct(d.changePct)}</p>
+              <>
+                <p className="flex items-baseline gap-2 sm:block">
+                  <span className="font-mono text-2xl font-semibold tabular-nums text-ink-900 dark:text-ink-50">{price(d.close, room.instrument.decimals)}</span>
+                  <span className={clsx('inline-flex items-center gap-0.5 font-mono text-sm tabular-nums sm:flex sm:justify-end', up ? 'text-profit-600 dark:text-profit-400' : d.changePct < 0 ? 'text-loss-500' : 'text-ink-400')}>{up ? <ArrowUpRight className="h-4 w-4" /> : d.changePct < 0 ? <ArrowDownRight className="h-4 w-4" /> : null}{signedPct(d.changePct)}</span>
+                </p>
                 <p className="text-[11px] text-ink-400">Daily close {d.closeDate}{d.stale ? ' (latest available)' : ''} · end-of-day, not live</p>
-              </div>
+              </>
             ) : (
-              <div className="max-w-xs text-right">
+              <div className="sm:max-w-xs">
                 {NA}
                 <p className="text-[11px] text-ink-400">{d?.note ?? REASONS[d?.reason] ?? ''}</p>
               </div>
             )}
-            <FollowButton targetType="market" targetId={room.instrument.symbol} following={room.following} size="md" />
           </div>
+          <FollowButton targetType="market" targetId={room.instrument.symbol} following={room.following} size="md" />
         </div>
-        <div className="mt-4 flex flex-wrap items-center gap-x-6 gap-y-2 border-t border-ink-100 pt-3 text-xs text-ink-500 dark:border-ink-800 dark:text-ink-400">
+        <div className={clsx('mt-4 flex-wrap items-center gap-x-6 gap-y-2 border-t border-ink-100 pt-3 text-xs text-ink-500 dark:border-ink-800 dark:text-ink-400', tab === 'overview' ? 'flex' : 'hidden sm:flex')}>
           <span><span className={clsx('mr-1.5 inline-block h-2 w-2 rounded-full', room.status.open ? 'bg-profit-500' : 'bg-ink-300')} />{room.status.label}{room.status.session ? ` · ${room.status.session}` : ''}</span>
           <span>{d?.available ? `${d.regime} volatility (${d.atrPct}% ATR)` : 'Volatility: n/a'}</span>
           <span>{room.fundamental.score != null ? `Fundamentals ${room.fundamental.score}/100 ${room.fundamental.condition}` : 'Fundamentals: n/a'}</span>
@@ -276,7 +279,7 @@ export default function MarketRoom() {
       </nav>
       {tab === 'overview' ? <Overview room={room} setRoom={setRoom} /> : null}
       {tab === 'discussion' ? (
-        <div className="flex h-[calc(100dvh-19rem)] min-h-[28rem] overflow-hidden rounded-2xl border border-ink-100 bg-white dark:border-ink-800 dark:bg-ink-900">
+        <div className="flex h-[calc(100dvh_-_23rem_-_var(--bottom-nav))] min-h-[20rem] overflow-hidden sm:h-[calc(100dvh_-_19rem_-_var(--bottom-nav))] sm:min-h-[28rem] rounded-2xl border border-ink-100 bg-white dark:border-ink-800 dark:bg-ink-900">
           <ConversationChat conversationId={room.room.id} variant="room" isPublic focusId={params.get('m')} emptyText={`No messages yet in ${room.instrument.display}. Start the conversation.`} />
         </div>
       ) : null}

@@ -41,12 +41,14 @@ export const ONLINE_WINDOW_MS = 150 * 1000;
 
 export const DEFAULT_PREFS = {
   notify: { messages: true, mentions: true, replies: true, follows: true, activity: true, ideas: true, events: true, markets: true, news: true },
+  // Which notifications also go to the phone/desktop as a push. Quieter by default.
+  push: { messages: true, mentions: true, replies: true, follows: false, activity: false, ideas: true, events: true, markets: true, news: false, announcements: true },
   privacy: { showOnline: true, readReceipts: true, allowDmsFrom: 'everyone' }, // everyone | following | nobody
 };
 
 export function mergePrefs(raw) {
   const r = raw && typeof raw === 'object' ? raw : {};
-  return { notify: { ...DEFAULT_PREFS.notify, ...(r.notify ?? {}) }, privacy: { ...DEFAULT_PREFS.privacy, ...(r.privacy ?? {}) } };
+  return { notify: { ...DEFAULT_PREFS.notify, ...(r.notify ?? {}) }, push: { ...DEFAULT_PREFS.push, ...(r.push ?? {}) }, privacy: { ...DEFAULT_PREFS.privacy, ...(r.privacy ?? {}) } };
 }
 
 export async function loadPrefs(userId) {

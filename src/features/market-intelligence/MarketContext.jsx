@@ -3,6 +3,7 @@ import clsx from 'clsx';
 import { ArrowDownRight, ArrowUpRight, CalendarDays, ExternalLink } from 'lucide-react';
 import { api } from '../../lib/api';
 import { txt } from './research/primitives';
+import InfoTip from '../../components/ui/InfoTip';
 
 const REGIME_TONE = {
   Normal: 'bg-ink-100 text-ink-600 dark:bg-ink-800 dark:text-ink-300',
@@ -97,7 +98,12 @@ export function MarketPulse({ onSelect }) {
   return (
     <section aria-labelledby="pulse-title">
       <div className="mb-3 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-        <h2 id="pulse-title" className="text-sm font-semibold text-ink-900 dark:text-ink-50">Market pulse</h2>
+        <h2 id="pulse-title" className="flex items-center gap-1.5 text-sm font-semibold text-ink-900 dark:text-ink-50">
+          Market pulse
+          <InfoTip label="Reading a tile">
+            ATR 14d is the average daily range over the last 14 sessions, as a share of price. The tag bands it: Normal up to 0.7%, Elevated up to 1.5%, High above. Tap a tile for the research.
+          </InfoTip>
+        </h2>
         <p className="text-[11px] text-ink-400">
           {closeDate
             ? `Daily closes as of ${new Date(`${closeDate}T00:00:00Z`).toLocaleDateString(undefined, { day: 'numeric', month: 'short', timeZone: 'UTC' })} · end-of-day data from Massive, not live quotes`

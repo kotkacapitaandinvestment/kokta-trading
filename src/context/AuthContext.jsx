@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { api } from '../lib/api';
+import { forgetDeviceOnLogout } from '../lib/pwa';
 
 const AuthContext = createContext(null);
 
@@ -39,6 +40,7 @@ export function AuthProvider({ children }) {
   };
 
   const logout = async () => {
+    await forgetDeviceOnLogout();
     await api.post('/auth/logout', {});
     setUser(null);
   };

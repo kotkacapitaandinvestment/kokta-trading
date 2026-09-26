@@ -61,6 +61,7 @@ model User {
   follows             Follow[]
   savedItems          SavedItem[]
   notifications       Notification[]
+  pushSubscriptions   PushSubscription[]
   reports             Report[]
   relations           UserRelation[] @relation("relationOwner")
   relatedBy           UserRelation[] @relation("relationTarget")
@@ -761,6 +762,22 @@ model Notification {
 
   @@index([userId, readAt, updatedAt])
   @@index([userId, groupKey])
+}
+
+// A browser/device that accepted Web Push for a user. Removed when the push
+// service reports it gone (404/410) or the user turns push off there.
+model PushSubscription {
+  id         String    @id @default(cuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  endpoint   String    @unique
+  p256dh     String
+  auth       String
+  userAgent  String?
+  createdAt  DateTime  @default(now())
+  lastUsedAt DateTime?
+
+  @@index([userId])
 }
 
 model Report {

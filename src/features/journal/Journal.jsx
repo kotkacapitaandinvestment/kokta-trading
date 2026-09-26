@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Plus, Search, Sparkles, CheckCircle2, XCircle } from 'lucide-react';
 import PageHeader from '../../components/ui/PageHeader';
+import Hint from '../../components/ui/Hint';
 import Card, { CardBody } from '../../components/ui/Card';
 import Badge from '../../components/ui/Badge';
 import Button from '../../components/ui/Button';
@@ -102,6 +103,8 @@ export default function Journal() {
           </Button>
         }
       />
+
+      <Hint id="journal-emotion" className="mb-4 max-w-2xl">Set the emotion before you enter, while it's honest. Analytics breaks your results down by it.</Hint>
 
       <div className="mb-4 flex items-center gap-2">
         <div className="relative w-full max-w-xs">

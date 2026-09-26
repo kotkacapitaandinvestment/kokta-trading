@@ -10,6 +10,8 @@ import { useCommunity } from '../CommunityContext';
 import { timeAgo } from '../util';
 import { Avatar, UserName } from '../components/Identity';
 import ReportDialog from '../components/ReportDialog';
+import PushNudge from '../../../components/PushNudge';
+import Hint from '../../../components/ui/Hint';
 import ConversationChat from '../chat/ConversationChat';
 
 const FILTERS = [
@@ -78,6 +80,9 @@ function NewChat({ onClose }) {
         <div className="flex gap-1 rounded-lg bg-ink-50 p-1 text-xs dark:bg-ink-800">
           {[['dm', 'Direct message'], ['group', 'Private group'], ['community', 'Community']].map(([v, l]) => <button key={v} type="button" onClick={() => { setMode(v); setPicked(v === 'dm' ? picked.slice(0, 1) : picked); }} className={clsx('flex-1 rounded-md py-1.5 font-medium', mode === v ? 'bg-white shadow-sm dark:bg-ink-700 dark:text-ink-50' : 'text-ink-500')}>{l}</button>)}
         </div>
+        {mode === 'dm' ? (
+          <Hint id="dm-privacy">Some traders only accept messages from people they follow. Your own setting is under <Link to="/app/settings?section=community" className="underline underline-offset-2">Settings, Community</Link>.</Hint>
+        ) : null}
         {mode !== 'dm' ? (
           <div className="space-y-2">
             <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} maxLength={60} placeholder={mode === 'group' ? 'Group name, e.g. London Session Traders' : 'Community name, e.g. Gold Traders Nigeria'} className="h-10 w-full rounded-lg border border-ink-200 bg-white px-3 text-sm dark:border-ink-700 dark:bg-ink-800 dark:text-ink-50" />
@@ -304,7 +309,7 @@ export default function Messages() {
   }, [id]);
 
   return (
-    <div className="flex h-[calc(100dvh-12rem)] min-h-[30rem] overflow-hidden rounded-2xl border border-ink-100 bg-white dark:border-ink-800 dark:bg-ink-900">
+    <div className="flex h-[calc(100dvh_-_12rem_-_var(--bottom-nav))] min-h-[30rem] overflow-hidden rounded-2xl border border-ink-100 bg-white dark:border-ink-800 dark:bg-ink-900">
       <div className={clsx('flex w-full flex-col border-r border-ink-100 dark:border-ink-800 lg:w-80 lg:shrink-0', id && 'hidden lg:flex')}>
         <div className="flex items-center justify-between px-4 py-3">
           <h1 className="text-sm font-semibold text-ink-900 dark:text-ink-50">Messages</h1>
@@ -313,6 +318,7 @@ export default function Messages() {
             <button type="button" onClick={() => setShowNew(true)} className="rounded-lg bg-ink-900 p-1.5 text-white dark:bg-accent-500 dark:text-ink-950" aria-label="New conversation" title="New conversation"><Plus className="h-4 w-4" /></button>
           </div>
         </div>
+        <PushNudge className="mx-3 mb-2 border-dashed">Know when someone messages you, even with Kotka closed.</PushNudge>
         <div className="flex gap-1 overflow-x-auto px-3 pb-2">
           {FILTERS.map(([v, l]) => <button key={v} type="button" aria-pressed={filter === v} onClick={() => setFilter(v)} className={clsx('shrink-0 rounded-full px-2.5 py-1 text-xs font-medium', filter === v ? 'bg-ink-900 text-white dark:bg-ink-700' : 'text-ink-500 hover:bg-ink-100 dark:hover:bg-ink-800')}>{l}</button>)}
         </div>

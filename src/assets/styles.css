@@ -2,9 +2,21 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Height of the phone bottom bar, so full-height panels (chat, Kotka AI)
+   can leave room for it. Zero from lg up, where the sidebar is used. */
+:root {
+  --bottom-nav: calc(3.5rem + env(safe-area-inset-bottom));
+}
+@media (min-width: 1024px) {
+  :root {
+    --bottom-nav: 0px;
+  }
+}
+
 @layer base {
   html {
     -webkit-font-smoothing: antialiased;
+    -webkit-tap-highlight-color: transparent;
   }
   body {
     font-feature-settings: 'ss01';

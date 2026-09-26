@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 import { useEffect, useMemo, useState } from 'react';
 import { CheckCircle2, Circle, Sparkles, RotateCcw } from 'lucide-react';
 import PageHeader from '../../components/ui/PageHeader';
+import Hint from '../../components/ui/Hint';
 import Card, { CardBody, CardHeader } from '../../components/ui/Card';
 import Button from '../../components/ui/Button';
 import ProgressRing from '../../components/ui/ProgressRing';
@@ -50,6 +51,8 @@ export default function Checklist() {
           </Button>
         }
       />
+
+      <Hint id="checklist-journal" className="mb-4 max-w-2xl">Reset for each new trade. When you log it in the journal, tick "Pre-trade checklist was completed". That tick is what your discipline score counts.</Hint>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <div className="space-y-3 lg:col-span-2">

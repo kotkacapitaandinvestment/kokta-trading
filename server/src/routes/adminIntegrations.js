@@ -66,13 +66,15 @@ async function narrativePreference() {
 }
 
 adminIntegrationsRouter.get('/', asyncHandler(async (req, res) => {
-  const rows = await prisma.integration.findMany();
+  // The Web Push keys are generated and managed by the server (lib/push.js).
+  const rows = await prisma.integration.findMany({ where: { provider: { not: 'webpush' } } });
   const narrativePreferred = await narrativePreference();
   res.json({ integrations: rows.map((r) => toPublicIntegration(r, { narrativePreferred })) });
 }));
 
 adminIntegrationsRouter.put('/:provider', asyncHandler(async (req, res) => {
   const { provider } = req.params;
+  if (provider === 'webpush') return res.status(400).json({ error: 'Web Push keys are managed by Kotka and cannot be edited here.' });
   const { publicKey, config, enabled } = req.body ?? {};
   const secret = typeof req.body?.secret === 'string' ? req.body.secret.trim() : undefined;
 

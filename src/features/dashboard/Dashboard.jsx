@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import clsx from 'clsx';
+import InfoTip from '../../components/ui/InfoTip';
 import { ArrowDownRight, ArrowRight, ArrowUpRight, Brain, CalendarDays, ListChecks, Megaphone, NotebookPen, Sparkles } from 'lucide-react';
 import Card from '../../components/ui/Card';
 import Button from '../../components/ui/Button';
@@ -29,10 +30,13 @@ function useGet(path) {
 }
 
 // One readout inside the readiness panel. Big mono figure, small caption.
-function Gauge({ label, value, unit, caption, children }) {
+function Gauge({ label, value, unit, caption, info, children }) {
   return (
     <div className="min-w-0 py-5 sm:px-6 sm:first:pl-0 sm:last:pr-0">
-      <p className="text-[11px] font-medium uppercase tracking-[0.12em] text-ink-400">{label}</p>
+      <p className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-[0.12em] text-ink-400">
+        {label}
+        {info ? <InfoTip label={label} tone="onDark">{info}</InfoTip> : null}
+      </p>
       <p className="mt-2 flex items-baseline gap-1">
         <span className="font-mono text-4xl font-semibold tabular-nums tracking-tight text-white">{value}</span>
         {unit ? <span className="font-mono text-sm text-ink-400">{unit}</span> : null}
@@ -76,13 +80,13 @@ function ReadinessPanel({ user, data, checklistDone }) {
       </div>
 
       <div className="relative mt-4 grid grid-cols-1 divide-y divide-white/10 sm:grid-cols-3 sm:divide-x sm:divide-y-0">
-        <Gauge label="Risk used today" value={risk} unit={`/ ${limit}R`} caption={overLimit ? 'Stop for today. The limit exists for days like this.' : `${Math.max(limit - risk, 0)}R left before your daily stop.`}>
+        <Gauge label="Risk used today" info={<>The risk on today's losing trades, added up. Hit the limit and you're done for the day. Change it in <Link to="/app/settings?section=trading" className="underline">Settings</Link>.</>} value={risk} unit={`/ ${limit}R`} caption={overLimit ? 'Stop for today. The limit exists for days like this.' : `${Math.max(limit - risk, 0)}R left before your daily stop.`}>
           <Meter value={risk} max={limit} tone={overLimit ? 'loss' : 'gold'} />
         </Gauge>
-        <Gauge label="Pre-trade checklist" value={checklistDone} unit={`/ ${CHECKLIST_TOTAL}`} caption={checklistDone >= CHECKLIST_TOTAL ? 'Every condition checked.' : 'Conditions still open for today.'}>
+        <Gauge label="Pre-trade checklist" info="Today's checklist. Work through it before each entry, then tick 'Pre-trade checklist was completed' when you journal the trade so it counts." value={checklistDone} unit={`/ ${CHECKLIST_TOTAL}`} caption={checklistDone >= CHECKLIST_TOTAL ? 'Every condition checked.' : 'Conditions still open for today.'}>
           <Meter value={checklistDone} max={CHECKLIST_TOTAL} />
         </Gauge>
-        <Gauge label="Discipline score" value={data?.disciplineScore ?? 0} unit="/ 100" caption={data?.totalEntries ? `Checklist completion across ${data.totalEntries} journaled trades. ${data.streak} day${data.streak === 1 ? '' : 's'} within your loss limit.` : 'Builds as you journal trades.'} />
+        <Gauge label="Discipline score" info="The share of your journaled trades entered with the checklist complete. It measures process, not profit." value={data?.disciplineScore ?? 0} unit="/ 100" caption={data?.totalEntries ? `Checklist completion across ${data.totalEntries} journaled trades. ${data.streak} day${data.streak === 1 ? '' : 's'} within your loss limit.` : 'Builds as you journal trades.'} />
       </div>
 
       <div className="relative mt-2 flex flex-wrap gap-2 border-t border-white/10 pt-5">

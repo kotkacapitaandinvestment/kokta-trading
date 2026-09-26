@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import clsx from 'clsx';
 import { User, Lock, BadgeCheck, Bell, Palette, Sparkles, LineChart, AlertTriangle, CheckCircle2, AlertCircle, Clock3, MessagesSquare } from 'lucide-react';
@@ -11,6 +11,7 @@ import Modal from '../../components/ui/Modal';
 import { useAuth } from '../../context/AuthContext';
 import { useTheme } from '../../context/ThemeContext';
 import { api } from '../../lib/api';
+import PushSettings from './PushSettings';
 
 const sections = [
   { id: 'profile', label: 'Profile', icon: User },
@@ -267,7 +268,7 @@ function CommunitySection() {
   };
   useEffect(load, []);
   const save = (patch) => {
-    setPrefs((p) => ({ notify: { ...p.notify, ...(patch.notify ?? {}) }, privacy: { ...p.privacy, ...(patch.privacy ?? {}) } }));
+    setPrefs((p) => ({ ...p, notify: { ...p.notify, ...(patch.notify ?? {}) }, privacy: { ...p.privacy, ...(patch.privacy ?? {}) } }));
     api.put('/community/me/preferences', patch).catch(() => {});
   };
   const undo = async (kind, id) => {
@@ -319,6 +320,17 @@ export default function Settings() {
   const [params, setParams] = useSearchParams();
   const active = sections.some((s) => s.id === params.get('section')) ? params.get('section') : 'profile';
   const setActive = (id) => setParams({ section: id }, { replace: true });
+  const tabsRef = useRef(null);
+
+  // Phones show the sections as a sideways strip; keep the open one in view.
+  useEffect(() => {
+    const strip = tabsRef.current;
+    const el = strip?.querySelector('[aria-current="page"]');
+    if (!strip || !el || strip.scrollWidth <= strip.clientWidth) return;
+    const a = strip.getBoundingClientRect();
+    const b = el.getBoundingClientRect();
+    strip.scrollLeft += b.left - a.left - (a.width - b.width) / 2;
+  }, [active]);
   const [prefs, setPrefs] = useState(null);
 
   useEffect(() => {
@@ -340,7 +352,7 @@ export default function Settings() {
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-4">
         <nav aria-label="Settings sections" className="lg:col-span-1">
-          <ul className="flex gap-1 overflow-x-auto scrollbar-thin lg:flex-col lg:gap-0.5">
+          <ul ref={tabsRef} className="flex gap-1 overflow-x-auto scrollbar-thin lg:flex-col lg:gap-0.5">
             {sections.map((s) => (
               <li key={s.id} className="shrink-0">
                 <button
@@ -388,9 +400,10 @@ export default function Settings() {
 
           {['notifications', 'ai', 'trading'].includes(active) && !prefs ? <div className="h-40 animate-pulse rounded-xl bg-ink-50 dark:bg-ink-800" /> : null}
 
+          {active === 'notifications' ? <PushSettings /> : null}
           {active === 'notifications' && prefs ? (
             <div>
-              <SectionTitle title="Notifications" description="Choose which reminders appear in your notification centre." />
+              <SectionTitle title="Reminders" description="Choose which reminders appear in your notification centre." />
               <div className="divide-y divide-ink-100 dark:divide-ink-800">
                 <Toggle checked={prefs.notifications.checklist !== false} onChange={(v) => update('notifications', { checklist: v })} label="Checklist reminders" hint="When today's pre-trade checklist is incomplete." />
                 <Toggle checked={prefs.notifications.journal !== false} onChange={(v) => update('notifications', { journal: v })} label="Journal reminders" hint="When you haven't logged a trade today." />

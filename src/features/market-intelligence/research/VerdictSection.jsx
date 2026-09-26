@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import clsx from 'clsx';
 import { ChevronDown, TrendingDown, TrendingUp, Minus, Repeat } from 'lucide-react';
+import InfoTip from '../../../components/ui/InfoTip';
 import { ccy, conditionTone, CurrencyChip, directionWord, fmt, KindTag, reportCodes, ScoreFigure, signed, toneOf, txt } from './primitives';
 
 function NarrativeSourceNote({ narrative }) {
@@ -188,7 +189,14 @@ export default function VerdictSection({ report }) {
           <div className="space-y-5 lg:col-span-7">
             <div className="flex flex-wrap items-end gap-x-8 gap-y-3">
               <div>
-                <p className="text-xs text-ink-400">{isPair ? 'Relative fundamental condition' : 'Fundamental score'}</p>
+                <p className="flex items-center gap-1 text-xs text-ink-400">
+                  {isPair ? 'Relative fundamental condition' : 'Fundamental score'}
+                  <InfoTip label={isPair ? 'Relative condition' : 'Fundamental score'}>
+                    {isPair
+                      ? 'Compares the two economies on official data. 50 means evenly matched; 58 or more favours the first currency, 42 or less the second. It describes fundamentals, not the next price move.'
+                      : 'A weighted score from 0 to 100 built from official data such as growth, inflation, jobs and rates. 60 or more reads strong, under 40 weak. It describes fundamentals, not the next price move.'}
+                  </InfoTip>
+                </p>
                 <ScoreFigure value={v.score} className="text-5xl text-ink-900 dark:text-ink-50" />
               </div>
               <p className={clsx('pb-2 text-xl font-semibold tracking-wide', strongerCode ? ccy(toneOf(report, strongerCode)).text : conditionTone(v.condition))}>{v.condition}</p>

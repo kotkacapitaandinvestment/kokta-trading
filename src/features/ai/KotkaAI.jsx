@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { ImagePlus, Send, Star, Sparkles } from 'lucide-react';
+import { History, ImagePlus, Send, Star, Sparkles, X } from 'lucide-react';
+import Hint from '../../components/ui/Hint';
 import PageHeader from '../../components/ui/PageHeader';
 import { Select } from '../../components/ui/Input';
 import Button from '../../components/ui/Button';
@@ -16,6 +17,7 @@ export default function KotkaAI() {
   const [activeId, setActiveId] = useState(null);
   const [messagesCache, setMessagesCache] = useState({});
   const [search, setSearch] = useState('');
+  const [showHistory, setShowHistory] = useState(false);
   const [market, setMarket] = useState('Forex');
   const [timeframe, setTimeframe] = useState('15m');
   const [params] = useSearchParams();
@@ -169,14 +171,15 @@ export default function KotkaAI() {
   if (!conversations) return null;
 
   return (
-    <div className="flex h-[calc(100vh-8rem)] flex-col">
+    <div className="flex h-[calc(100dvh_-_6.5rem_-_var(--bottom-nav))] min-h-[26rem] flex-col sm:h-[calc(100dvh_-_7rem_-_var(--bottom-nav))] lg:h-[calc(100dvh-8rem)]">
       <PageHeader
+        compact
         eyebrow="Kotka AI"
         title="Your institutional trading mentor"
         description="Kotka challenges assumptions, evaluates probability, and questions bias. It will never hand you a signal."
       />
 
-      <Card className="flex min-h-0 flex-1 overflow-hidden">
+      <Card className="relative flex min-h-0 flex-1 overflow-hidden">
         <div className="hidden w-72 shrink-0 border-r border-ink-100 dark:border-ink-800 md:block">
           <ConversationList
             conversations={conversations}
@@ -188,17 +191,43 @@ export default function KotkaAI() {
           />
         </div>
 
+        {/* Phones: past analyses slide over the chat. */}
+        {showHistory ? (
+          <div className="absolute inset-0 z-10 flex flex-col bg-white dark:bg-ink-900 md:hidden">
+            <div className="flex items-center justify-between border-b border-ink-100 px-4 py-2.5 dark:border-ink-800">
+              <span className="text-sm font-semibold text-ink-800 dark:text-ink-100">Past analyses</span>
+              <button type="button" onClick={() => setShowHistory(false)} className="flex h-8 w-8 items-center justify-center rounded-lg text-ink-400 hover:bg-ink-100 dark:hover:bg-ink-800" aria-label="Close past analyses"><X className="h-4 w-4" /></button>
+            </div>
+            <div className="min-h-0 flex-1">
+              <ConversationList
+                conversations={conversations}
+                activeId={active?.id}
+                onSelect={(id) => { setActiveId(id); setShowHistory(false); }}
+                onNew={() => { handleNew(); setShowHistory(false); }}
+                search={search}
+                onSearch={setSearch}
+              />
+            </div>
+          </div>
+        ) : null}
+
         <div className="flex min-w-0 flex-1 flex-col">
           {!active ? (
             <div className="flex flex-1 flex-col items-center justify-center gap-3 text-center">
               <Sparkles className="h-8 w-8 text-accent-500" />
               <p className="text-sm text-ink-500 dark:text-ink-400">Start a new analysis to talk to Kotka AI.</p>
               <Button onClick={handleNew}>New analysis</Button>
+              {conversations.length ? (
+                <button type="button" onClick={() => setShowHistory(true)} className="text-xs font-medium text-ink-500 underline-offset-2 hover:underline dark:text-ink-400 md:hidden">
+                  Open a past analysis ({conversations.length})
+                </button>
+              ) : null}
             </div>
           ) : (
             <>
-              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-ink-100 px-4 py-3 dark:border-ink-800">
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-ink-100 px-3 py-2.5 dark:border-ink-800 sm:gap-3 sm:px-4 sm:py-3">
                 <div className="flex items-center gap-2">
+                  <button type="button" onClick={() => setShowHistory(true)} className="flex h-8 w-8 items-center justify-center rounded-lg border border-ink-200 text-ink-500 dark:border-ink-700 dark:text-ink-300 md:hidden" aria-label="Past analyses" title="Past analyses"><History className="h-4 w-4" /></button>
                   <Select value={market} onChange={(e) => setMarket(e.target.value)} className="h-8 w-32 text-xs">
                     {markets.map((m) => (
                       <option key={m} value={m}>{m}</option>
@@ -236,6 +265,7 @@ export default function KotkaAI() {
                       Describe your setup or upload a chart. I'll question your structure, your risk, and your bias before
                       we talk direction.
                     </p>
+                    <Hint id="ai-entry-stop" className="mt-5 max-w-sm text-left">Include your entry, stop and why. Kotka pushes back hardest on the reason.</Hint>
                   </div>
                 ) : (
                   activeMessages.map((m) => <ChatMessage key={m.id} {...m} />)
@@ -292,8 +322,8 @@ export default function KotkaAI() {
                     placeholder="Explain your setup, thesis, or paste a level…"
                     className="h-10 max-h-32 flex-1 resize-none rounded-lg border border-ink-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-ink-400 disabled:opacity-50 dark:border-ink-700 dark:bg-ink-800 dark:text-ink-100"
                   />
-                  <Button onClick={handleSend} icon={Send} size="md" disabled={thinking || limitReached}>
-                    Send
+                  <Button onClick={handleSend} icon={Send} size="md" disabled={thinking || limitReached} aria-label="Send">
+                    <span className="hidden sm:inline">Send</span>
                   </Button>
                 </div>
               </div>

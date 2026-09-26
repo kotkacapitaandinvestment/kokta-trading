@@ -30,7 +30,7 @@ export default function AdminLayout() {
 
   return (
     <CommunityShell>
-    <div className="flex h-screen overflow-hidden bg-ink-50 dark:bg-ink-950">
+    <div className="flex h-[100dvh] overflow-hidden bg-ink-50 pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] dark:bg-ink-950">
       <Sidebar
         brandTo="/admin/overview"
         items={items}
@@ -47,7 +47,7 @@ export default function AdminLayout() {
             </>
           }
         />
-        <main className="flex-1 overflow-y-auto scrollbar-thin px-4 py-6 lg:px-8 lg:py-8">
+        <main className="flex-1 overflow-y-auto scrollbar-thin px-4 pb-[calc(1.5rem+env(safe-area-inset-bottom))] pt-6 lg:px-8 lg:py-8">
           <div className="mx-auto max-w-7xl animate-fade-in">
             <Outlet />
           </div>

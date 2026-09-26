@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import clsx from 'clsx';
 import { AtSign, Bell, CalendarClock, CheckCheck, CornerDownRight, Heart, Landmark, LineChart, ListChecks, Megaphone, MessageSquare, NotebookPen, ShieldAlert, ShieldCheck, Sparkles, TrendingUp, UserPlus, Users } from 'lucide-react';
 import PageHeader from '../../components/ui/PageHeader';
+import PushNudge from '../../components/PushNudge';
 import Card from '../../components/ui/Card';
 import Button from '../../components/ui/Button';
 import EmptyState from '../../components/ui/EmptyState';
@@ -88,6 +89,7 @@ export default function Notifications() {
         description="Mentions, replies and follows from Community, market moves and events you follow, announcements, and today's discipline reminders."
         actions={<Button variant="secondary" size="sm" icon={CheckCheck} onClick={markAllRead}>Mark all read</Button>}
       />
+      <PushNudge className="mb-4" />
       <div className="mb-4 flex flex-wrap gap-2">
         {GROUPS.map(([v, l]) => (
           <button key={v} type="button" onClick={() => setFilter(v)} className={clsx('rounded-full px-3 py-1.5 text-xs font-medium transition-colors', filter === v ? 'bg-ink-900 text-white dark:bg-white dark:text-ink-900' : 'bg-ink-100 text-ink-600 dark:bg-ink-800 dark:text-ink-300')}>{l}</button>

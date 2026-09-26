@@ -1,9 +1,11 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Bell, Moon, Sun, ChevronDown, LogOut, ShieldCheck, User as UserIcon } from 'lucide-react';
+import { Bell, Moon, Sun, ChevronDown, LogOut, ShieldCheck, User as UserIcon, Download, Share } from 'lucide-react';
 import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
 import { useCommunity } from '../../features/community/CommunityContext';
+import { useInstallPrompt } from '../../lib/pwa';
+import BrandMark from '../ui/BrandMark';
 
 export default function Topbar({ title, right }) {
   const { theme, toggleTheme } = useTheme();
@@ -11,15 +13,18 @@ export default function Topbar({ title, right }) {
   const { unread } = useCommunity();
   const unreadCount = unread?.notifications ?? 0;
   const [open, setOpen] = useState(false);
+  const [iosSteps, setIosSteps] = useState(false);
+  const installer = useInstallPrompt();
   const navigate = useNavigate();
 
   return (
-    <header className="flex h-16 items-center justify-between border-b border-ink-100 bg-white/80 px-4 backdrop-blur lg:px-6 dark:border-ink-800 dark:bg-ink-900/80">
-      <div className="min-w-0">
+    <header className="flex h-14 shrink-0 items-center justify-between gap-3 border-b border-ink-100 bg-white/80 px-4 backdrop-blur sm:h-16 lg:px-6 dark:border-ink-800 dark:bg-ink-900/80">
+      <div className="flex min-w-0 items-center gap-2.5">
+        <Link to="/app/dashboard" className="shrink-0 lg:hidden" aria-label="Kotka home"><BrandMark size={26} /></Link>
         <h2 className="truncate text-sm font-semibold text-ink-800 dark:text-ink-100">{title}</h2>
       </div>
 
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-1 sm:gap-2">
         {right}
 
         <button
@@ -75,6 +80,29 @@ export default function Topbar({ title, right }) {
                     <ShieldCheck className="h-4 w-4" />
                     Go to Admin Dashboard
                   </Link>
+                ) : null}
+                {installer.canInstall ? (
+                  <button
+                    onClick={() => { setOpen(false); installer.install(); }}
+                    className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-ink-600 hover:bg-ink-50 dark:text-ink-300 dark:hover:bg-ink-700"
+                  >
+                    <Download className="h-4 w-4" /> Install app
+                  </button>
+                ) : installer.iosManual ? (
+                  <>
+                    <button
+                      onClick={() => setIosSteps((v) => !v)}
+                      aria-expanded={iosSteps}
+                      className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-ink-600 hover:bg-ink-50 dark:text-ink-300 dark:hover:bg-ink-700"
+                    >
+                      <Download className="h-4 w-4" /> Add to Home Screen
+                    </button>
+                    {iosSteps ? (
+                      <p className="px-3 pb-2 text-xs leading-5 text-ink-500 dark:text-ink-400">
+                        In Safari, tap <Share className="inline h-3.5 w-3.5 align-[-2px]" aria-label="Share" /> then <span className="font-medium text-ink-700 dark:text-ink-200">Add to Home Screen</span>. Push alerts on iPhone work from there.
+                      </p>
+                    ) : null}
+                  </>
                 ) : null}
                 <div className="my-1 h-px bg-ink-100 dark:bg-ink-700" />
                 <button

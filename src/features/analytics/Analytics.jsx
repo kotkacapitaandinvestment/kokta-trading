@@ -34,10 +34,10 @@ export default function Analytics() {
       />
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <StatTile label="Win Rate" value={`${data.winRate}%`} />
-        <StatTile label="Avg Risk/Reward" value={data.avgRR !== null ? `${data.avgRR}R` : 'n/a'} />
-        <StatTile label="Profit Factor" value={data.profitFactor !== null ? data.profitFactor : 'n/a'} />
-        <StatTile label="Expectancy" value={`$${data.expectancy}`} hint="per trade" />
+        <StatTile label="Win Rate" value={`${data.winRate}%`} info="Winning trades as a share of all journaled trades. Read it next to risk/reward: a 40% win rate can pay well at 2R." />
+        <StatTile label="Avg Risk/Reward" value={data.avgRR !== null ? `${data.avgRR}R` : 'n/a'} info="The average reward you planned per unit of risk, from trades that record a target." />
+        <StatTile label="Profit Factor" value={data.profitFactor !== null ? data.profitFactor : 'n/a'} info="Money won divided by money lost. Above 1 means winners outweigh losers. Shows n/a until you have a losing trade." />
+        <StatTile label="Expectancy" value={`$${data.expectancy}`} hint="per trade" info="Your average result per trade. Positive over a decent sample (30+ trades) suggests your process has an edge." />
       </div>
 
       {!hasTrades ? (

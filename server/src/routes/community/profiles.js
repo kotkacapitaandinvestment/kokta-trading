@@ -75,10 +75,12 @@ profilesRouter.put('/me/preferences', asyncHandler(async (req, res) => {
   const current = await loadPrefs(req.me.id);
   const notify = { ...current.notify };
   for (const k of Object.keys(current.notify)) if (typeof req.body?.notify?.[k] === 'boolean') notify[k] = req.body.notify[k];
+  const push = { ...current.push };
+  for (const k of Object.keys(current.push)) if (typeof req.body?.push?.[k] === 'boolean') push[k] = req.body.push[k];
   const privacy = { ...current.privacy };
   for (const k of ['showOnline', 'readReceipts']) if (typeof req.body?.privacy?.[k] === 'boolean') privacy[k] = req.body.privacy[k];
   if (['everyone', 'following', 'nobody'].includes(req.body?.privacy?.allowDmsFrom)) privacy.allowDmsFrom = req.body.privacy.allowDmsFrom;
-  const prefs = mergePrefs({ notify, privacy });
+  const prefs = mergePrefs({ notify, push, privacy });
   await prisma.userSettings.upsert({ where: { userId: req.me.id }, update: { communityPreferences: prefs }, create: { userId: req.me.id, communityPreferences: prefs } });
   res.json({ prefs });
 }));

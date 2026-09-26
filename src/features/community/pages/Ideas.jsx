@@ -4,6 +4,7 @@ import { api } from '../../../lib/api';
 import PostCard from '../components/PostCard';
 import Composer from '../components/Composer';
 import { InstrumentSelect } from '../components/inputs';
+import Hint from '../../../components/ui/Hint';
 
 export default function Ideas() {
   const [filters, setFilters] = useState({ instrument: null, status: 'active', direction: null, sort: 'latest' });
@@ -24,6 +25,7 @@ export default function Ideas() {
       <div className="border-b border-ink-100 px-5 py-4 dark:border-ink-800">
         <h1 className="text-lg font-semibold tracking-tight text-ink-900 dark:text-ink-50">Trade ideas</h1>
         <p className="mt-0.5 text-xs text-ink-500 dark:text-ink-400">Structured theses from traders, open to comment and challenge. These are views to debate, not signals, and Kotka does not vet them.</p>
+        <Hint id="ideas-challenge" className="mt-3">Disagree with a thesis? Use Challenge on it and name the weak assumption. Challenges are tagged, so the author can answer each one.</Hint>
       </div>
       <div className="border-b border-ink-100 dark:border-ink-800"><Composer compact defaultKind="idea" lockKind onCreated={(p) => setIdeas((prev) => [p, ...(prev ?? [])])} /></div>
       <div className="flex flex-wrap items-center gap-1.5 border-b border-ink-100 px-4 py-2.5 dark:border-ink-800">
