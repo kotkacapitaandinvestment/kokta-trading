@@ -1,4 +1,5 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import clsx from 'clsx';
 import { Info } from 'lucide-react';
 
@@ -66,7 +67,7 @@ export default function InfoTip({ label, children, className, tone = 'default' }
       >
         <Info className="h-3.5 w-3.5" strokeWidth={2} />
       </button>
-      {open ? (
+      {open ? createPortal(
         <span
           ref={pop}
           id={id}
@@ -76,7 +77,8 @@ export default function InfoTip({ label, children, className, tone = 'default' }
         >
           {label ? <span className="mb-0.5 block font-semibold text-ink-800 dark:text-ink-50">{label}</span> : null}
           {children}
-        </span>
+        </span>,
+        document.body,
       ) : null}
     </span>
   );

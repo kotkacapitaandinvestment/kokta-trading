@@ -1,5 +1,6 @@
 import { X } from 'lucide-react';
 import { useEffect } from 'react';
+import { createPortal } from 'react-dom';
 
 export default function Modal({ open, onClose, title, children, width = 'max-w-lg' }) {
   useEffect(() => {
@@ -11,7 +12,8 @@ export default function Modal({ open, onClose, title, children, width = 'max-w-l
 
   if (!open) return null;
 
-  return (
+  // Portalled to <body> so no page layer (or the top bar) can sit above it.
+  return createPortal(
     <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-4 py-10 sm:items-center">
       <div className="fixed inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
       <div className={`relative w-full ${width} animate-slide-up rounded-2xl border border-ink-100 bg-white shadow-pop dark:border-ink-700 dark:bg-ink-900 dark:shadow-none`}>
@@ -23,6 +25,7 @@ export default function Modal({ open, onClose, title, children, width = 'max-w-l
         </div>
         <div className="max-h-[75vh] overflow-y-auto scrollbar-thin p-5">{children}</div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

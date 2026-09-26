@@ -18,7 +18,8 @@ export default function Topbar({ title, right }) {
   const navigate = useNavigate();
 
   return (
-    <header className="flex h-14 shrink-0 items-center justify-between gap-3 border-b border-ink-100 bg-white/80 px-4 backdrop-blur sm:h-16 lg:px-6 dark:border-ink-800 dark:bg-ink-900/80">
+    // relative z-30: page content below (animated cards) would otherwise paint over the account menu.
+    <header className="relative z-30 flex h-14 shrink-0 items-center justify-between gap-3 border-b border-ink-100 bg-white/80 px-4 backdrop-blur sm:h-16 lg:px-6 dark:border-ink-800 dark:bg-ink-900/80">
       <div className="flex min-w-0 items-center gap-2.5">
         <Link to="/app/dashboard" className="shrink-0 lg:hidden" aria-label="Kotka home"><BrandMark size={26} /></Link>
         <h2 className="truncate text-sm font-semibold text-ink-800 dark:text-ink-100">{title}</h2>
@@ -47,11 +48,17 @@ export default function Topbar({ title, right }) {
         <div className="relative">
           <button
             onClick={() => setOpen((o) => !o)}
+            aria-expanded={open}
+            aria-label="Account menu"
             className="flex items-center gap-2 rounded-lg py-1.5 pl-1.5 pr-2 transition-colors hover:bg-ink-100 dark:hover:bg-ink-800"
           >
-            <div className="flex h-7 w-7 items-center justify-center rounded-full bg-accent-500 text-xs font-semibold text-ink-950">
-              {user?.initials ?? 'KT'}
-            </div>
+            {user?.avatarUrl ? (
+              <img src={user.avatarUrl} alt="" className="h-7 w-7 rounded-full object-cover" />
+            ) : (
+              <div className="flex h-7 w-7 items-center justify-center rounded-full bg-accent-500 text-xs font-semibold text-ink-950">
+                {user?.initials ?? 'KT'}
+              </div>
+            )}
             <ChevronDown className="h-3.5 w-3.5 text-ink-400" />
           </button>
 

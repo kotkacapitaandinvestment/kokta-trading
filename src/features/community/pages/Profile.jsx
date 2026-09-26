@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import clsx from 'clsx';
 import { Ban, Camera, Flag, MessageSquare, VolumeX } from 'lucide-react';
@@ -6,7 +6,9 @@ import { api } from '../../../lib/api';
 import Button from '../../../components/ui/Button';
 import Modal from '../../../components/ui/Modal';
 import { useCommunity } from '../CommunityContext';
-import { compressImage, timeAgo } from '../util';
+import { timeAgo } from '../util';
+import { useAuth } from '../../../context/AuthContext';
+import { uploadAvatar } from '../../../lib/avatar';
 import { Avatar, StaffBadge } from '../components/Identity';
 import { FollowButton } from '../components/Buttons';
 import PostCard from '../components/PostCard';
@@ -15,18 +17,17 @@ import Menu from '../components/Menu';
 import { display } from '../components/inputs';
 
 function EditProfile({ profile, onClose, onSaved }) {
+  const { setUser } = useAuth();
   const [form, setForm] = useState({ username: profile.username, headline: profile.headline ?? '', bio: profile.bio ?? '' });
   const [avatar, setAvatar] = useState(null);
   const [state, setState] = useState(null);
+  const preview = useMemo(() => (avatar ? URL.createObjectURL(avatar) : null), [avatar]);
+  useEffect(() => () => preview && URL.revokeObjectURL(preview), [preview]);
   const save = async () => {
     setState({ busy: true });
     try {
-      let avatarMediaId;
-      if (avatar) {
-        const { dataUrl, width, height } = await compressImage(avatar, { maxSide: 512 });
-        avatarMediaId = (await api.post('/media', { dataUrl, width, height })).media.id;
-      }
-      await api.put('/community/me/profile', { ...form, ...(avatarMediaId ? { avatarMediaId } : {}) });
+      if (avatar) setUser(await uploadAvatar(avatar));
+      await api.put('/community/me/profile', form);
       onSaved(form.username);
     } catch (err) {
       setState({ error: err.message });
@@ -35,9 +36,10 @@ function EditProfile({ profile, onClose, onSaved }) {
   return (
     <Modal open onClose={onClose} title="Edit profile">
       <div className="space-y-3">
-        <label className="flex items-center gap-3 text-sm text-ink-600 dark:text-ink-300">
-          <Camera className="h-4 w-4" /> Photo
-          <input type="file" accept="image/*" onChange={(e) => setAvatar(e.target.files?.[0] ?? null)} className="text-xs" />
+        <label className="flex cursor-pointer items-center gap-3 text-sm text-ink-600 dark:text-ink-300">
+          {preview ? <img src={preview} alt="" className="h-14 w-14 rounded-full object-cover" /> : <Avatar user={profile} size={56} />}
+          <span className="inline-flex items-center gap-1.5 rounded-lg border border-ink-200 px-3 py-1.5 text-xs font-medium dark:border-ink-700"><Camera className="h-3.5 w-3.5" /> {profile.avatarUrl || preview ? 'Change photo' : 'Add photo'}</span>
+          <input type="file" accept="image/*" onChange={(e) => setAvatar(e.target.files?.[0] ?? null)} className="sr-only" />
         </label>
         {[['username', 'Username', 20], ['headline', 'Headline', 80]].map(([k, l, max]) => (
           <label key={k} className="block"><span className="mb-1 block text-sm font-medium text-ink-700 dark:text-ink-200">{l}</span><input value={form[k]} maxLength={max} onChange={(e) => setForm({ ...form, [k]: k === 'username' ? e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '') : e.target.value })} className="h-10 w-full rounded-lg border border-ink-200 bg-white px-3 text-sm dark:border-ink-700 dark:bg-ink-800 dark:text-ink-50" /></label>

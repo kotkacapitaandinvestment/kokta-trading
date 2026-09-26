@@ -27,16 +27,21 @@ export const price = (v, decimals = 4) => (v == null ? 'n/a' : Number(v).toLocal
 export const signedPct = (v) => (v == null ? 'n/a' : `${v > 0 ? '+' : ''}${v}%`);
 
 // Resize to at most maxSide and re-encode as WebP (JPEG fallback) so uploads
-// stay small; returns { dataUrl, width, height }.
-export async function compressImage(file, { maxSide = 1600, quality = 0.82 } = {}) {
+// stay small; returns { dataUrl, width, height }. square: centre-crop first
+// (profile photos).
+export async function compressImage(file, { maxSide = 1600, quality = 0.82, square = false } = {}) {
   const bitmap = await createImageBitmap(file);
-  const scale = Math.min(1, maxSide / Math.max(bitmap.width, bitmap.height));
-  const width = Math.round(bitmap.width * scale);
-  const height = Math.round(bitmap.height * scale);
+  const side = Math.min(bitmap.width, bitmap.height);
+  const src = square
+    ? { x: (bitmap.width - side) / 2, y: (bitmap.height - side) / 2, w: side, h: side }
+    : { x: 0, y: 0, w: bitmap.width, h: bitmap.height };
+  const scale = Math.min(1, maxSide / Math.max(src.w, src.h));
+  const width = Math.round(src.w * scale);
+  const height = Math.round(src.h * scale);
   const canvas = document.createElement('canvas');
   canvas.width = width;
   canvas.height = height;
-  canvas.getContext('2d').drawImage(bitmap, 0, 0, width, height);
+  canvas.getContext('2d').drawImage(bitmap, src.x, src.y, src.w, src.h, 0, 0, width, height);
   let dataUrl = canvas.toDataURL('image/webp', quality);
   if (!dataUrl.startsWith('data:image/webp')) dataUrl = canvas.toDataURL('image/jpeg', quality);
   return { dataUrl, width, height };

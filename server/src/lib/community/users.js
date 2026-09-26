@@ -1,7 +1,7 @@
 // Public identity in Community: profiles, usernames, presence, preferences.
 
 import { prisma } from '../prisma.js';
-import { mediaUrl } from '../media.js';
+import { mediaUrl, avatarUrl } from '../media.js';
 
 export const STAFF_ROLES = ['moderator', 'admin', 'super_admin'];
 export const isStaff = (u) => !!u && STAFF_ROLES.includes(u.role);
@@ -72,7 +72,7 @@ export function userCard(u, { showOnline = true } = {}) {
     username: u.username,
     headline: u.headline ?? null,
     initials: u.initials,
-    avatarUrl: u.avatarId ? `/api/media/avatar/${u.id}` : null,
+    avatarUrl: avatarUrl(u),
     staff: isStaff(u),
     online: !!online,
     lastSeenAt: showOnline ? u.lastSeenAt : null,

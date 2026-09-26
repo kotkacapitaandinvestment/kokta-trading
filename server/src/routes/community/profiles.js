@@ -4,6 +4,7 @@ import { asyncHandler } from '../../lib/asyncHandler.js';
 import { validateUsername, impersonationError, suggestUsername, isStaff, loadPrefs, mergePrefs, userCard, relationsFor, USER_CARD_SELECT } from '../../lib/community/users.js';
 import { unreadCount } from '../../lib/community/notify.js';
 import { str } from './context.js';
+import { setAvatar } from '../../lib/media.js';
 
 export const profilesRouter = Router();
 
@@ -52,12 +53,8 @@ profilesRouter.put('/me/profile', asyncHandler(async (req, res) => {
     data.bio = bio || null;
   }
   if (req.body?.avatarMediaId !== undefined) {
-    if (req.body.avatarMediaId === null) data.avatarId = null;
-    else {
-      const m = await prisma.media.findFirst({ where: { id: String(req.body.avatarMediaId), ownerId: req.me.id, kind: 'image' }, select: { id: true } });
-      if (!m) return res.status(400).json({ error: 'Upload the photo again.', field: 'avatar' });
-      data.avatarId = m.id;
-    }
+    const { error } = await setAvatar(req.me.id, req.body.avatarMediaId === null ? null : req.body.avatarMediaId);
+    if (error) return res.status(400).json({ error, field: 'avatar' });
   }
   if (Array.isArray(req.body?.followMarkets)) {
     // First-run onboarding: follow a few markets in one go.

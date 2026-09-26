@@ -6,6 +6,7 @@ import { asyncHandler } from '../lib/asyncHandler.js';
 import { toPublicUser, PUBLIC_USER_INCLUDE } from '../lib/serialize.js';
 import { audit } from '../lib/audit.js';
 import { initialsFor } from './auth.js';
+import { setAvatar } from '../lib/media.js';
 
 // The signed-in user's own account: display name, password, deletion.
 export const accountRouter = Router();
@@ -22,6 +23,16 @@ accountRouter.patch('/profile', asyncHandler(async (req, res) => {
   if (!name) return res.status(400).json({ error: 'Enter your name.' });
   if (name.length > 80) return res.status(400).json({ error: 'Keep your name under 80 characters.' });
   const user = await prisma.user.update({ where: { id: req.userId }, data: { name, initials: initialsFor(name) }, include: PUBLIC_USER_INCLUDE });
+  res.json({ user: toPublicUser(user) });
+}));
+
+// Profile photo: { mediaId } from POST /api/media, or { mediaId: null } to remove.
+accountRouter.put('/avatar', asyncHandler(async (req, res) => {
+  const mediaId = req.body?.mediaId;
+  if (mediaId !== null && typeof mediaId !== 'string') return res.status(400).json({ error: 'Choose a photo to upload.' });
+  const { error } = await setAvatar(req.userId, mediaId);
+  if (error) return res.status(400).json({ error });
+  const user = await prisma.user.findUnique({ where: { id: req.userId }, include: PUBLIC_USER_INCLUDE });
   res.json({ user: toPublicUser(user) });
 }));
 

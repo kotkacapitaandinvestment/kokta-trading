@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import clsx from 'clsx';
-import { User, Lock, BadgeCheck, Bell, Palette, Sparkles, LineChart, AlertTriangle, CheckCircle2, AlertCircle, Clock3, MessagesSquare } from 'lucide-react';
+import { User, Lock, BadgeCheck, Bell, Palette, Sparkles, LineChart, AlertTriangle, CheckCircle2, AlertCircle, Clock3, MessagesSquare, Camera, Loader2 } from 'lucide-react';
 import PageHeader from '../../components/ui/PageHeader';
 import Card from '../../components/ui/Card';
 import Input, { Select } from '../../components/ui/Input';
@@ -12,6 +12,8 @@ import { useAuth } from '../../context/AuthContext';
 import { useTheme } from '../../context/ThemeContext';
 import { api } from '../../lib/api';
 import PushSettings from './PushSettings';
+import { uploadAvatar, removeAvatar } from '../../lib/avatar';
+import { useCommunity } from '../community/CommunityContext';
 
 const sections = [
   { id: 'profile', label: 'Profile', icon: User },
@@ -65,6 +67,68 @@ function Notice({ tone, children }) {
   );
 }
 
+// Profile photo: shown in the top bar and on everything you post in Community.
+function AvatarPicker() {
+  const { user, setUser } = useAuth();
+  const community = useCommunity();
+  const input = useRef(null);
+  const [state, setState] = useState(null);
+  const run = async (fn) => {
+    setState({ busy: true });
+    try {
+      const updated = await fn();
+      setUser(updated);
+      community.refresh?.();
+      setState(null);
+    } catch (err) {
+      setState({ error: err.message });
+    }
+  };
+  return (
+    <div className="flex items-center gap-4">
+      <button
+        type="button"
+        onClick={() => input.current?.click()}
+        disabled={state?.busy}
+        className="group relative h-16 w-16 shrink-0 overflow-hidden rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-ink-900"
+        aria-label={user?.avatarUrl ? 'Change profile photo' : 'Add profile photo'}
+      >
+        {user?.avatarUrl ? (
+          <img src={user.avatarUrl} alt="" className="h-full w-full object-cover" />
+        ) : (
+          <span className="flex h-full w-full items-center justify-center bg-accent-500 text-lg font-semibold text-ink-950">{user?.initials}</span>
+        )}
+        <span className={clsx('absolute inset-0 flex items-center justify-center bg-ink-950/50 text-white transition-opacity', state?.busy ? 'opacity-100' : 'opacity-0 group-hover:opacity-100')}>
+          {state?.busy ? <Loader2 className="h-5 w-5 animate-spin" /> : <Camera className="h-5 w-5" />}
+        </span>
+      </button>
+      <input
+        ref={input}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          e.target.value = '';
+          if (file) run(() => uploadAvatar(file));
+        }}
+      />
+      <div className="min-w-0 text-xs text-ink-500 dark:text-ink-400">
+        <div className="flex flex-wrap items-center gap-2">
+          <Button type="button" size="sm" variant="secondary" icon={Camera} disabled={state?.busy} onClick={() => input.current?.click()}>
+            {user?.avatarUrl ? 'Change photo' : 'Add photo'}
+          </Button>
+          {user?.avatarUrl ? (
+            <Button type="button" size="sm" variant="ghost" disabled={state?.busy} onClick={() => run(removeAvatar)}>Remove</Button>
+          ) : null}
+        </div>
+        <p className="mt-1.5">Square crop, shown in the app and on your Community posts.</p>
+        {state?.error ? <p role="alert" className="mt-1 text-loss-500">{state.error}</p> : null}
+      </div>
+    </div>
+  );
+}
+
 function ProfileSection() {
   const { user, setUser } = useAuth();
   const [name, setName] = useState(user?.name ?? '');
@@ -85,13 +149,10 @@ function ProfileSection() {
   return (
     <form onSubmit={save} className="space-y-5">
       <SectionTitle title="Profile" description="Your display name appears in the app. Your email is your sign-in and can't be changed here." />
-      <div className="flex items-center gap-4">
-        <div className="flex h-14 w-14 items-center justify-center rounded-full bg-accent-500 text-base font-semibold text-ink-950">{user?.initials}</div>
-        <div className="text-xs text-ink-500 dark:text-ink-400">
-          <p className="font-medium text-ink-700 dark:text-ink-200">Member since {user?.memberSince}</p>
-          <p>{user?.plan} plan</p>
-        </div>
-      </div>
+      <AvatarPicker />
+      <p className="text-xs text-ink-500 dark:text-ink-400">
+        <span className="font-medium text-ink-700 dark:text-ink-200">Member since {user?.memberSince}</span> · {user?.plan} plan
+      </p>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <Input label="Display name" name="name" autoComplete="name" value={name} onChange={(e) => setName(e.target.value)} maxLength={80} required />
         <Input label="Email" name="email" value={user?.email ?? ''} readOnly disabled />

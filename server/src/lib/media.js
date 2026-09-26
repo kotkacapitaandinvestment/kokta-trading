@@ -71,3 +71,27 @@ export async function serveMedia(req, res) {
   });
   res.end(Buffer.from(m.data));
 }
+
+// Profile photo URL. The avatar id is in the query so a new photo is a new
+// URL and nobody keeps seeing the old one from cache.
+export function avatarUrl(user) {
+  return user?.avatarId ? `/api/media/avatar/${user.id}?v=${user.avatarId.slice(-8)}` : null;
+}
+
+// Set (or clear, with null) a user's profile photo. The photo must be an
+// image the user uploaded; the replaced photo is deleted so old avatars
+// don't pile up in the database.
+export async function setAvatar(userId, mediaId) {
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { id: true, avatarId: true } });
+  if (!user) return { error: 'Account not found.' };
+  let next = null;
+  if (mediaId !== null) {
+    const m = await prisma.media.findFirst({ where: { id: String(mediaId), ownerId: userId, kind: 'image' }, select: { id: true } });
+    if (!m) return { error: 'Upload the photo again.' };
+    next = m.id;
+  }
+  if (next === user.avatarId) return { avatarId: next };
+  await prisma.user.update({ where: { id: userId }, data: { avatarId: next }, select: { id: true } });
+  if (user.avatarId) await prisma.media.deleteMany({ where: { id: user.avatarId, ownerId: userId } });
+  return { avatarId: next };
+}
