@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import clsx from 'clsx';
-import { User, Lock, BadgeCheck, Bell, Palette, Sparkles, LineChart, AlertTriangle, CheckCircle2, AlertCircle, Clock3 } from 'lucide-react';
+import { User, Lock, BadgeCheck, Bell, Palette, Sparkles, LineChart, AlertTriangle, CheckCircle2, AlertCircle, Clock3, MessagesSquare } from 'lucide-react';
 import PageHeader from '../../components/ui/PageHeader';
 import Card from '../../components/ui/Card';
 import Input, { Select } from '../../components/ui/Input';
@@ -17,6 +17,7 @@ const sections = [
   { id: 'security', label: 'Password', icon: Lock },
   { id: 'verification', label: 'Verification', icon: BadgeCheck },
   { id: 'notifications', label: 'Notifications', icon: Bell },
+  { id: 'community', label: 'Community', icon: MessagesSquare },
   { id: 'theme', label: 'Theme', icon: Palette },
   { id: 'ai', label: 'Kotka AI', icon: Sparkles },
   { id: 'trading', label: 'Trading', icon: LineChart },
@@ -244,6 +245,75 @@ function DeleteAccountSection() {
   );
 }
 
+
+const COMMUNITY_NOTIFY = [
+  ['messages', 'Direct and group messages'],
+  ['mentions', 'Mentions'],
+  ['replies', 'Replies to you'],
+  ['follows', 'New followers'],
+  ['activity', 'Reactions, comments and challenges on your posts'],
+  ['ideas', 'Trade ideas from traders you follow, and updates to ideas you follow'],
+  ['events', 'Reminders before events you follow or that affect your markets'],
+  ['markets', 'Unusual daily moves in markets you follow'],
+  ['news', 'Official central-bank releases for markets you follow'],
+];
+
+function CommunitySection() {
+  const [prefs, setPrefs] = useState(null);
+  const [relations, setRelations] = useState(null);
+  const load = () => {
+    api.get('/community/me').then((r) => setPrefs(r.prefs)).catch(() => {});
+    api.get('/community/relations').then(setRelations).catch(() => setRelations({ blocked: [], muted: [] }));
+  };
+  useEffect(load, []);
+  const save = (patch) => {
+    setPrefs((p) => ({ notify: { ...p.notify, ...(patch.notify ?? {}) }, privacy: { ...p.privacy, ...(patch.privacy ?? {}) } }));
+    api.put('/community/me/preferences', patch).catch(() => {});
+  };
+  const undo = async (kind, id) => {
+    await api.delete(`/community/users/${id}/${kind}`);
+    load();
+  };
+  if (!prefs) return <div className="h-40 animate-pulse rounded-xl bg-ink-50 dark:bg-ink-800" />;
+  return (
+    <div className="space-y-8">
+      <div>
+        <SectionTitle title="Community notifications" description="Choose what reaches your notification centre." />
+        <div className="divide-y divide-ink-100 dark:divide-ink-800">
+          {COMMUNITY_NOTIFY.map(([k, label]) => <Toggle key={k} label={label} checked={prefs.notify[k] !== false} onChange={(v) => save({ notify: { [k]: v } })} />)}
+        </div>
+      </div>
+      <div>
+        <SectionTitle title="Privacy" description="What other traders can see and do." />
+        <div className="divide-y divide-ink-100 dark:divide-ink-800">
+          <Toggle label="Show when I'm online" hint="Others see Online or when you were last active." checked={prefs.privacy.showOnline} onChange={(v) => save({ privacy: { showOnline: v } })} />
+          <Toggle label="Send read receipts" hint="Others see when you've read their messages." checked={prefs.privacy.readReceipts} onChange={(v) => save({ privacy: { readReceipts: v } })} />
+          <div className="flex items-center justify-between gap-6 py-3">
+            <div><p className="text-sm font-medium text-ink-700 dark:text-ink-200">Who can message you</p><p className="text-xs text-ink-400">Existing conversations continue either way.</p></div>
+            <select value={prefs.privacy.allowDmsFrom} onChange={(e) => save({ privacy: { allowDmsFrom: e.target.value } })} className="h-9 rounded-lg border border-ink-200 bg-white px-2 text-sm dark:border-ink-700 dark:bg-ink-800 dark:text-ink-100">
+              <option value="everyone">Everyone</option>
+              <option value="following">People I follow</option>
+              <option value="nobody">Nobody</option>
+            </select>
+          </div>
+        </div>
+      </div>
+      <div>
+        <SectionTitle title="Blocked and muted" description="Blocked traders can't message you and you don't see each other's content. Muted traders are hidden from you only." />
+        {relations && !relations.blocked.length && !relations.muted.length ? <p className="text-sm text-ink-400">Nobody blocked or muted.</p> : null}
+        <ul className="divide-y divide-ink-100 dark:divide-ink-800">
+          {[...(relations?.blocked ?? []).map((u) => ['block', u]), ...(relations?.muted ?? []).map((u) => ['mute', u])].map(([kind, u]) => (
+            <li key={`${kind}${u.id}`} className="flex items-center justify-between py-2.5 text-sm">
+              <span className="text-ink-700 dark:text-ink-200">{u.name} <span className="text-xs text-ink-400">@{u.username} · {kind === 'block' ? 'blocked' : 'muted'}</span></span>
+              <Button size="sm" variant="ghost" onClick={() => undo(kind, u.id)}>{kind === 'block' ? 'Unblock' : 'Unmute'}</Button>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </div>
+  );
+}
+
 export default function Settings() {
   const { theme, setTheme } = useTheme();
   const [params, setParams] = useSearchParams();
@@ -294,6 +364,7 @@ export default function Settings() {
           {active === 'profile' ? <ProfileSection /> : null}
           {active === 'security' ? <PasswordSection /> : null}
           {active === 'verification' ? <VerificationSection /> : null}
+          {active === 'community' ? <CommunitySection /> : null}
           {active === 'account' ? <DeleteAccountSection /> : null}
 
           {active === 'theme' ? (

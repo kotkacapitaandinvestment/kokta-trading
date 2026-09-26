@@ -10,6 +10,7 @@ datasource db {
 enum Role {
   trader
   premium
+  moderator
   admin
   super_admin
 }
@@ -39,6 +40,32 @@ model User {
   simulatorSessions SimulatorSession[]
   aiConversations   AIConversation[]
   kyc               KycProfile?
+
+  // Community profile. username is chosen on first visit to Community.
+  username            String?   @unique
+  headline            String?
+  bio                 String?
+  avatarId            String?
+  lastSeenAt          DateTime?
+  communityMutedUntil DateTime?
+
+  media               Media[]
+  memberships         ConversationMember[]
+  messages            Message[]
+  messageReactions    MessageReaction[]
+  posts               Post[]
+  comments            Comment[]
+  postReactions       PostReaction[]
+  pollVotes           PollVote[]
+  sentimentVotes      SentimentVote[]
+  follows             Follow[]
+  savedItems          SavedItem[]
+  notifications       Notification[]
+  reports             Report[]
+  relations           UserRelation[] @relation("relationOwner")
+  relatedBy           UserRelation[] @relation("relationTarget")
+
+  @@index([name(ops: raw("gin_trgm_ops"))], type: Gin, map: "User_name_trgm")
 }
 
 model JournalEntry {
@@ -91,6 +118,9 @@ model UserSettings {
   notifications     Json   @default("{\"checklist\": true, \"journal\": true, \"riskWarnings\": true, \"weeklyReview\": true, \"aiInsights\": false}")
   aiPreferences     Json   @default("{\"tone\": \"Direct & challenging\", \"autoSuggest\": true, \"rememberContext\": true}")
   tradingPreferences Json  @default("{\"baseCurrency\": \"USD\", \"dailyLossLimit\": 2, \"defaultRisk\": 1}")
+  // Community notification switches and privacy (online status, read
+  // receipts, who may message you). Missing keys use the defaults in code.
+  communityPreferences Json @default("{}")
 }
 
 model Integration {
@@ -357,4 +387,440 @@ model AuthAttempt {
 
   @@index([kind, email, createdAt])
   @@index([kind, ip, createdAt])
+}
+
+// ══ Community ═══════════════════════════════════════════════════════════════
+
+// Uploaded images and voice notes. Kept in Postgres (no file store is set up);
+// clients compress before upload. Served only to signed-in users, by id+token.
+model Media {
+  id         String   @id @default(cuid())
+  token      String
+  ownerId    String
+  owner      User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  kind       String // image | audio
+  mime       String
+  size       Int
+  width      Int?
+  height     Int?
+  durationMs Int?
+  data       Bytes
+  createdAt  DateTime @default(now())
+
+  @@index([ownerId, createdAt])
+}
+
+// One model for every place people talk: direct messages, private groups,
+// public/private communities, market rooms and event rooms.
+model Conversation {
+  id            String    @id @default(cuid())
+  kind          String // dm | group | community | room | event
+  visibility    String    @default("private") // public | private | invite_only
+  slug          String?   @unique
+  name          String?
+  description   String?
+  imageId       String?
+  instrument    String? // market rooms
+  eventId       String?   @unique
+  event         MarketEvent? @relation(fields: [eventId], references: [id], onDelete: SetNull)
+  sendPolicy    String    @default("everyone") // everyone | admins
+  joinPolicy    String    @default("open") // open | approval | invite
+  inviteCode    String?   @unique
+  dmKey         String?   @unique // "<userA>:<userB>" sorted, for one-to-one chats
+  createdById   String?
+  featured      Boolean   @default(false)
+  archivedAt    DateTime?
+  lastMessageAt DateTime?
+  messageCount  Int       @default(0)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  members  ConversationMember[]
+  messages Message[]
+
+  @@index([kind, lastMessageAt])
+  @@index([instrument])
+}
+
+model ConversationMember {
+  id              String       @id @default(cuid())
+  conversationId  String
+  conversation    Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  userId          String
+  user            User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role            String       @default("member") // owner | admin | moderator | member
+  status          String       @default("active") // active | pending | left | removed
+  mutedUntil      DateTime?
+  archivedAt      DateTime?
+  lastReadAt      DateTime?
+  lastDeliveredAt DateTime?
+  joinedAt        DateTime     @default(now())
+
+  @@unique([conversationId, userId])
+  @@index([userId, status])
+}
+
+model Message {
+  id             String       @id @default(cuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  authorId       String?
+  author         User?        @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  kind           String       @default("text") // text | system
+  body           String       @default("")
+  // [{ type: image|audio|market|idea|post|news|event|poll, ... }]
+  attachments    Json         @default("[]")
+  mentions       String[]
+  flags          String[] // safety flags raised when the message was sent
+  replyToId      String?
+  replyTo        Message?     @relation("MessageReply", fields: [replyToId], references: [id], onDelete: SetNull)
+  replies        Message[]    @relation("MessageReply")
+  threadRootId   String?
+  threadCount    Int          @default(0)
+  lastThreadAt   DateTime?
+  editedAt       DateTime?
+  deletedAt      DateTime?
+  removedById    String?
+  pinnedAt       DateTime?
+  pinnedById     String?
+  createdAt      DateTime     @default(now())
+
+  reactions MessageReaction[]
+
+  @@index([conversationId, createdAt])
+  @@index([threadRootId, createdAt])
+  @@index([authorId, createdAt])
+  @@index([body(ops: raw("gin_trgm_ops"))], type: Gin, map: "Message_body_trgm")
+}
+
+model MessageReaction {
+  id        String   @id @default(cuid())
+  messageId String
+  message   Message  @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  emoji     String
+  createdAt DateTime @default(now())
+
+  @@unique([messageId, userId, emoji])
+}
+
+model Post {
+  id            String    @id @default(cuid())
+  authorId      String
+  author        User      @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  kind          String // post | market | idea | poll | question | news
+  body          String    @default("")
+  instrument    String?
+  topics        String[]
+  attachments   Json      @default("[]")
+  newsId        String?
+  news          NewsItem? @relation(fields: [newsId], references: [id], onDelete: SetNull)
+  mentions      String[]
+  flags         String[]
+  commentCount  Int       @default(0)
+  reactionCount Int       @default(0)
+  featuredAt    DateTime?
+  editedAt      DateTime?
+  deletedAt     DateTime?
+  removedById   String?
+  removedAt     DateTime?
+  createdAt     DateTime  @default(now())
+
+  idea      TradeIdea?
+  poll      Poll?
+  reactions PostReaction[]
+
+  @@index([createdAt])
+  @@index([instrument, createdAt])
+  @@index([authorId, createdAt])
+  @@index([kind, createdAt])
+  @@index([body(ops: raw("gin_trgm_ops"))], type: Gin, map: "Post_body_trgm")
+}
+
+// Structured market thesis. Never called a signal.
+model TradeIdea {
+  id              String    @id @default(cuid())
+  postId          String    @unique
+  post            Post      @relation(fields: [postId], references: [id], onDelete: Cascade)
+  instrument      String
+  direction       String // bullish | bearish
+  timeframe       String
+  entry           Float
+  stop            Float
+  target          Float
+  riskReward      Float?
+  thesis          String
+  status          String    @default("open") // open | updated | closed | invalidated
+  statusNote      String?
+  statusChangedAt DateTime?
+  history         Json      @default("[]")
+  createdAt       DateTime  @default(now())
+
+  @@index([instrument, status])
+}
+
+// Comments on posts, trade ideas and news items. A comment with a
+// challengeCategory is a structured "Challenge thesis".
+model Comment {
+  id                String    @id @default(cuid())
+  targetType        String // post | news
+  targetId          String
+  authorId          String
+  author            User      @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  parentId          String?
+  body              String
+  challengeCategory String? // technical | fundamental | risk | timing | liquidity | invalidation
+  mentions          String[]
+  flags             String[]
+  editedAt          DateTime?
+  deletedAt         DateTime?
+  removedById       String?
+  createdAt         DateTime  @default(now())
+
+  @@index([targetType, targetId, createdAt])
+  @@index([authorId, createdAt])
+}
+
+model PostReaction {
+  id        String   @id @default(cuid())
+  postId    String
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  emoji     String   @default("like")
+  createdAt DateTime @default(now())
+
+  @@unique([postId, userId, emoji])
+}
+
+// A poll belongs to a post or to a chat message.
+model Poll {
+  id        String       @id @default(cuid())
+  postId    String?      @unique
+  post      Post?        @relation(fields: [postId], references: [id], onDelete: Cascade)
+  messageId String?      @unique
+  question  String
+  closesAt  DateTime?
+  createdAt DateTime     @default(now())
+  options   PollOption[]
+  votes     PollVote[]
+}
+
+model PollOption {
+  id        String     @id @default(cuid())
+  pollId    String
+  poll      Poll       @relation(fields: [pollId], references: [id], onDelete: Cascade)
+  label     String
+  position  Int
+  voteCount Int        @default(0)
+  votes     PollVote[]
+}
+
+model PollVote {
+  id        String     @id @default(cuid())
+  pollId    String
+  poll      Poll       @relation(fields: [pollId], references: [id], onDelete: Cascade)
+  optionId  String
+  option    PollOption @relation(fields: [optionId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime   @default(now())
+
+  @@unique([pollId, userId])
+}
+
+// Each trader's current view on an instrument; changeable any time.
+model SentimentVote {
+  id         String   @id @default(cuid())
+  instrument String
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  stance     String // bullish | neutral | bearish
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([instrument, userId])
+  @@index([instrument, updatedAt])
+}
+
+// Hourly snapshot of the aggregate, for the sentiment history.
+model SentimentSnapshot {
+  id         String   @id @default(cuid())
+  instrument String
+  bucket     DateTime
+  bullish    Int
+  neutral    Int
+  bearish    Int
+
+  @@unique([instrument, bucket])
+}
+
+// Scheduled releases and decisions. Synced from the publishers' official
+// calendars; admins can add events and fill in previous/forecast/actual.
+model MarketEvent {
+  id              String        @id @default(cuid())
+  sourceKey       String        @unique
+  source          String // fomc | ecb | bls | bea | eurostat | admin
+  title           String
+  currency        String
+  country         String
+  category        String
+  importance      String
+  scheduledAt     DateTime
+  dateOnly        Boolean       @default(false)
+  referencePeriod String?
+  previous        String?
+  forecast        String?
+  actual          String?
+  valuesNote      String?
+  sourceName      String?
+  sourceUrl       String?
+  instruments     String[]
+  cancelled       Boolean       @default(false)
+  summary         Json?
+  summaryAt       DateTime?
+  createdById     String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  conversation    Conversation?
+
+  @@index([scheduledAt])
+  @@index([currency, scheduledAt])
+}
+
+// Market-relevant news only: wire stories and official press releases that
+// match a supported market. Anything unrelated is not stored.
+model NewsItem {
+  id               String    @id @default(cuid())
+  source           String // finnhub | fed | ecb
+  provider         String
+  externalId       String    @unique
+  headline         String
+  summary          String?
+  url              String
+  imageUrl         String?
+  publishedAt      DateTime
+  currencies       String[]
+  instruments      String[]
+  topics           String[]
+  official         Boolean   @default(false)
+  explanation      Json?
+  explanationModel String?
+  explainedAt      DateTime?
+  commentCount     Int       @default(0)
+  createdAt        DateTime  @default(now())
+  posts            Post[]
+
+  @@index([publishedAt])
+  @@index([headline(ops: raw("gin_trgm_ops"))], type: Gin, map: "NewsItem_headline_trgm")
+}
+
+// Follow a trader, market, topic, trade idea or event.
+model Follow {
+  id         String   @id @default(cuid())
+  followerId String
+  follower   User     @relation(fields: [followerId], references: [id], onDelete: Cascade)
+  targetType String // user | market | topic | idea | event
+  targetId   String
+  createdAt  DateTime @default(now())
+
+  @@unique([followerId, targetType, targetId])
+  @@index([targetType, targetId])
+}
+
+model SavedItem {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  itemType  String // post | idea | news | message | event | conversation
+  itemId    String
+  createdAt DateTime @default(now())
+
+  @@unique([userId, itemType, itemId])
+  @@index([userId, createdAt])
+}
+
+// Persistent notifications. groupKey batches repeats (e.g. reactions on one
+// post) into a single unread row with a count.
+model Notification {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      String
+  actorId   String?
+  title     String
+  body      String?
+  link      String?
+  data      Json      @default("{}")
+  groupKey  String?
+  count     Int       @default(1)
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@index([userId, readAt, updatedAt])
+  @@index([userId, groupKey])
+}
+
+model Report {
+  id           String    @id @default(cuid())
+  reporterId   String?
+  reporter     User?     @relation(fields: [reporterId], references: [id], onDelete: SetNull)
+  targetType   String // post | comment | message | user | conversation
+  targetId     String
+  targetUserId String?
+  category     String // spam | scam | harassment | hate | impersonation | fraud | manipulation | illegal | other
+  details      String?
+  auto         Boolean   @default(false)
+  status       String    @default("open") // open | actioned | dismissed
+  resolvedById String?
+  resolvedAt   DateTime?
+  resolution   String?
+  createdAt    DateTime  @default(now())
+
+  @@index([status, createdAt])
+  @@index([targetType, targetId])
+}
+
+model ModerationAction {
+  id           String   @id @default(cuid())
+  moderatorId  String?
+  action       String // remove | restore | mute | unmute | suspend | ban | dismiss | warn
+  targetType   String
+  targetId     String
+  targetUserId String?
+  reportId     String?
+  reason       String?
+  createdAt    DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([targetUserId, createdAt])
+}
+
+// block: no DMs either way, their content hidden. mute: their content hidden.
+model UserRelation {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation("relationOwner", fields: [userId], references: [id], onDelete: Cascade)
+  targetId  String
+  target    User     @relation("relationTarget", fields: [targetId], references: [id], onDelete: Cascade)
+  kind      String // block | mute
+  createdAt DateTime @default(now())
+
+  @@unique([userId, targetId, kind])
+  @@index([targetId, kind])
+}
+
+// Append-only event log that powers real-time delivery across serverless
+// instances (each instance tails it and fans out to its open streams).
+// Pruned after a few hours.
+model RealtimeEvent {
+  id        BigInt   @id @default(autoincrement())
+  channel   String
+  type      String
+  payload   Json
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
 }

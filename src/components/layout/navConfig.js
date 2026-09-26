@@ -19,6 +19,8 @@ import {
   Plug,
   Landmark,
   BadgeCheck,
+  MessagesSquare,
+  UsersRound,
 } from 'lucide-react';
 
 export const traderNav = [
@@ -29,6 +31,7 @@ export const traderNav = [
   { to: '/app/analytics', label: 'Analytics', icon: BarChart3 },
   { to: '/app/calculators', label: 'Calculators', icon: Calculator },
   { to: '/app/market', label: 'Market Intelligence', icon: Globe2 },
+  { to: '/app/community', label: 'Community', icon: MessagesSquare },
 ];
 
 export const traderNavSecondary = [
@@ -40,6 +43,7 @@ export const adminNav = [
   { to: '/admin/overview', label: 'Overview', icon: LayoutDashboard },
   { to: '/admin/users', label: 'Users', icon: Users },
   { to: '/admin/verifications', label: 'Verifications', icon: BadgeCheck },
+  { to: '/admin/community', label: 'Community', icon: UsersRound, moderator: true },
   { to: '/admin/announcements', label: 'Announcements', icon: Megaphone },
   { to: '/admin/research', label: 'Fundamental Research', icon: Landmark },
   { to: '/admin/ai-usage', label: 'AI Usage', icon: Cpu },

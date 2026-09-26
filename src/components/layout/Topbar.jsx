@@ -3,10 +3,13 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Bell, Moon, Sun, ChevronDown, LogOut, ShieldCheck, User as UserIcon } from 'lucide-react';
 import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
+import { useCommunity } from '../../features/community/CommunityContext';
 
 export default function Topbar({ title, right }) {
   const { theme, toggleTheme } = useTheme();
   const { user, logout } = useAuth();
+  const { unread } = useCommunity();
+  const unreadCount = unread?.notifications ?? 0;
   const [open, setOpen] = useState(false);
   const navigate = useNavigate();
 
@@ -29,10 +32,11 @@ export default function Topbar({ title, right }) {
 
         <Link
           to="/app/notifications"
-          className="flex h-9 w-9 items-center justify-center rounded-lg text-ink-500 transition-colors hover:bg-ink-100 dark:text-ink-300 dark:hover:bg-ink-800"
-          aria-label="Notifications"
+          className="relative flex h-9 w-9 items-center justify-center rounded-lg text-ink-500 transition-colors hover:bg-ink-100 dark:text-ink-300 dark:hover:bg-ink-800"
+          aria-label={unreadCount ? `Notifications, ${unreadCount} unread` : 'Notifications'}
         >
           <Bell className="h-4 w-4" />
+          {unreadCount ? <span className="absolute right-1 top-1 min-w-[1rem] rounded-full bg-loss-500 px-1 text-center text-[9px] font-semibold leading-4 text-white">{unreadCount > 99 ? '99+' : unreadCount}</span> : null}
         </Link>
 
         <div className="relative">
@@ -62,7 +66,7 @@ export default function Topbar({ title, right }) {
                 >
                   <UserIcon className="h-4 w-4" /> Profile & Settings
                 </Link>
-                {['admin', 'super_admin'].includes(user?.role) ? (
+                {['moderator', 'admin', 'super_admin'].includes(user?.role) ? (
                   <Link
                     to="/admin/overview"
                     onClick={() => setOpen(false)}

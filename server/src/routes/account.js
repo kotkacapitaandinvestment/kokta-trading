@@ -48,6 +48,7 @@ accountRouter.delete('/', asyncHandler(async (req, res) => {
     if (others === 0) return res.status(409).json({ error: 'You are the only Super Admin. Promote someone else before deleting this account.' });
   }
   await audit(req, 'account.deleted', { targetType: 'user', targetId: user.id, actor: user, detail: { email: user.email, role: user.role } });
+  await prisma.follow.deleteMany({ where: { targetType: 'user', targetId: user.id } });
   await prisma.user.delete({ where: { id: user.id } });
   forgetUserAccess(user.id);
   clearSessionCookie(res);

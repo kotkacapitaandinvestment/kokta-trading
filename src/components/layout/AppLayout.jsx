@@ -7,6 +7,7 @@ import MobileNav from './MobileNav';
 import { traderNav, traderNavSecondary } from './navConfig';
 import { useAuth } from '../../context/AuthContext';
 import { useAppConfig } from '../../context/AppConfigContext';
+import CommunityShell from '../../features/community/CommunityShell';
 
 const titleFromPath = (pathname) => {
   const match = [...traderNav, ...traderNavSecondary].find((i) => pathname.startsWith(i.to));
@@ -41,6 +42,7 @@ export default function AppLayout() {
   }, [refreshUser, navigate]);
 
   return (
+    <CommunityShell>
     <div className="flex h-screen overflow-hidden bg-ink-50 dark:bg-ink-950">
       <Sidebar brandTo="/app/dashboard" items={traderNav} secondaryItems={traderNavSecondary} />
       <div className="flex min-w-0 flex-1 flex-col">
@@ -53,5 +55,6 @@ export default function AppLayout() {
         </main>
       </div>
     </div>
+    </CommunityShell>
   );
 }

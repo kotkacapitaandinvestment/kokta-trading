@@ -5,23 +5,19 @@
 
 import { prisma } from './prisma.js';
 import { decryptSecret } from './crypto.js';
-import { getDailyBarsCached, MassiveRateLimited } from './massive.js';
-import { cachedSource, HOUR } from './research/cache.js';
+import { getDailyBarsCached, peekDailyBars, MassiveRateLimited } from './massive.js';
+import { cachedSource, peekSource, HOUR } from './research/cache.js';
 import { CALENDAR_SOURCES, fetchFomcMeetings, fetchEcbMeetings, fetchBlsReleases, fetchBeaReleases, fetchEurostatReleases } from './research/sources/calendars.js';
+import { INSTRUMENTS, instrument as findInstrument } from './instruments.js';
 
-export const PULSE_INSTRUMENTS = [
-  { symbol: 'EUR/USD', ticker: 'C:EURUSD', market: 'Forex', research: 'EURUSD', decimals: 4 },
-  { symbol: 'GBP/USD', ticker: 'C:GBPUSD', market: 'Forex', research: 'GBPUSD', decimals: 4 },
-  { symbol: 'USD/JPY', ticker: 'C:USDJPY', market: 'Forex', research: 'USDJPY', decimals: 2 },
-  { symbol: 'XAU/USD', ticker: 'C:XAUUSD', market: 'Metals', decimals: 2 },
-  { symbol: 'NAS100', ticker: 'I:NDX', market: 'Indices', decimals: 1 },
-  { symbol: 'BTC/USD', ticker: 'X:BTCUSD', market: 'Crypto', decimals: 0 },
-];
+// The market-pulse subset, from the shared instrument registry.
+export const PULSE_INSTRUMENTS = INSTRUMENTS.filter((i) => i.pulse);
 
 const ATR_DAYS = 14;
 const round = (v, d) => (v == null || !Number.isFinite(v) ? null : Math.round(v * 10 ** d) / 10 ** d);
+const mean = (xs) => xs.reduce((s, v) => s + v, 0) / xs.length;
 
-async function massiveKey() {
+export async function massiveKey() {
   const row = await prisma.integration.findUnique({ where: { provider: 'massive' } }).catch(() => null);
   if (!row?.enabled || !row.secretCipher) return null;
   try {
@@ -31,53 +27,114 @@ async function massiveKey() {
   }
 }
 
-function summarize(inst, bars) {
-  if (bars.length < ATR_DAYS + 1) return null;
+// Everything derived from daily bars. All values are computed from the bars;
+// nothing is estimated.
+export function summarizeBars(inst, bars) {
+  if (!bars || bars.length < ATR_DAYS + 1) return null;
+  const d = inst.decimals + 1;
   const last = bars[bars.length - 1];
   const prev = bars[bars.length - 2];
   const window = bars.slice(-(ATR_DAYS + 1));
   const trs = window.slice(1).map((b, i) => Math.max(b.h - b.l, Math.abs(b.h - window[i].c), Math.abs(b.l - window[i].c)));
-  const atr = trs.reduce((s, v) => s + v, 0) / trs.length;
+  const atr = mean(trs);
   const atrPct = (atr / last.c) * 100;
   const month = bars.slice(-21);
   const high = Math.max(...month.map((b) => b.h));
   const low = Math.min(...month.map((b) => b.l));
+  const changePct = (last.c / prev.c - 1) * 100;
+  const sma20 = bars.length >= 20 ? mean(bars.slice(-20).map((b) => b.c)) : null;
+  const sma50 = bars.length >= 50 ? mean(bars.slice(-50).map((b) => b.c)) : null;
+  const position = high > low ? (last.c - low) / (high - low) : null;
+  const third = position == null ? null : position >= 2 / 3 ? 'upper third' : position <= 1 / 3 ? 'lower third' : 'middle third';
   return {
-    close: round(last.c, inst.decimals + 1),
+    close: round(last.c, d),
     closeDate: new Date(last.t).toISOString().slice(0, 10),
-    changePct: round((last.c / prev.c - 1) * 100, 2),
-    atr: round(atr, inst.decimals + 1),
+    changePct: round(changePct, 2),
+    // A move bigger than the 14-day average true range is unusual for it.
+    unusualMove: Math.abs(last.c - prev.c) >= atr,
+    session: { open: round(last.o, d), high: round(last.h, d), low: round(last.l, d) },
+    atr: round(atr, d),
     atrPct: round(atrPct, 2),
-    // Same thresholds as before: ATR as a share of price.
     regime: atrPct > 1.5 ? 'High' : atrPct > 0.7 ? 'Elevated' : 'Normal',
-    range: { high: round(high, inst.decimals + 1), low: round(low, inst.decimals + 1), position: high > low ? round((last.c - low) / (high - low), 2) : null },
-    closes: bars.slice(-30).map((b) => round(b.c, inst.decimals + 1)),
+    range: { high: round(high, d), low: round(low, d), position: round(position, 2) },
+    technical: {
+      sma20: round(sma20, d),
+      sma50: round(sma50, d),
+      vsSma20: sma20 == null ? null : last.c >= sma20 ? 'above' : 'below',
+      vsSma50: sma50 == null ? null : last.c >= sma50 ? 'above' : 'below',
+      rangeThird: third,
+    },
+    closes: bars.slice(-30).map((b) => round(b.c, d)),
+    history: bars.map((b) => ({ t: new Date(b.t).toISOString().slice(0, 10), c: round(b.c, d) })),
   };
 }
+
+// One instrument's market data. fetch=false never calls Massive (feeds and
+// lists); fetch=true may, within the rate limit, falling back to the most
+// recent cached day.
+export async function instrumentMarketData(symbol, { fetch = true, apiKey } = {}) {
+  const inst = findInstrument(symbol);
+  if (!inst) return null;
+  const base = { symbol: inst.symbol, display: inst.display, market: inst.market, decimals: inst.decimals };
+  if (!inst.ticker) return { ...base, available: false, reason: 'not_in_plan', note: inst.dataNote };
+  let result = null;
+  if (fetch) {
+    const key = apiKey === undefined ? await massiveKey() : apiKey;
+    if (!key) return { ...base, available: false, reason: 'not_configured' };
+    try {
+      result = await getDailyBarsCached(key, inst.ticker, { cachedSource });
+    } catch (err) {
+      result = await peekDailyBars(inst.ticker, { peekSource });
+      if (!result) return { ...base, available: false, reason: err instanceof MassiveRateLimited ? 'rate_limited' : 'fetch_failed' };
+    }
+  } else {
+    result = await peekDailyBars(inst.ticker, { peekSource });
+    if (!result) return { ...base, available: false, reason: 'not_loaded' };
+  }
+  const summary = summarizeBars(inst, result.bars);
+  if (!summary) return { ...base, available: false, reason: 'insufficient_history' };
+  return { ...base, available: true, fetchedAt: result.fetchedAt, stale: !!result.stale, ...summary };
+}
+
+const slim = ({ history, ...rest }) => rest; // eslint-disable-line no-unused-vars
 
 export async function getMarketPulse() {
   const apiKey = await massiveKey();
   if (!apiKey) {
-    return { configured: false, instruments: PULSE_INSTRUMENTS.map(({ symbol, market, research }) => ({ symbol, market, research: research ?? null, available: false, reason: 'not_configured' })) };
+    return { configured: false, instruments: PULSE_INSTRUMENTS.map(({ symbol, display, market, research }) => ({ symbol: display, key: symbol, market, research: research ?? null, available: false, reason: 'not_configured' })) };
   }
   // Sequential on purpose: the per-instance call gate in massive.js then
   // stops cleanly at the provider's limit instead of firing a burst.
   const instruments = [];
   for (const inst of PULSE_INSTRUMENTS) {
-    const base = { symbol: inst.symbol, market: inst.market, research: inst.research ?? null, decimals: inst.decimals };
-    try {
-      const { bars, fetchedAt } = await getDailyBarsCached(apiKey, inst.ticker, { cachedSource });
-      const summary = summarize(inst, bars);
-      instruments.push(summary ? { ...base, available: true, fetchedAt, ...summary } : { ...base, available: false, reason: 'insufficient_history' });
-    } catch (err) {
-      instruments.push({ ...base, available: false, reason: err instanceof MassiveRateLimited ? 'rate_limited' : 'fetch_failed' });
-    }
+    const data = await instrumentMarketData(inst.symbol, { apiKey });
+    instruments.push({ ...slim(data), symbol: inst.display, key: inst.symbol, research: inst.research ?? null });
   }
   return {
     configured: true,
     source: { name: 'Massive (formerly Polygon.io), end-of-day bars', url: 'https://massive.com' },
     instruments,
   };
+}
+
+// Warms the daily-bar cache for instruments that don't have today's bars
+// yet, a few per call (the scheduled job calls it hourly).
+export async function warmInstrumentBars({ max = 4 } = {}) {
+  const apiKey = await massiveKey();
+  if (!apiKey) return { warmed: 0 };
+  let warmed = 0;
+  for (const inst of INSTRUMENTS) {
+    if (!inst.ticker || warmed >= max) continue;
+    const today = await peekSource(`massive:daily100:${inst.ticker}:${new Date().toISOString().slice(0, 10)}`);
+    if (today && !today.expired) continue;
+    try {
+      await getDailyBarsCached(apiKey, inst.ticker, { cachedSource });
+      warmed += 1;
+    } catch {
+      break; // rate limited or failing: try again next run
+    }
+  }
+  return { warmed };
 }
 
 // ── Official release calendar ──────────────────────────────────────────────

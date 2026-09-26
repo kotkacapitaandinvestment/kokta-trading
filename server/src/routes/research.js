@@ -8,6 +8,8 @@ import { loadSettings, publicSettings, verifyCronToken } from '../lib/research/s
 import { latestReport, freshnessOf, activeRun, runResearch, reportHistory, runCronBatch, ResearchError } from '../lib/research/engine.js';
 import { checkModelHealth } from '../lib/aiModels.js';
 import { loadAppSettings, paidFeatureLocked } from '../lib/appSettings.js';
+import { warmInstrumentBars } from '../lib/marketPulse.js';
+import { runCommunityJobs } from '../lib/community/jobs.js';
 
 export const researchRouter = Router();
 
@@ -25,7 +27,12 @@ researchRouter.all('/cron', asyncHandler(async (req, res) => {
   if (!verifyCronToken(settings, token)) return res.status(401).json({ error: 'Invalid or missing research cron token.' });
 
   const jobs = [checkModelHealth({ narrativePreferred: settings.model?.trim() || undefined }).catch((err) => console.error('Model health check failed:', err))];
-  if (settings.enabled) jobs.push(runCronBatch().catch((err) => console.error('Research cron batch failed:', err)));
+  // Price bars first (a few per run, within Massive's 5/min), then research,
+  // which reuses the same cached bars for its pairs.
+  const warm = warmInstrumentBars({ max: 4 }).catch((err) => console.error('Instrument bar warm-up failed:', err));
+  if (settings.enabled) jobs.push(warm.then(() => runCronBatch()).catch((err) => console.error('Research cron batch failed:', err)));
+  else jobs.push(warm);
+  jobs.push(runCommunityJobs().catch((err) => console.error('Community jobs failed:', err)));
   waitUntil(Promise.all(jobs));
   res.status(202).json({
     ok: true,

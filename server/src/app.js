@@ -20,6 +20,10 @@ import { adminPlatformRouter } from './routes/adminPlatform.js';
 import { appConfigRouter } from './routes/appConfig.js';
 import { accountRouter } from './routes/account.js';
 import { adminAnnouncementsRouter } from './routes/adminAnnouncements.js';
+import { communityRouter } from './routes/community/index.js';
+import { realtimeRouter } from './routes/realtime.js';
+import { mediaRouter } from './routes/media.js';
+import { adminCommunityRouter } from './routes/adminCommunity.js';
 import { requireAuth, requireRole } from './middleware/auth.js';
 
 export const app = express();
@@ -35,6 +39,9 @@ app.use('/api/auth', authRouter);
 app.use('/api/app', appConfigRouter);
 app.use('/api/account', accountRouter);
 app.use('/api/kyc', kycRouter);
+app.use('/api/community', communityRouter);
+app.use('/api/realtime', realtimeRouter);
+app.use('/api/media', mediaRouter);
 app.use('/api/journal', journalRouter);
 app.use('/api/checklist', checklistRouter);
 app.use('/api/settings', settingsRouter);
@@ -49,6 +56,7 @@ app.use('/api/me', meStatsRouter);
 app.use('/api/market', marketDataRouter);
 app.use('/api/research', researchRouter);
 app.use('/api/admin/research', adminResearchRouter);
+app.use('/api/admin/community', adminCommunityRouter);
 
 app.use((err, req, res, next) => {
   console.error(err);

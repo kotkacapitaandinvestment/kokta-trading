@@ -41,7 +41,7 @@ function takeCallSlot() {
 
 export async function getDailyBarsCached(apiKey, ticker, { cachedSource, ttlMs = 6 * 60 * 60 * 1000 } = {}) {
   const today = new Date().toISOString().slice(0, 10);
-  const { data, fetchedAt } = await cachedSource(`massive:daily100:${ticker}:${today}`, ttlMs, async () => {
+  const { data, fetchedAt } = await cachedSource(dailyBarsKey(ticker), ttlMs, async () => {
     takeCallSlot();
     const from = new Date(Date.now() - 100 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
     const bars = await fetchHistoricalBars(apiKey, ticker, 1, 'day', from, today);
@@ -49,4 +49,16 @@ export async function getDailyBarsCached(apiKey, ticker, { cachedSource, ttlMs =
     return bars.map(({ t, o, h, l, c }) => ({ t, o, h, l, c }));
   });
   return { bars: data, fetchedAt };
+}
+
+export const dailyBarsKey = (ticker, day = new Date()) => `massive:daily100:${ticker}:${day.toISOString().slice(0, 10)}`;
+
+// Today's bars if cached, else the most recent earlier day's (within 4 days),
+// without calling Massive. For feeds and lists that must not spend quota.
+export async function peekDailyBars(ticker, { peekSource }) {
+  for (let back = 0; back < 4; back++) {
+    const hit = await peekSource(dailyBarsKey(ticker, new Date(Date.now() - back * 86400000)));
+    if (hit?.data?.length) return { bars: hit.data, fetchedAt: hit.fetchedAt, stale: back > 0 };
+  }
+  return null;
 }

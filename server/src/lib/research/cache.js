@@ -45,3 +45,13 @@ export async function purgeExpiredSourceCache() {
 export function clearMemoryCache() {
   memory.clear();
 }
+
+// Cache-only read: returns { data, fetchedAt, expired } or null, never
+// fetching. Expired rows are still returned (flagged) for stale fallbacks.
+export async function peekSource(key) {
+  const hit = memory.get(key);
+  if (hit) return { data: hit.payload, fetchedAt: hit.fetchedAt, expired: hit.expiresAt <= Date.now() };
+  const row = await prisma.researchSourceCache.findUnique({ where: { key } }).catch(() => null);
+  if (!row) return null;
+  return { data: row.payload, fetchedAt: row.fetchedAt.toISOString(), expired: row.expiresAt.getTime() <= Date.now() };
+}

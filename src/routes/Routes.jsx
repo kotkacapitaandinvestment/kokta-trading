@@ -34,6 +34,23 @@ import AdminIntegrations from '../features/admin/AdminIntegrations';
 import AdminResearch from '../features/admin/AdminResearch';
 import AdminVerifications from '../features/admin/AdminVerifications';
 import AdminBilling from '../features/admin/AdminBilling';
+import AdminCommunity from '../features/admin/AdminCommunity';
+import CommunityLayout from '../features/community/CommunityLayout';
+import ForYou from '../features/community/pages/ForYou';
+import Markets from '../features/community/pages/Markets';
+import MarketRoom from '../features/community/pages/MarketRoom';
+import Ideas from '../features/community/pages/Ideas';
+import PostPage from '../features/community/pages/PostPage';
+import CommunityEvents from '../features/community/pages/Events';
+import EventDetail from '../features/community/pages/EventDetail';
+import Following from '../features/community/pages/Following';
+import Messages from '../features/community/pages/Messages';
+import Profile from '../features/community/pages/Profile';
+import CommunitySearch from '../features/community/pages/Search';
+import Saved from '../features/community/pages/Saved';
+import NewsDetail from '../features/community/pages/NewsDetail';
+import Guidelines from '../features/community/pages/Guidelines';
+import Invite from '../features/community/pages/Invite';
 
 export default function AppRoutes() {
   return (
@@ -62,6 +79,25 @@ export default function AppRoutes() {
         <Route path="market" element={<MarketIntelligence />} />
         <Route path="settings" element={<Settings />} />
         <Route path="notifications" element={<Notifications />} />
+        <Route path="community" element={<CommunityLayout />}>
+          <Route index element={<ForYou />} />
+          <Route path="markets" element={<Markets />} />
+          <Route path="markets/:symbol" element={<MarketRoom />} />
+          <Route path="ideas" element={<Ideas />} />
+          <Route path="ideas/:id" element={<PostPage />} />
+          <Route path="posts/:id" element={<PostPage />} />
+          <Route path="events" element={<CommunityEvents />} />
+          <Route path="events/:id" element={<EventDetail />} />
+          <Route path="following" element={<Following />} />
+          <Route path="messages" element={<Messages />} />
+          <Route path="messages/:id" element={<Messages />} />
+          <Route path="u/:username" element={<Profile />} />
+          <Route path="search" element={<CommunitySearch />} />
+          <Route path="saved" element={<Saved />} />
+          <Route path="news/:id" element={<NewsDetail />} />
+          <Route path="guidelines" element={<Guidelines />} />
+          <Route path="invite/:code" element={<Invite />} />
+        </Route>
       </Route>
 
       <Route path="/admin" element={<AdminLayout />}>
@@ -74,6 +110,7 @@ export default function AppRoutes() {
         <Route path="journal-stats" element={<AdminJournalStats />} />
         <Route path="announcements" element={<AdminAnnouncements />} />
         <Route path="research" element={<AdminResearch />} />
+        <Route path="community" element={<AdminCommunity />} />
         <Route path="billing" element={<AdminBilling />} />
         {['subscriptions', 'revenue'].map((p) => (
           <Route key={p} path={p} element={<Navigate to="/admin/billing" replace />} />

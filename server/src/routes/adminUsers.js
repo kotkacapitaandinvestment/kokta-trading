@@ -25,9 +25,9 @@ adminUsersRouter.get('/', asyncHandler(async (req, res) => {
   res.json({ users: users.map(toAdminUser) });
 }));
 
-const ROLES = ['trader', 'premium', 'admin', 'super_admin'];
+const ROLES = ['trader', 'premium', 'moderator', 'admin', 'super_admin'];
 const STATUSES = ['active', 'suspended', 'banned'];
-const RANK = { trader: 0, premium: 0, admin: 1, super_admin: 2 };
+const RANK = { trader: 0, premium: 0, moderator: 0.5, admin: 1, super_admin: 2 };
 
 // Role changes are super-admin only; admins may manage trader accounts'
 // status and plan; nobody can change their own role or status.

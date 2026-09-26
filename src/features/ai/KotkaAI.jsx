@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { ImagePlus, Send, Star, Sparkles } from 'lucide-react';
 import PageHeader from '../../components/ui/PageHeader';
 import { Select } from '../../components/ui/Input';
@@ -17,7 +18,8 @@ export default function KotkaAI() {
   const [search, setSearch] = useState('');
   const [market, setMarket] = useState('Forex');
   const [timeframe, setTimeframe] = useState('15m');
-  const [input, setInput] = useState('');
+  const [params] = useSearchParams();
+  const [input, setInput] = useState(() => (params.get('prompt') ?? '').slice(0, 2000));
   const [pendingImage, setPendingImage] = useState(null);
   const [thinking, setThinking] = useState(false);
   const [lastSource, setLastSource] = useState(null);

@@ -5,6 +5,7 @@ import MobileNav from './MobileNav';
 import { adminNav, traderNav } from './navConfig';
 import { useAuth } from '../../context/AuthContext';
 import Badge from '../ui/Badge';
+import CommunityShell from '../../features/community/CommunityShell';
 
 const titleFromPath = (pathname) => adminNav.find((i) => pathname.startsWith(i.to))?.label ?? 'Admin';
 
@@ -14,10 +15,13 @@ export default function AdminLayout() {
 
   if (loading) return null;
   if (!user) return <Navigate to="/login" replace />;
-  if (!['admin', 'super_admin'].includes(user.role)) return <Navigate to="/app/dashboard" replace />;
+  if (!['moderator', 'admin', 'super_admin'].includes(user.role)) return <Navigate to="/app/dashboard" replace />;
+  // Moderators only get Community moderation.
+  const isModerator = user.role === 'moderator';
+  if (isModerator && !location.pathname.startsWith('/admin/community')) return <Navigate to="/admin/community" replace />;
 
   const isSuperAdmin = user.role === 'super_admin';
-  const items = adminNav.map((item) => ({
+  const items = adminNav.filter((item) => !isModerator || item.moderator).map((item) => ({
     ...item,
     locked: item.superAdminOnly && !isSuperAdmin,
     badge: item.superAdminOnly ? 'Super Admin' : undefined,
@@ -25,6 +29,7 @@ export default function AdminLayout() {
   const traderTools = traderNav.map((item) => ({ ...item, locked: false, badge: undefined }));
 
   return (
+    <CommunityShell>
     <div className="flex h-screen overflow-hidden bg-ink-50 dark:bg-ink-950">
       <Sidebar
         brandTo="/admin/overview"
@@ -37,7 +42,7 @@ export default function AdminLayout() {
           title={titleFromPath(location.pathname)}
           right={
             <>
-              <Badge tone="accent" className="hidden sm:inline-flex">{isSuperAdmin ? 'Super Admin' : 'Administrator'}</Badge>
+              <Badge tone="accent" className="hidden sm:inline-flex">{isSuperAdmin ? 'Super Admin' : isModerator ? 'Moderator' : 'Administrator'}</Badge>
               <MobileNav items={items} secondaryItems={traderTools} />
             </>
           }
@@ -49,5 +54,6 @@ export default function AdminLayout() {
         </main>
       </div>
     </div>
+    </CommunityShell>
   );
 }
