@@ -220,3 +220,77 @@ model AIMessage {
 
   @@index([conversationId])
 }
+
+// ── Kotka Fundamental Research ────────────────────────────────────────────
+// Admin-controlled configuration (singleton row, id = "singleton").
+model ResearchSettings {
+  id        String   @id @default("singleton")
+  config    Json     @default("{}")
+  updatedAt DateTime @updatedAt
+  updatedBy String?
+}
+
+// Raw upstream responses (IMF, ECB, FRED, BIS, calendars...) cached server-side
+// so repeated research runs don't re-hit every source.
+model ResearchSourceCache {
+  key       String   @id
+  payload   Json
+  fetchedAt DateTime @default(now())
+  expiresAt DateTime
+
+  @@index([expiresAt])
+}
+
+// Every completed research report is kept — the history is the fundamental trend.
+model ResearchReport {
+  id              String   @id @default(cuid())
+  kind            String // "currency" | "pair"
+  subject         String // "EUR" | "EURUSD"
+  score           Int?
+  confidence      Int?
+  condition       String?
+  direction       String?
+  payload         Json
+  narrativeSource String   @default("rules") // "rules" | "ai"
+  model           String?
+  durationMs      Int?
+  createdAt       DateTime @default(now())
+
+  @@index([kind, subject, createdAt])
+}
+
+model ResearchRun {
+  id           String    @id @default(cuid())
+  kind         String
+  subject      String
+  trigger      String // "user" | "admin" | "cron"
+  userId       String?
+  status       String    @default("running") // running | succeeded | failed
+  error        String?
+  sourceStatus Json      @default("[]")
+  reportId     String?
+  startedAt    DateTime  @default(now())
+  finishedAt   DateTime?
+
+  @@index([subject, startedAt])
+  @@index([userId, startedAt])
+}
+
+// Institutional assessments with no machine-readable API (e.g. IMF External
+// Sector Report valuations), entered by an admin with the original source.
+model SourceAssessment {
+  id             String   @id @default(cuid())
+  currency       String
+  factor         String
+  institution    String
+  title          String
+  classification String?
+  statement      String
+  url            String
+  publishedAt    DateTime
+  createdById    String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([currency, factor])
+}

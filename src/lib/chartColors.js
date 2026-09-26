@@ -12,3 +12,11 @@ export const CHART_COLORS = {
   grid: { light: '#EDE8DD', dark: '#262320' },
   tick: { light: '#948A7D', dark: '#B8AE9F' },
 };
+
+// Fundamental Research trend series. Validated with the dataviz palette
+// validator against Kotka's card surfaces (#FFFFFF light / #0C0C0E dark):
+// all checks pass (CVD ΔE 25.5+, normal-vision ΔE 27+, ≥3:1 contrast).
+export const RESEARCH_SERIES = {
+  base: { light: '#B58637', dark: '#B58637' },
+  quote: { light: '#2a78d6', dark: '#3987e5' },
+};

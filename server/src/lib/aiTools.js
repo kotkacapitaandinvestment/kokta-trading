@@ -5,6 +5,8 @@
 import { prisma } from './prisma.js';
 import { computeScores, computeAnalytics, computeIdentity } from './traderMetrics.js';
 import { getMarketSnapshot } from './marketSnapshot.js';
+import { parseSubject } from './research/currencies.js';
+import { latestReport } from './research/engine.js';
 
 async function getUserEntries(userId) {
   const allEntries = await prisma.journalEntry.findMany({ where: { userId }, orderBy: { date: 'asc' } });
@@ -44,6 +46,19 @@ export const TOOL_DEFINITIONS = [
       name: 'get_open_positions',
       description: "Get the trader's currently open (not yet closed) logged positions, with entry, stop loss, take profit, and risk.",
       parameters: { type: 'object', properties: {}, required: [] },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'get_fundamental_research',
+      description:
+        "Get Kotka's latest cached Fundamental Research report for a currency (e.g. EUR) or currency pair (e.g. EURUSD): fundamental score and confidence, factor scores with their evidence, central bank stance, IMF forecast revisions, upcoming catalysts and invalidation conditions — all from official sources (IMF, central banks, statistics offices). Fundamentals are context, never a trade signal.",
+      parameters: {
+        type: 'object',
+        properties: { instrument: { type: 'string', description: 'Currency code (EUR) or pair (EURUSD / EUR/USD).' } },
+        required: ['instrument'],
+      },
     },
   },
   {
@@ -112,6 +127,31 @@ export async function executeToolCall(name, args, userId) {
         sentiment: snapshot.sentiment,
         sentimentLive: snapshot.sentimentLive,
         volatility: snapshot.volatility,
+      };
+    }
+    case 'get_fundamental_research': {
+      const parsed = parseSubject(args?.instrument);
+      if (!parsed) return { available: false, reason: 'Unsupported instrument.' };
+      const row = await latestReport(parsed.kind, parsed.subject);
+      if (!row) return { available: false, reason: `No research report exists yet for ${parsed.subject}. The trader can generate one in Market Intelligence → Fundamental Research.` };
+      const r = row.payload;
+      return {
+        available: true,
+        instrument: parsed.subject,
+        researchedAt: row.createdAt,
+        verdict: r.verdict,
+        currencies: [r.base, r.quote].filter(Boolean).map((code) => r.currencies[code]).map((c) => ({
+          currency: c.code,
+          score: c.score,
+          condition: c.condition,
+          confidence: c.confidence,
+          policy: c.policy ? { rate: c.policy.display, stance: c.policy.stance, realRate: c.policy.realRate } : null,
+          factors: Object.values(c.factors).map((f) => ({ factor: f.label, score: f.available ? f.score : null, classification: f.classification, evidence: f.available ? f.rationale : f.unavailableReason })),
+        })),
+        pairFactors: r.pair?.factors?.map((f) => ({ factor: f.label, favours: f.favors })) ?? null,
+        bottomLine: r.narrative?.bottomLine,
+        upcomingCatalysts: r.catalysts.items.filter((c) => c.date).slice(0, 5).map((c) => ({ date: c.date.slice(0, 10), event: c.event, currency: c.currency })),
+        whatCouldChangeThisView: r.invalidation.map((i) => i.text),
       };
     }
     default:

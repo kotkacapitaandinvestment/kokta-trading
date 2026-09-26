@@ -27,6 +27,7 @@ import {
   Server,
   SlidersHorizontal,
   Plug,
+  Landmark,
 } from 'lucide-react';
 
 export const traderNav = [
@@ -61,6 +62,7 @@ export const adminNav = [
   { to: '/admin/content', label: 'Content', icon: BookOpen },
   { to: '/admin/courses', label: 'Courses', icon: BookOpen },
   { to: '/admin/market-news', label: 'Market News', icon: Newspaper },
+  { to: '/admin/research', label: 'Fundamental Research', icon: Landmark },
   { to: '/admin/feature-flags', label: 'Feature Flags', icon: Flag },
   { to: '/admin/support', label: 'Support Tickets', icon: LifeBuoy },
   { to: '/admin/audit-logs', label: 'Audit Logs', icon: ShieldCheck },

@@ -13,6 +13,8 @@ import { aiRouter } from './routes/ai.js';
 import { simulatorRouter } from './routes/simulator.js';
 import { meStatsRouter } from './routes/meStats.js';
 import { marketDataRouter } from './routes/marketData.js';
+import { researchRouter } from './routes/research.js';
+import { adminResearchRouter } from './routes/adminResearch.js';
 import { requireAuth, requireRole } from './middleware/auth.js';
 import { createCrudRouter } from './lib/crudRouter.js';
 import { prisma } from './lib/prisma.js';
@@ -41,6 +43,8 @@ app.use('/api/ai', aiRouter);
 app.use('/api/simulator', simulatorRouter);
 app.use('/api/me', meStatsRouter);
 app.use('/api/market', marketDataRouter);
+app.use('/api/research', researchRouter);
+app.use('/api/admin/research', adminResearchRouter);
 
 app.use((err, req, res, next) => {
   console.error(err);

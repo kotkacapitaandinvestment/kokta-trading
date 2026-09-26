@@ -43,6 +43,7 @@ import AdminSystemHealth from '../features/admin/AdminSystemHealth';
 import AdminApiUsage from '../features/admin/AdminApiUsage';
 import AdminSettings from '../features/admin/AdminSettings';
 import AdminIntegrations from '../features/admin/AdminIntegrations';
+import AdminResearch from '../features/admin/AdminResearch';
 
 export default function AppRoutes() {
   return (
@@ -90,6 +91,7 @@ export default function AppRoutes() {
         <Route path="content" element={<AdminContent />} />
         <Route path="courses" element={<AdminCourses />} />
         <Route path="market-news" element={<AdminMarketNews />} />
+        <Route path="research" element={<AdminResearch />} />
         <Route path="feature-flags" element={<AdminFeatureFlags />} />
         <Route path="support" element={<AdminSupport />} />
         <Route path="audit-logs" element={<AdminAuditLogs />} />

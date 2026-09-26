@@ -1,7 +1,9 @@
 export const NVIDIA_DEFAULT_BASE_URL = 'https://integrate.api.nvidia.com/v1';
 export const NVIDIA_DEFAULT_MODEL = 'meta/llama-3.1-70b-instruct';
 
-export async function nvidiaChatCompletion({ apiKey, baseUrl, model, messages, maxTokens = 600 }) {
+// Some hosted models fix sampling parameters (e.g. top_p must stay at its
+// default); pass topP: null to omit it.
+export async function nvidiaChatCompletion({ apiKey, baseUrl, model, messages, maxTokens = 600, temperature = 0.5, topP = 0.9, timeoutMs, extraBody = {} }) {
   const res = await fetch(`${baseUrl}/chat/completions`, {
     method: 'POST',
     headers: {
@@ -12,11 +14,13 @@ export async function nvidiaChatCompletion({ apiKey, baseUrl, model, messages, m
     body: JSON.stringify({
       model,
       messages,
-      temperature: 0.5,
-      top_p: 0.9,
+      temperature,
+      ...(topP === null ? {} : { top_p: topP }),
       max_tokens: maxTokens,
       stream: false,
+      ...extraBody,
     }),
+    ...(timeoutMs ? { signal: AbortSignal.timeout(timeoutMs) } : {}),
   });
 
   if (!res.ok) {
