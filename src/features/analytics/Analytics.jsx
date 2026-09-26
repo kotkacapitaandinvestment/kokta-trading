@@ -30,13 +30,13 @@ export default function Analytics() {
       <PageHeader
         eyebrow="Analytics"
         title="Performance Analytics"
-        description="The numbers behind your process — not just your P&L."
+        description="The numbers behind your process, not just your P&L."
       />
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <StatTile label="Win Rate" value={`${data.winRate}%`} />
-        <StatTile label="Avg Risk/Reward" value={data.avgRR !== null ? `${data.avgRR}R` : '—'} />
-        <StatTile label="Profit Factor" value={data.profitFactor !== null ? data.profitFactor : '—'} />
+        <StatTile label="Avg Risk/Reward" value={data.avgRR !== null ? `${data.avgRR}R` : 'n/a'} />
+        <StatTile label="Profit Factor" value={data.profitFactor !== null ? data.profitFactor : 'n/a'} />
         <StatTile label="Expectancy" value={`$${data.expectancy}`} hint="per trade" />
       </div>
 

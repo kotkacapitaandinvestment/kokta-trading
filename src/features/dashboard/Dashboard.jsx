@@ -263,7 +263,7 @@ export default function Dashboard() {
                       <td className="whitespace-nowrap px-6 py-3 font-mono text-xs tabular-nums text-ink-500 dark:text-ink-400">{t.date.slice(5)}</td>
                       <td className="px-3 py-3 font-medium text-ink-800 dark:text-ink-100">{t.symbol}</td>
                       <td className="px-3 py-3 text-ink-500 dark:text-ink-400">{t.direction}</td>
-                      <td className="hidden px-3 py-3 text-ink-500 dark:text-ink-400 sm:table-cell">{t.session || '—'}</td>
+                      <td className="hidden px-3 py-3 text-ink-500 dark:text-ink-400 sm:table-cell">{t.session || 'n/a'}</td>
                       <td className={clsx('px-6 py-3 text-right font-mono tabular-nums', t.pnl > 0 ? 'text-profit-600 dark:text-profit-400' : t.pnl < 0 ? 'text-loss-500' : 'text-ink-400')}>{t.pnl == null ? 'open' : money(t.pnl)}</td>
                     </tr>
                   ))}

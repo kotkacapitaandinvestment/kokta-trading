@@ -25,7 +25,7 @@ export default function AdminTradingStats() {
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <StatTile label="Trades Logged (30d)" value={stats.tradesLogged30d.toLocaleString()} />
         <StatTile label="Platform Win Rate" value={`${stats.winRate}%`} />
-        <StatTile label="Avg Risk/Reward" value={stats.avgRR !== null ? `${stats.avgRR}R` : '—'} hint={stats.avgRR === null ? 'No R-multiples logged yet' : undefined} />
+        <StatTile label="Avg Risk/Reward" value={stats.avgRR !== null ? `${stats.avgRR}R` : 'n/a'} hint={stats.avgRR === null ? 'No R-multiples logged yet' : undefined} />
         <StatTile label="Checklist Completion" value={`${stats.checklistRate}%`} />
       </div>
       <AdminTable columns={columns} rows={stats.markets} searchKeys={['market']} emptyLabel="No trades logged yet" />

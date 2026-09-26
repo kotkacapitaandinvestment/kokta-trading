@@ -124,7 +124,7 @@ export function computeIdentity(entries, minSample = 2) {
   };
 }
 
-export function computeAnalytics(entries) {
+export function computeAnalytics(entries, defaultRisk = 1) {
   const total = entries.length;
   const wins = entries.filter((e) => e.result === 'win');
   const losses = entries.filter((e) => e.result === 'loss');
@@ -172,7 +172,8 @@ export function computeAnalytics(entries) {
   const mistakeCount = entries.filter((e) => e.mistakes && e.mistakes.trim()).length;
   const ruleViolations = [
     { rule: 'Entered without checklist complete', count: entries.filter((e) => !e.checklistComplete).length },
-    { rule: 'Sized above stated per-trade risk policy', count: 0 },
+    // Same comparison computeScores uses for Risk Control.
+    { rule: 'Sized above your default risk per trade', count: entries.filter((e) => e.risk > defaultRisk).length },
     { rule: 'Logged a mistake for this trade', count: mistakeCount },
   ];
 

@@ -37,7 +37,7 @@ function Field({ label, children, mono }) {
   return (
     <div>
       <dt className="text-[11px] uppercase tracking-wide text-ink-400">{label}</dt>
-      <dd className={clsx('mt-0.5 text-sm text-ink-800 dark:text-ink-100', mono && 'font-mono tabular-nums')}>{children || '—'}</dd>
+      <dd className={clsx('mt-0.5 text-sm text-ink-800 dark:text-ink-100', mono && 'font-mono tabular-nums')}>{children || 'Not given'}</dd>
     </div>
   );
 }
@@ -207,7 +207,7 @@ export default function AdminVerifications() {
               <s.icon className={clsx('h-3.5 w-3.5', s.tone)} />
               {s.label}
             </p>
-            <p className="mt-1 font-mono text-2xl font-semibold tabular-nums text-ink-900 dark:text-ink-50">{s.value ?? '–'}</p>
+            <p className="mt-1 font-mono text-2xl font-semibold tabular-nums text-ink-900 dark:text-ink-50">{s.value ?? '-'}</p>
           </div>
         ))}
       </div>

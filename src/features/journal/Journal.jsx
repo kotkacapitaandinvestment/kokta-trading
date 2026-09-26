@@ -95,7 +95,7 @@ export default function Journal() {
       <PageHeader
         eyebrow="Journal"
         title="Trading Journal"
-        description="Every trade, every emotion, every lesson — in one disciplined record."
+        description="Every trade, every emotion and every lesson, in one disciplined record."
         actions={
           <Button icon={Plus} onClick={() => setShowForm(true)}>
             New entry
@@ -169,7 +169,7 @@ export default function Journal() {
                   </td>
                   <td className="px-5 py-3 text-right font-medium">
                     {e.positionStatus === 'open' ? (
-                      <span className="text-ink-400">—</span>
+                      <span className="text-ink-400">-</span>
                     ) : (
                       <span className={e.pnl >= 0 ? 'text-profit-600 dark:text-profit-400' : 'text-loss-500'}>
                         {e.pnl >= 0 ? '+' : ''}${e.pnl}

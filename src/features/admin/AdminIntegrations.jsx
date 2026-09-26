@@ -234,7 +234,7 @@ export default function AdminIntegrations() {
                 type={field.type}
                 placeholder={
                   field.key === 'secret' && integrations[activeProvider.id]?.maskedSecret
-                    ? `Current: ${integrations[activeProvider.id].maskedSecret} — leave blank to keep it`
+                    ? `Current: ${integrations[activeProvider.id].maskedSecret}. Leave blank to keep it.`
                     : field.placeholder
                 }
                 hint={field.hint}

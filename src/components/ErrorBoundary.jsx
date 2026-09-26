@@ -31,7 +31,7 @@ export default class ErrorBoundary extends Component {
         <span className="text-sm font-semibold text-accent-600 dark:text-accent-400">Something went wrong</span>
         <h1 className="mt-2 text-2xl font-semibold text-ink-900 dark:text-ink-50">This page hit an unexpected error</h1>
         <p className="mt-2 max-w-sm text-sm text-ink-500 dark:text-ink-400">
-          Nothing was lost — try reloading. If this keeps happening, let us know what you were doing when it broke.
+          Nothing was lost. Try reloading. If this keeps happening, let us know what you were doing when it broke.
         </p>
         <Button onClick={this.handleReload} className="mt-6">
           Back to home

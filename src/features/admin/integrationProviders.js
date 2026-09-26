@@ -6,7 +6,7 @@ export const INTEGRATION_PROVIDERS = [
     name: 'NVIDIA',
     category: 'Artificial Intelligence',
     icon: Sparkles,
-    description: 'NVIDIA NIM / build.nvidia.com — powers Kotka AI chat, chart image analysis, journal critiques and Fundamental Research narratives.',
+    description: 'NVIDIA NIM / build.nvidia.com. Powers Kotka AI chat, chart image analysis, journal critiques and Fundamental Research narratives.',
     fallbackNote:
       'If a configured model is retired or unavailable, Kotka automatically switches to the next model in the fallback list, then to its vetted defaults, and records the switch below. A scheduled health check re-tests every model every 6 hours.',
     fields: [
@@ -83,7 +83,7 @@ export const INTEGRATION_PROVIDERS = [
     name: 'FRED',
     category: 'Economic Data',
     icon: Landmark,
-    description: 'Federal Reserve Bank of St. Louis API — US policy rates, inflation, GDP, labour and yield series for Fundamental Research.',
+    description: 'Federal Reserve Bank of St. Louis API: US policy rates, inflation, GDP, labour and yield series for Fundamental Research.',
     fallbackNote: 'Optional. Without a key, Fundamental Research reads the same official series from FRED’s public CSV endpoint; a key gives the documented JSON API and higher reliability.',
     fields: [{ key: 'secret', label: 'API Key', type: 'password', placeholder: 'FRED API key (free at fred.stlouisfed.org)' }],
   },

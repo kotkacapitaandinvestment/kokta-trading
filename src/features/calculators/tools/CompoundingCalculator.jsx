@@ -47,7 +47,7 @@ export default function CompoundingCalculator() {
       </div>
       <p className="text-xs text-ink-400">
         Illustrative only. Consistent monthly returns of this magnitude are rare and compounding assumes no
-        withdrawals — treat this as a planning tool, not a projection of guaranteed results.
+        withdrawals. Treat this as a planning tool, not a projection of guaranteed results.
       </p>
     </div>
   );

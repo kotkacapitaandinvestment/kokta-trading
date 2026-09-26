@@ -26,8 +26,8 @@ async function getUserContext(userId) {
 }
 
 meStatsRouter.get('/analytics', asyncHandler(async (req, res) => {
-  const { entries } = await getUserContext(req.userId);
-  const analytics = computeAnalytics(entries);
+  const { entries, defaultRisk } = await getUserContext(req.userId);
+  const analytics = computeAnalytics(entries, defaultRisk);
   const insights = generatePsychologyInsights(entries);
   res.json({ ...analytics, insights });
 }));

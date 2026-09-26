@@ -9,10 +9,13 @@ import { parseSubject } from './research/currencies.js';
 import { latestReport } from './research/engine.js';
 
 async function getUserEntries(userId) {
-  const allEntries = await prisma.journalEntry.findMany({ where: { userId }, orderBy: { date: 'asc' } });
+  const [allEntries, settings] = await Promise.all([
+    prisma.journalEntry.findMany({ where: { userId }, orderBy: { date: 'asc' } }),
+    prisma.userSettings.findUnique({ where: { userId }, select: { tradingPreferences: true } }),
+  ]);
   const entries = allEntries.filter((e) => e.positionStatus !== 'open');
   const openPositions = allEntries.filter((e) => e.positionStatus === 'open');
-  return { entries, openPositions };
+  return { entries, openPositions, defaultRisk: settings?.tradingPreferences?.defaultRisk ?? 1 };
 }
 
 export const TOOL_DEFINITIONS = [
@@ -75,10 +78,10 @@ export const TOOL_DEFINITIONS = [
 export async function executeToolCall(name, args, userId) {
   switch (name) {
     case 'get_trader_stats': {
-      const { entries } = await getUserEntries(userId);
-      const { scores, hasData } = computeScores(entries);
+      const { entries, defaultRisk } = await getUserEntries(userId);
+      const { scores, hasData } = computeScores(entries, defaultRisk);
       const identity = computeIdentity(entries);
-      const analytics = computeAnalytics(entries);
+      const analytics = computeAnalytics(entries, defaultRisk);
       return {
         hasData,
         scores,

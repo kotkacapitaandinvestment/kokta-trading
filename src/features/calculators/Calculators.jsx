@@ -35,7 +35,7 @@ export default function Calculators() {
       <PageHeader
         eyebrow="Tools"
         title="Calculators"
-        description="Precision math for risk, sizing, and growth — because guessing is not a strategy."
+        description="Precision math for risk, sizing, and growth, because guessing is not a strategy."
       />
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-4">
