@@ -1,3 +1,4 @@
+import BrandMark from '../ui/BrandMark';
 import { NavLink } from 'react-router-dom';
 import clsx from 'clsx';
 import { Lock } from 'lucide-react';
@@ -8,9 +9,7 @@ export default function Sidebar({ brandTo, items, secondaryItems, secondaryLabel
     <aside className="hidden w-64 shrink-0 flex-col border-r border-ink-100 bg-white lg:flex dark:border-ink-800 dark:bg-ink-900">
       <div className="flex h-16 items-center gap-2.5 border-b border-ink-100 px-6 dark:border-ink-800">
         <NavLink to={brandTo} className="flex items-center gap-2.5">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent-500 text-sm font-bold text-ink-950 dark:bg-accent-400">
-            K
-          </div>
+          <BrandMark size={32} />
           <div className="leading-tight">
             <div className="text-sm font-semibold text-ink-900 dark:text-ink-50">Kotka Trading</div>
             <div className="text-[10px] uppercase tracking-wider text-ink-400">Discipline is Freedom</div>

@@ -7,7 +7,7 @@ import Button from '../../components/ui/Button';
 import { useAuth } from '../../context/AuthContext';
 
 export default function Login() {
-  const { login, loginWithProvider } = useAuth();
+  const { login } = useAuth();
   const navigate = useNavigate();
   const [form, setForm] = useState({ email: '', password: '' });
   const [loading, setLoading] = useState(false);
@@ -22,19 +22,6 @@ export default function Login() {
       navigate('/app/dashboard');
     } catch (err) {
       setError(err.message || 'Could not sign in. Check your details and try again.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleProvider = async (provider) => {
-    setError(null);
-    setLoading(true);
-    try {
-      await loginWithProvider(provider);
-      navigate('/app/dashboard');
-    } catch (err) {
-      setError(err.message || 'Could not sign in. Try again.');
     } finally {
       setLoading(false);
     }
@@ -77,22 +64,7 @@ export default function Login() {
         </Button>
       </form>
 
-      <div className="my-6 flex items-center gap-3">
-        <div className="h-px flex-1 bg-ink-100 dark:bg-ink-800" />
-        <span className="text-xs text-ink-400">or continue with</span>
-        <div className="h-px flex-1 bg-ink-100 dark:bg-ink-800" />
-      </div>
-
-      <div className="grid grid-cols-2 gap-3">
-        <Button variant="secondary" onClick={() => handleProvider('google')} disabled={loading}>
-          Google
-        </Button>
-        <Button variant="secondary" onClick={() => handleProvider('apple')} disabled={loading}>
-          Apple
-        </Button>
-      </div>
-
-      <p className="mt-8 text-center text-sm text-ink-500 dark:text-ink-400">
+      <p className="mt-6 text-center text-sm text-ink-500 dark:text-ink-400">
         Don't have an account?{' '}
         <Link to="/signup" className="font-medium text-accent-600 hover:underline dark:text-accent-400">
           Create one

@@ -1,3 +1,4 @@
+import BrandMark from '../../components/ui/BrandMark';
 import { Link } from 'react-router-dom';
 import { ArrowRight, Brain, ShieldCheck, LineChart, NotebookPen } from 'lucide-react';
 import Button from '../../components/ui/Button';
@@ -31,9 +32,7 @@ export default function Landing() {
     <div className="min-h-screen bg-white dark:bg-ink-950">
       <header className="mx-auto flex max-w-7xl items-center justify-between px-6 py-6">
         <div className="flex items-center gap-2.5">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent-500 text-sm font-bold text-ink-950 dark:bg-accent-400">
-            K
-          </div>
+          <BrandMark size={32} />
           <span className="text-sm font-semibold text-ink-900 dark:text-ink-50">Kotka Trading</span>
         </div>
         <div className="flex items-center gap-3">

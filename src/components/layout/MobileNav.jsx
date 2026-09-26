@@ -1,3 +1,4 @@
+import BrandMark from '../ui/BrandMark';
 import { NavLink } from 'react-router-dom';
 import { Menu, X } from 'lucide-react';
 import { useState } from 'react';
@@ -22,9 +23,7 @@ export default function MobileNav({ items, secondaryItems }) {
           <div className="absolute inset-y-0 left-0 w-72 overflow-y-auto border-r border-ink-100 bg-white p-4 shadow-pop dark:border-ink-700 dark:bg-ink-900 dark:shadow-none">
             <div className="mb-4 flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent-500 text-sm font-bold text-ink-950 dark:bg-accent-400">
-                  K
-                </div>
+                <BrandMark size={32} />
                 <span className="text-sm font-semibold text-ink-900 dark:text-ink-50">Kotka Trading</span>
               </div>
               <button onClick={() => setOpen(false)} className="text-ink-400 hover:text-ink-700">

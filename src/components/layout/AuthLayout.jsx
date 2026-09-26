@@ -1,3 +1,4 @@
+import BrandMark from '../ui/BrandMark';
 import { Link } from 'react-router-dom';
 import { ShieldCheck, TrendingUp, Brain } from 'lucide-react';
 
@@ -13,7 +14,7 @@ export default function AuthLayout({ title, subtitle, children }) {
       <div className="relative hidden w-1/2 flex-col justify-between overflow-hidden bg-ink-950 p-12 text-white lg:flex">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(209,168,91,0.18),transparent_45%)]" />
         <Link to="/" className="relative z-10 flex items-center gap-2.5">
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-accent-400 text-sm font-bold text-ink-950">K</div>
+          <BrandMark size={36} />
           <span className="text-lg font-semibold">Kotka Trading</span>
         </Link>
 
@@ -39,7 +40,7 @@ export default function AuthLayout({ title, subtitle, children }) {
       <div className="flex w-full flex-col justify-center px-6 py-12 sm:px-12 lg:w-1/2 lg:px-20">
         <div className="mx-auto w-full max-w-sm">
           <div className="mb-8 flex items-center gap-2.5 lg:hidden">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent-500 text-sm font-bold text-ink-950 dark:bg-accent-400">K</div>
+            <BrandMark size={32} />
             <span className="text-sm font-semibold text-ink-900 dark:text-ink-50">Kotka Trading</span>
           </div>
           <h1 className="text-2xl font-semibold tracking-tight text-ink-900 dark:text-ink-50">{title}</h1>

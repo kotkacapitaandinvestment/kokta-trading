@@ -136,6 +136,9 @@ researchRouter.post('/:subject/refresh', asyncHandler(async (req, res) => {
 }));
 
 researchRouter.get('/:subject/history', asyncHandler(async (req, res) => {
+  const settings = await loadSettings();
+  const access = await accessFor(req.userId, settings);
+  if (!access.allowed) return res.status(403).json({ error: access.reason });
   const parsed = parseSubject(req.params.subject);
   if (!parsed) return res.status(404).json({ error: 'Unknown instrument.' });
   res.json({ history: await reportHistory(parsed.kind, parsed.subject, 120) });

@@ -21,12 +21,6 @@ export function AuthProvider({ children }) {
     return user;
   };
 
-  const loginWithProvider = async (provider) => {
-    const { user } = await api.post('/auth/provider', { provider });
-    setUser(user);
-    return user;
-  };
-
   const signup = async ({ name, email, password }) => {
     const { user } = await api.post('/auth/signup', { name, email, password });
     setUser(user);
@@ -38,13 +32,8 @@ export function AuthProvider({ children }) {
     setUser(null);
   };
 
-  const setRole = async (role) => {
-    const { user } = await api.patch('/auth/role', { role });
-    setUser(user);
-  };
-
   const value = useMemo(
-    () => ({ user, loading, login, loginWithProvider, signup, logout, setRole, isAuthenticated: !!user }),
+    () => ({ user, loading, login, signup, logout, isAuthenticated: !!user }),
     [user, loading],
   );
 
