@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import clsx from 'clsx';
 import { ArrowDownRight, ArrowUpRight, Info, Landmark, MessagesSquare } from 'lucide-react';
 import { api } from '../../../lib/api';
+import { askKotkaLink } from '../../../lib/askKotka';
 import PriceChart from '../../community/components/PriceChart';
 
 const usd = (v) => {
@@ -65,7 +66,8 @@ export default function CryptoView({ symbol, onInstrumentChange }) {
       <div className="flex items-start gap-3 rounded-2xl border border-accent-500/25 bg-accent-50/50 p-4 text-sm text-ink-700 dark:bg-accent-900/10 dark:text-ink-200">
         <Info className="mt-0.5 h-4 w-4 shrink-0 text-accent-600 dark:text-accent-400" />
         <p>
-          <span className="font-semibold">{data.asset} is not scored.</span> Kotka's fundamental scores come from an economy's official data: growth, inflation, policy, external balance and public finances. {data.asset} has no issuing economy, so below is the verified context that does exist, each with its source.
+          <span className="font-semibold">{data.asset} is not scored.</span> Kotka's fundamental scores come from an economy's official data: growth, inflation, policy, external balance and public finances. {data.asset} has no issuing economy, so below is the verified context that does exist, each with its source.{' '}
+          <Link to={askKotkaLink(`What does Kotka's data say about ${data.asset} right now: price structure, market data, network activity and the dollar side?`, 'Crypto')} className="font-medium text-accent-700 underline-offset-2 hover:underline dark:text-accent-300">Ask Kotka about {data.asset}</Link>
         </p>
       </div>
 

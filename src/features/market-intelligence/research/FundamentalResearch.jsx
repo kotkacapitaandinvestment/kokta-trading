@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import clsx from 'clsx';
-import { AlertTriangle, CalendarClock, Check, Globe2, History, Landmark, Layers, Library, Loader2, RefreshCw, Scale } from 'lucide-react';
+import { AlertTriangle, CalendarClock, Check, Globe2, History, Landmark, Layers, Library, Loader2, RefreshCw, Scale, Sparkles } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { askKotkaLink } from '../../../lib/askKotka';
 import Button from '../../../components/ui/Button';
 import EmptyState from '../../../components/ui/EmptyState';
 import Skeleton from '../../../components/ui/Skeleton';
@@ -205,6 +207,17 @@ function ResearchView({ config, subject, onInstrumentChange }) {
           <FreshnessStrip freshness={freshness} report={report} />
           <div className="flex shrink-0 items-center gap-3">
             {config.usage?.limit !== null && config.usage?.limit !== undefined ? <span className="text-[11px] text-ink-400">{config.usage.refreshesToday}/{config.usage.limit} refreshes today</span> : null}
+            {report ? (
+              <Button
+                as={Link}
+                to={askKotkaLink(`Walk me through the ${report.kind === 'pair' ? `${report.base}/${report.quote}` : report.subject} fundamental research: what drives the verdict, what changed recently, and what could change the view.`)}
+                variant="ghost"
+                size="sm"
+                icon={Sparkles}
+              >
+                Ask Kotka
+              </Button>
+            ) : null}
             <Button
               variant="secondary"
               size="sm"

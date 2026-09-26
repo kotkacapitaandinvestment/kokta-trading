@@ -5,6 +5,7 @@ import { ArrowDownRight, ArrowUpRight, Info, Landmark, Sparkles } from 'lucide-r
 import { api } from '../../../lib/api';
 import { useRealtime, useChannels } from '../realtime';
 import { price, signedPct, timeAgo } from '../util';
+import { askKotkaLink, aiMarketFor } from '../../../lib/askKotka';
 import { FollowButton } from '../components/Buttons';
 import PostCard from '../components/PostCard';
 import Composer from '../components/Composer';
@@ -267,7 +268,7 @@ export default function MarketRoom() {
           <span>{room.fundamental.score != null ? `Fundamentals ${room.fundamental.score}/100 ${room.fundamental.condition}` : 'Fundamentals: n/a'}</span>
           <span>{room.sentiment.total ? `Community ${room.sentiment.bullishPct}% bullish · ${room.sentiment.neutralPct}% neutral · ${room.sentiment.bearishPct}% bearish` : 'Community sentiment: no views yet'}</span>
           <span>{room.room.participants24h ? `${room.room.participants24h} trader${room.room.participants24h === 1 ? '' : 's'} discussing today` : 'Room quiet today'}</span>
-          <Link to={`/app/ai?prompt=${encodeURIComponent(`Give me context on ${room.instrument.display} right now: structure, volatility, fundamentals and upcoming events. No signals.`)}`} className="ml-auto inline-flex items-center gap-1 font-medium text-accent-700 hover:underline dark:text-accent-300"><Sparkles className="h-3.5 w-3.5" /> Ask Kotka</Link>
+          <Link to={askKotkaLink(`Give me context on ${room.instrument.display} right now: structure, volatility, fundamentals, sentiment and upcoming events.`, aiMarketFor(room.instrument.market))} className="ml-auto inline-flex items-center gap-1 font-medium text-accent-700 hover:underline dark:text-accent-300"><Sparkles className="h-3.5 w-3.5" /> Ask Kotka</Link>
         </div>
       </header>
       <nav className="-mx-1 flex gap-1 overflow-x-auto px-1" aria-label="Market room">

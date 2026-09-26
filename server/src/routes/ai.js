@@ -3,14 +3,37 @@ import { prisma } from '../lib/prisma.js';
 import { requireAuth } from '../middleware/auth.js';
 import { nvidiaChatCompletionStream } from '../lib/nvidia.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
-import { TOOL_DEFINITIONS, executeToolCall } from '../lib/aiTools.js';
+import { TOOL_DEFINITIONS, executeToolCall, toolStatus, serializeToolResult } from '../lib/aiTools.js';
+import { groundingCalls } from '../lib/aiGrounding.js';
 import { connection, openStreamWithFallback } from '../lib/aiModels.js';
 import { logUsage, usageSnapshot, limitReached, tonePreference } from '../lib/aiUsage.js';
 
 export const aiRouter = Router();
 aiRouter.use(requireAuth);
 
+// What Kotka contains, so the model knows what it can look up and where to
+// send the trader. Kept in sync with the tools in lib/aiTools.js.
+const APP_MAP = `Kotka's sections, and the tools that read them:
+- Dashboard: today's risk used vs daily loss limit, checklist progress, discipline score (get_today_status).
+- Journal and Analytics: the trader's logged trades and computed stats (get_recent_trades, get_trader_stats, get_open_positions).
+- Checklist: the eight pre-trade conditions ticked today (get_today_status).
+- Market Intelligence: end-of-day market pulse for all covered markets (get_market_snapshot, get_instrument_context), Fundamental Research on USD, EUR, GBP, JPY, AUD, CAD, CHF, NZD and their pairs from official data (list_research_coverage, get_fundamental_research), and Bitcoin/Ether context (get_crypto_context).
+- Events: official release and central-bank calendar for USD and EUR (get_economic_calendar).
+- News: wire stories and Fed/ECB releases tagged to markets (get_market_news).
+- Community: market rooms, sentiment and trade ideas from other traders (get_community_view).
+
+Using Kotka's data:
+- For any question about markets, prices, research, scores, central banks, events, news, sentiment, or the trader's own trades and stats, use the tool results. Never answer those from memory or general knowledge.
+- Only state figures, dates, events, forecasts, scores and headlines that appear in tool results in this conversation. If what you need isn't there, call the right tool; if Kotka doesn't have it, say so. Never fill a gap with a plausible number (for example a forecast the calendar doesn't list).
+- Call several tools at once when a question needs them (e.g. research plus calendar).
+- Say how fresh the data is: prices are end-of-day closes (give the close date), research has a researched-at date.
+- If a tool says something is unavailable, say so plainly and, where useful, where in Kotka the trader can find or generate it.
+- Fundamentals, sentiment and news are context, not signals. Explain what the data says and what could change it; never turn it into a buy or sell call or a price target.
+- When pointing to a page, name the section (e.g. "Market Intelligence, EUR/USD report").
+- Write dates as "26 Sep 2026" and times as "12:30 UTC"; say how old research is in hours or days, never a raw timestamp.`;
+
 function systemPromptFor(market, timeframe) {
+  const now = new Date();
   return `You are Kotka AI, an institutional trading mentor inside the Kotka Trading platform. You are not a signal provider, broker, or copy-trading bot, and you must never behave like one.
 
 Your job is to build professional traders, not find them trades:
@@ -18,7 +41,8 @@ Your job is to build professional traders, not find them trades:
 - Evaluate probability and risk before entry ideas.
 - Ask sharp, Socratic follow-up questions rather than handing over conclusions.
 - Never say "buy" or "sell" as an instruction, and never give a specific price target as advice.
-- Keep responses tight: 2-4 sentences, direct, no filler, no disclaimers about not being financial advice repeated every message.
+- Coaching replies: tight, 2-4 sentences, direct, no filler, no repeated disclaimers.
+- Questions about Kotka's data (research, markets, events, news, the trader's stats): lead with the answer in one or two sentences, then up to five short "- " bullets that add the supporting figures and their dates (don't repeat the lead). Use **bold** sparingly for the key number. No tables, no headings, no closing summary.
 
 You have deep, working fluency in three domains. Reach for this vocabulary naturally when it's relevant, not as a performance:
 
@@ -32,7 +56,10 @@ Use this depth to sharpen your Socratic questions — ask whether their order bl
 
 Write in plain sentences and don't use em dashes.
 
-Current context: the trader is discussing the ${market} market on the ${timeframe} timeframe.`;
+${APP_MAP}
+
+Today is ${now.toISOString().slice(0, 10)} (${now.toUTCString().slice(0, 3)}), ${now.toISOString().slice(11, 16)} UTC.
+Current context: the trader has the ${market} market and ${timeframe} timeframe selected (a hint, not a limit; answer about whatever they ask).`;
 }
 
 function toNvidiaMessage(m) {
@@ -157,7 +184,29 @@ aiRouter.post('/conversations/:id/messages', asyncHandler(async (req, res) => {
       ...priorMessages.map(toNvidiaMessage),
     ];
 
-    const MAX_TOOL_ROUNDS = 3;
+    // Data questions are grounded before the model answers (see
+    // lib/aiGrounding.js); the vision model takes no tool results.
+    const grounding = hasImage ? [] : groundingCalls(content);
+    if (grounding.length) {
+      grounding.forEach((c) => writeEvent(res, { type: 'status', text: toolStatus(c.name, c.args) }));
+      const results = await Promise.all(
+        grounding.map((c) =>
+          executeToolCall(c.name, c.args, req.userId).catch((err) => {
+            console.error(`AI grounding ${c.name} failed:`, err.message);
+            return { available: false, reason: 'That data could not be loaded right now.' };
+          }),
+        ),
+      );
+      conversationMessages.push({
+        role: 'assistant',
+        content: null,
+        tool_calls: grounding.map((c, i) => ({ id: `kotka_${i}`, type: 'function', function: { name: c.name, arguments: JSON.stringify(c.args) } })),
+      });
+      grounding.forEach((c, i) => conversationMessages.push({ role: 'tool', tool_call_id: `kotka_${i}`, content: serializeToolResult(results[i]) }));
+    }
+
+    // Up to three rounds of lookups, then a final answer without tools.
+    const MAX_TOOL_ROUNDS = 4;
     let round = 0;
     let finalReached = false;
 
@@ -174,6 +223,7 @@ aiRouter.post('/conversations/:id/messages', asyncHandler(async (req, res) => {
           model: m,
           messages: conversationMessages,
           tools: hasImage || isLastAllowedRound ? undefined : TOOL_DEFINITIONS,
+          maxTokens: 1000,
           topP: settings.topP,
           extraBody: settings.extraBody,
         });
@@ -204,6 +254,11 @@ aiRouter.post('/conversations/:id/messages', asyncHandler(async (req, res) => {
       }
 
       if (toolCalls?.length && !isLastAllowedRound) {
+        // Keep any lead-in sentence ("Let me check...") apart from the answer.
+        if (roundText.trim()) {
+          full += '\n\n';
+          writeEvent(res, { type: 'delta', text: '\n\n' });
+        }
         conversationMessages.push({
           role: 'assistant',
           content: roundText || null,
@@ -213,20 +268,26 @@ aiRouter.post('/conversations/:id/messages', asyncHandler(async (req, res) => {
             function: { name: tc.name, arguments: tc.arguments },
           })),
         });
-        for (const tc of toolCalls) {
+        // Lookups in a round run in parallel; results go back in call order.
+        const calls = toolCalls.map((tc) => {
           let args = {};
           try {
             args = tc.arguments ? JSON.parse(tc.arguments) : {};
           } catch {
             args = {};
           }
-          const result = await executeToolCall(tc.name, args, req.userId);
-          conversationMessages.push({
-            role: 'tool',
-            tool_call_id: tc.id,
-            content: JSON.stringify(result),
-          });
-        }
+          writeEvent(res, { type: 'status', text: toolStatus(tc.name, args) });
+          return { tc, args };
+        });
+        const results = await Promise.all(
+          calls.map(({ tc, args }) =>
+            executeToolCall(tc.name, args, req.userId).catch((err) => {
+              console.error(`AI tool ${tc.name} failed:`, err.message);
+              return { available: false, reason: 'That data could not be loaded right now.' };
+            }),
+          ),
+        );
+        calls.forEach(({ tc }, i) => conversationMessages.push({ role: 'tool', tool_call_id: tc.id, content: serializeToolResult(results[i]) }));
       } else {
         finalReached = true;
       }

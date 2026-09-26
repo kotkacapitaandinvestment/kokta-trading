@@ -12,6 +12,17 @@ import ChatMessage from './components/ChatMessage';
 import { markets, timeframes } from './options';
 import { api } from '../../lib/api';
 
+// Starting points that show what Kotka can read. Each is answered from live
+// app data, not general knowledge.
+const SUGGESTIONS = [
+  'Which currency is fundamentally strongest right now?',
+  'Summarise the EUR/USD research and what could change it',
+  'What high-impact releases are coming this week?',
+  'How volatile is gold compared with its usual range?',
+  'What changed in the US dollar research recently?',
+  'How am I doing against my risk rules today?',
+];
+
 export default function KotkaAI() {
   const [conversations, setConversations] = useState(null);
   const [activeId, setActiveId] = useState(null);
@@ -20,8 +31,13 @@ export default function KotkaAI() {
   const [showHistory, setShowHistory] = useState(false);
   const [market, setMarket] = useState('Forex');
   const [timeframe, setTimeframe] = useState('15m');
-  const [params] = useSearchParams();
+  const [params, setParams] = useSearchParams();
   const [input, setInput] = useState(() => (params.get('prompt') ?? '').slice(0, 2000));
+  const [status, setStatus] = useState(null);
+  // "Ask Kotka" links elsewhere in the app arrive with ?prompt= (and &send=1
+  // to ask straight away); they get a fresh conversation.
+  const booted = useRef(false);
+  const autoSend = useRef(params.get('prompt') && params.get('send') === '1');
   const [pendingImage, setPendingImage] = useState(null);
   const [thinking, setThinking] = useState(false);
   const [lastSource, setLastSource] = useState(null);
@@ -29,12 +45,25 @@ export default function KotkaAI() {
   const fileInputRef = useRef(null);
 
   useEffect(() => {
-    api.get('/ai/conversations').then(({ conversations: list }) => {
+    if (booted.current) return;
+    booted.current = true;
+    const fromLink = params.get('prompt');
+    const linkMarket = markets.includes(params.get('market')) ? params.get('market') : null;
+    if (linkMarket) setMarket(linkMarket);
+    api.get('/ai/conversations').then(async ({ conversations: list }) => {
+      if (fromLink) {
+        const { conversation } = await api.post('/ai/conversations', { market: linkMarket ?? 'Forex' });
+        setMessagesCache((prev) => ({ ...prev, [conversation.id]: [] }));
+        setConversations([conversation, ...list]);
+        setActiveId(conversation.id);
+        setParams({}, { replace: true });
+        return;
+      }
       setConversations(list);
       if (list.length) setActiveId(list[0].id);
     });
     api.get('/ai/usage').then(setUsage);
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!activeId || messagesCache[activeId]) return;
@@ -73,9 +102,10 @@ export default function KotkaAI() {
     reader.readAsDataURL(file);
   };
 
-  const handleSend = async () => {
-    if ((!input.trim() && !pendingImage) || !active || thinking) return;
-    const content = input.trim();
+  const handleSend = async (override) => {
+    const text = typeof override === 'string' ? override : input;
+    if ((!text.trim() && !pendingImage) || !active || thinking) return;
+    const content = text.trim();
     const image = pendingImage;
     const conversationId = active.id;
     const wasEmpty = (messagesCache[conversationId] ?? []).length === 0;
@@ -127,7 +157,10 @@ export default function KotkaAI() {
 
           if (event.type === 'meta') {
             setLastSource(event.source);
+          } else if (event.type === 'status') {
+            setStatus(event.text);
           } else if (event.type === 'delta') {
+            if (event.text.trim()) setStatus(null);
             assembled += event.text;
             if (!placeholderAdded) {
               placeholderAdded = true;
@@ -165,8 +198,15 @@ export default function KotkaAI() {
       }));
     } finally {
       setThinking(false);
+      setStatus(null);
     }
   };
+
+  useEffect(() => {
+    if (!autoSend.current || !active || !messagesCache[active.id] || !input.trim()) return;
+    autoSend.current = false;
+    handleSend();
+  }); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!conversations) return null;
 
@@ -265,17 +305,24 @@ export default function KotkaAI() {
                       Describe your setup or upload a chart. I'll question your structure, your risk, and your bias before
                       we talk direction.
                     </p>
-                    <Hint id="ai-entry-stop" className="mt-5 max-w-sm text-left">Include your entry, stop and why. Kotka pushes back hardest on the reason.</Hint>
+                    <div className="mt-5 flex max-w-lg flex-wrap justify-center gap-1.5">
+                      {SUGGESTIONS.map((q) => (
+                        <button key={q} type="button" onClick={() => handleSend(q)} disabled={limitReached} className="rounded-full border border-ink-200 px-3 py-1.5 text-xs text-ink-600 transition-colors hover:border-accent-500 hover:text-ink-900 disabled:opacity-50 dark:border-ink-700 dark:text-ink-300 dark:hover:text-ink-50">
+                          {q}
+                        </button>
+                      ))}
+                    </div>
+                    <Hint id="ai-sees-app" className="mt-4 max-w-sm text-left">Kotka reads your journal, the research, market data, the calendar, news and Community, so ask about any of it.</Hint>
                   </div>
                 ) : (
                   activeMessages.map((m) => <ChatMessage key={m.id} {...m} />)
                 )}
-                {thinking && !activeMessages.some((m) => m.id.startsWith('local-assistant-')) ? (
-                  <div className="flex items-center gap-2 text-xs text-ink-400">
+                {thinking && (status || !activeMessages.some((m) => m.id.startsWith('local-assistant-'))) ? (
+                  <div className="flex items-center gap-2 text-xs text-ink-400" role="status">
                     <span className="flex h-8 w-8 items-center justify-center rounded-full bg-ink-900 text-white dark:bg-white dark:text-ink-900">
                       <Sparkles className="h-4 w-4 animate-pulse" />
                     </span>
-                    Kotka is thinking…
+                    {status ? `${status}…` : 'Kotka is thinking…'}
                   </div>
                 ) : null}
               </div>
@@ -319,7 +366,7 @@ export default function KotkaAI() {
                     }}
                     rows={1}
                     disabled={limitReached}
-                    placeholder="Explain your setup, thesis, or paste a level…"
+                    placeholder="Ask about a market, the research, your trades, or explain a setup…"
                     className="h-10 max-h-32 flex-1 resize-none rounded-lg border border-ink-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-ink-400 disabled:opacity-50 dark:border-ink-700 dark:bg-ink-800 dark:text-ink-100"
                   />
                   <Button onClick={handleSend} icon={Send} size="md" disabled={thinking || limitReached} aria-label="Send">
