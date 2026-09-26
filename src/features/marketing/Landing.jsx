@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { ArrowRight, Brain, ShieldCheck, LineChart, NotebookPen, Gamepad2, Dna } from 'lucide-react';
+import { ArrowRight, Brain, ShieldCheck, LineChart, NotebookPen } from 'lucide-react';
 import Button from '../../components/ui/Button';
 import Card from '../../components/ui/Card';
 
@@ -23,16 +23,6 @@ const pillars = [
     icon: LineChart,
     title: 'Institutional analytics',
     body: 'Win rate, expectancy, profit factor, and rule-violation tracking — the numbers a prop desk actually watches.',
-  },
-  {
-    icon: Gamepad2,
-    title: 'Simulator & replay',
-    body: 'Rehearse decisions under Institutional Chaos conditions, then replay real trades with AI critique.',
-  },
-  {
-    icon: Dna,
-    title: 'Trader DNA',
-    body: 'A living profile of your patience, discipline, execution and psychology — scored, tracked, and improved.',
   },
 ];
 
@@ -78,7 +68,7 @@ export default function Landing() {
       </section>
 
       <section className="mx-auto max-w-7xl px-6 pb-24">
-        <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-5 sm:grid-cols-2">
           {pillars.map((p) => (
             <Card key={p.title} className="p-6" hover>
               <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-xl bg-ink-50 dark:bg-ink-800">

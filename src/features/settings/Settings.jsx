@@ -203,7 +203,7 @@ export default function Settings() {
           {active === 'privacy' ? (
             <div className="space-y-4">
               <h3 className="text-sm font-semibold text-ink-900 dark:text-ink-50">Privacy</h3>
-              <Toggle checked={false} onChange={() => {}} label="Share anonymized data for benchmark analytics" hint="Helps improve Trader DNA benchmarks across the platform." />
+              <Toggle checked={false} onChange={() => {}} label="Share anonymized data for benchmark analytics" hint="Helps improve benchmark analytics across the platform." />
               <Button variant="danger" size="sm">Delete my account</Button>
             </div>
           ) : null}

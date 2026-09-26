@@ -69,8 +69,8 @@ export async function fetchMassiveVolatility(apiKey, days = 14) {
   return items;
 }
 
-// Generic historical bar fetch, used by both volatility (daily) and the
-// trading simulator (intraday). Returns raw {t,o,h,l,c,v} bar objects.
+// Generic historical bar fetch (daily bars for Fundamental Research spot
+// performance). Returns raw {t,o,h,l,c,v} bar objects.
 export async function fetchHistoricalBars(apiKey, ticker, multiplier, unit, from, to) {
   const data = await massiveGet(apiKey, `/v2/aggs/ticker/${ticker}/range/${multiplier}/${unit}/${from}/${to}`);
   return data?.results ?? [];

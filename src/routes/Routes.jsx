@@ -17,9 +17,6 @@ import Checklist from '../features/checklist/Checklist';
 import Analytics from '../features/analytics/Analytics';
 import Calculators from '../features/calculators/Calculators';
 import MarketIntelligence from '../features/market-intelligence/MarketIntelligence';
-import TraderDNA from '../features/trader-dna/TraderDNA';
-import Simulator from '../features/simulator/Simulator';
-import Replay from '../features/replay/Replay';
 import Settings from '../features/settings/Settings';
 import Notifications from '../features/notifications/Notifications';
 
@@ -29,7 +26,6 @@ import AdminSubscriptions from '../features/admin/AdminSubscriptions';
 import AdminAIUsage from '../features/admin/AdminAIUsage';
 import AdminTradingStats from '../features/admin/AdminTradingStats';
 import AdminJournalStats from '../features/admin/AdminJournalStats';
-import AdminSimulatorStats from '../features/admin/AdminSimulatorStats';
 import AdminRevenue from '../features/admin/AdminRevenue';
 import AdminReports from '../features/admin/AdminReports';
 import AdminAnnouncements from '../features/admin/AdminAnnouncements';
@@ -69,9 +65,6 @@ export default function AppRoutes() {
         <Route path="analytics" element={<Analytics />} />
         <Route path="calculators" element={<Calculators />} />
         <Route path="market" element={<MarketIntelligence />} />
-        <Route path="trader-dna" element={<TraderDNA />} />
-        <Route path="simulator" element={<Simulator />} />
-        <Route path="replay" element={<Replay />} />
         <Route path="settings" element={<Settings />} />
         <Route path="notifications" element={<Notifications />} />
       </Route>
@@ -84,7 +77,6 @@ export default function AppRoutes() {
         <Route path="ai-usage" element={<AdminAIUsage />} />
         <Route path="trading-stats" element={<AdminTradingStats />} />
         <Route path="journal-stats" element={<AdminJournalStats />} />
-        <Route path="simulator-stats" element={<AdminSimulatorStats />} />
         <Route path="revenue" element={<AdminRevenue />} />
         <Route path="reports" element={<AdminReports />} />
         <Route path="announcements" element={<AdminAnnouncements />} />

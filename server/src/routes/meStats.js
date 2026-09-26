@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { prisma } from '../lib/prisma.js';
 import { requireAuth } from '../middleware/auth.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
-import { computeScores, computeIdentity, computeAnalytics, generatePsychologyInsights } from '../lib/traderMetrics.js';
+import { computeScores, computeAnalytics, generatePsychologyInsights } from '../lib/traderMetrics.js';
 
 export const meStatsRouter = Router();
 meStatsRouter.use(requireAuth);
@@ -22,13 +22,6 @@ async function getUserContext(userId) {
   const dailyLossLimit = settings?.tradingPreferences?.dailyLossLimit ?? 2;
   return { entries, openPositions, defaultRisk, dailyLossLimit };
 }
-
-meStatsRouter.get('/dna', asyncHandler(async (req, res) => {
-  const { entries, defaultRisk } = await getUserContext(req.userId);
-  const { scores, hasData } = computeScores(entries, defaultRisk);
-  const identity = computeIdentity(entries);
-  res.json({ scores, hasData, identity });
-}));
 
 meStatsRouter.get('/analytics', asyncHandler(async (req, res) => {
   const { entries } = await getUserContext(req.userId);

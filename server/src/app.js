@@ -10,7 +10,6 @@ import { adminIntegrationsRouter } from './routes/adminIntegrations.js';
 import { adminUsersRouter } from './routes/adminUsers.js';
 import { adminStatsRouter } from './routes/adminStats.js';
 import { aiRouter } from './routes/ai.js';
-import { simulatorRouter } from './routes/simulator.js';
 import { meStatsRouter } from './routes/meStats.js';
 import { marketDataRouter } from './routes/marketData.js';
 import { researchRouter } from './routes/research.js';
@@ -40,7 +39,6 @@ app.use('/api/admin/announcements', requireAdmin, createCrudRouter(prisma.announ
 app.use('/api/admin/market-news', requireAdmin, createCrudRouter(prisma.marketNewsItem, { orderBy: { publishedAt: 'desc' } }));
 app.use('/api/admin/stats', requireAdmin, adminStatsRouter);
 app.use('/api/ai', aiRouter);
-app.use('/api/simulator', simulatorRouter);
 app.use('/api/me', meStatsRouter);
 app.use('/api/market', marketDataRouter);
 app.use('/api/research', researchRouter);

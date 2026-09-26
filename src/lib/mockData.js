@@ -130,27 +130,6 @@ export const emotionBreakdown = [
   { emotion: 'Fearful', value: 7 },
 ];
 
-export const traderDNA = {
-  scores: [
-    { label: 'Patience', value: 78 },
-    { label: 'Discipline', value: 84 },
-    { label: 'Execution', value: 71 },
-    { label: 'Risk Control', value: 88 },
-    { label: 'Confidence', value: 66 },
-    { label: 'Consistency', value: 73 },
-    { label: 'Psychology', value: 69 },
-    { label: 'Institutional Thinking', value: 75 },
-  ],
-  bestSession: 'New York',
-  worstSession: 'Tokyo',
-  bestStrategy: 'Break of Structure',
-  worstHabit: 'Entering before full confirmation',
-  emotionalTrigger: 'Revenge trading after a stop-out',
-  mostProfitableSetup: 'Liquidity sweep into FVG continuation',
-  weakestMarket: 'GBP/JPY',
-  strongestMarket: 'EUR/USD',
-};
-
 export const psychologyInsights = [
   'You take 34% larger position sizes after a losing trade — a classic revenge-trading signature. Consider a mandatory cooldown after any stop-out.',
   'Your win rate during the London session (63%) is 15 points higher than Tokyo (48%). Consider concentrating size where your edge is proven.',
@@ -207,15 +186,8 @@ export const supportTickets = [
 
 export const auditLogs = [
   { id: 'a1', actor: 'James Okafor', action: 'Suspended user Sofia Novak', time: '2026-07-27 14:02' },
-  { id: 'a2', actor: 'System', action: 'Feature flag "replay-engine-v2" enabled for Institutional tier', time: '2026-07-26 09:11' },
   { id: 'a3', actor: 'James Okafor', action: 'Issued refund to Liam O\'Brien ($49.00)', time: '2026-07-24 16:40' },
   { id: 'a4', actor: 'System', action: 'Nightly analytics rollup completed (4m12s)', time: '2026-07-24 02:00' },
-];
-
-export const announcements = [
-  { id: 'an1', title: 'Trader DNA v2 is live', audience: 'All users', published: '2026-07-20', status: 'published' },
-  { id: 'an2', title: 'Scheduled maintenance — Aug 3, 02:00 UTC', audience: 'All users', published: '2026-07-28', status: 'scheduled' },
-  { id: 'an3', title: 'New Institutional Chaos simulator difficulty', audience: 'Premium', published: '2026-07-15', status: 'published' },
 ];
 
 export const revenueByMonth = [

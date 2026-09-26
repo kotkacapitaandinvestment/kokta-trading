@@ -41,65 +41,6 @@ adminStatsRouter.get('/ai-usage', asyncHandler(async (req, res) => {
   });
 }));
 
-adminStatsRouter.get('/simulator', asyncHandler(async (req, res) => {
-  const since30d = daysAgo(30);
-  const sessions = await prisma.simulatorSession.findMany({ where: { createdAt: { gte: since30d } } });
-  const trades = await prisma.simulatorTrade.findMany({
-    where: { session: { createdAt: { gte: since30d } } },
-    include: { session: { select: { symbol: true } } },
-  });
-
-  const sessions30d = sessions.length;
-  const completedSessions30d = sessions.filter((s) => s.status === 'completed').length;
-  const closedTrades = trades.filter((t) => t.status === 'closed');
-  const totalTrades30d = closedTrades.length;
-
-  const wins = closedTrades.filter((t) => t.result === 'win').length;
-  const avgWinRate = totalTrades30d ? Math.round((wins / totalTrades30d) * 100) : 0;
-
-  const withStop = closedTrades.filter((t) => t.stopLoss != null);
-  const avgExpectancyR = withStop.length
-    ? Math.round(
-        (withStop.reduce((s, t) => s + t.pnl / (Math.abs(t.entryPrice - t.stopLoss) * t.size), 0) / withStop.length) * 100,
-      ) / 100
-    : null;
-
-  const totalSimulatedPnl30d = Math.round(closedTrades.reduce((s, t) => s + t.pnl, 0) * 100) / 100;
-
-  const bySymbol = {};
-  for (const s of sessions) {
-    if (!bySymbol[s.symbol]) bySymbol[s.symbol] = { symbol: s.symbol, sessions: 0, trades: 0, wins: 0, totalPnl: 0 };
-    bySymbol[s.symbol].sessions += 1;
-  }
-  for (const t of closedTrades) {
-    const symbol = t.session.symbol;
-    if (!bySymbol[symbol]) bySymbol[symbol] = { symbol, sessions: 0, trades: 0, wins: 0, totalPnl: 0 };
-    bySymbol[symbol].trades += 1;
-    if (t.result === 'win') bySymbol[symbol].wins += 1;
-    bySymbol[symbol].totalPnl += t.pnl;
-  }
-  const symbolBreakdown = Object.values(bySymbol)
-    .map((s) => ({
-      symbol: s.symbol,
-      sessions: s.sessions,
-      trades: s.trades,
-      winRate: s.trades ? Math.round((s.wins / s.trades) * 100) : 0,
-      avgPnl: s.trades ? Math.round((s.totalPnl / s.trades) * 100) / 100 : 0,
-    }))
-    .sort((a, b) => b.sessions - a.sessions);
-
-  res.json({
-    sessions30d,
-    completedSessions30d,
-    totalTrades30d,
-    avgWinRate,
-    avgExpectancyR,
-    mostTradedSymbol: symbolBreakdown[0]?.symbol ?? null,
-    totalSimulatedPnl30d,
-    bySymbol: symbolBreakdown,
-  });
-}));
-
 adminStatsRouter.get('/trading', asyncHandler(async (req, res) => {
   const since30d = daysAgo(30);
   const entries = await prisma.journalEntry.findMany({ where: { createdAt: { gte: since30d } } });
@@ -159,14 +100,13 @@ adminStatsRouter.get('/overview', asyncHandler(async (req, res) => {
   const todayStart = startOfDay();
   const since30d = daysAgo(30);
 
-  const [totalUsers, newSignups30d, dau, mau, aiRequestsToday, journalEntries30d, simulatorSessions30d] = await Promise.all([
+  const [totalUsers, newSignups30d, dau, mau, aiRequestsToday, journalEntries30d] = await Promise.all([
     prisma.user.count(),
     prisma.user.count({ where: { createdAt: { gte: since30d } } }),
     prisma.user.count({ where: { lastLoginAt: { gte: todayStart } } }),
     prisma.user.count({ where: { lastLoginAt: { gte: since30d } } }),
     prisma.aIUsageLog.count({ where: { createdAt: { gte: todayStart } } }),
     prisma.journalEntry.count({ where: { createdAt: { gte: since30d } } }),
-    prisma.simulatorSession.count({ where: { createdAt: { gte: since30d } } }),
   ]);
 
   const dailyActive = [];
@@ -191,7 +131,6 @@ adminStatsRouter.get('/overview', asyncHandler(async (req, res) => {
       { feature: 'Kotka AI', count: aiUsageCount30d },
       { feature: 'Journal', count: journalEntries30d },
       { feature: 'Checklist', count: checklistDays30d },
-      { feature: 'Simulator', count: simulatorSessions30d },
     ].sort((a, b) => b.count - a.count),
   });
 }));

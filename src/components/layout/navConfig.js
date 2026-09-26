@@ -6,9 +6,6 @@ import {
   BarChart3,
   Calculator,
   Globe2,
-  Dna,
-  Gamepad2,
-  History,
   Bell,
   Settings,
   Users,
@@ -38,9 +35,6 @@ export const traderNav = [
   { to: '/app/analytics', label: 'Analytics', icon: BarChart3 },
   { to: '/app/calculators', label: 'Calculators', icon: Calculator },
   { to: '/app/market', label: 'Market Intelligence', icon: Globe2 },
-  { to: '/app/trader-dna', label: 'Trader DNA', icon: Dna, premium: true },
-  { to: '/app/simulator', label: 'Simulator', icon: Gamepad2 },
-  { to: '/app/replay', label: 'Replay Engine', icon: History, premium: true },
 ];
 
 export const traderNavSecondary = [
@@ -55,7 +49,6 @@ export const adminNav = [
   { to: '/admin/ai-usage', label: 'AI Usage', icon: Cpu },
   { to: '/admin/trading-stats', label: 'Trading Statistics', icon: LineChart },
   { to: '/admin/journal-stats', label: 'Journal Statistics', icon: NotebookPen },
-  { to: '/admin/simulator-stats', label: 'Simulator Statistics', icon: Gamepad2 },
   { to: '/admin/revenue', label: 'Revenue', icon: DollarSign },
   { to: '/admin/reports', label: 'Reports', icon: FileBarChart },
   { to: '/admin/announcements', label: 'Announcements', icon: Megaphone },
