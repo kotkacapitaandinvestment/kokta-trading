@@ -147,6 +147,8 @@ model AIUsageLog {
   @@index([createdAt])
 }
 
+// Legacy: the Simulator feature was removed on 2026-09-26. These tables and
+// their data are intentionally kept (owner's decision) — do not drop them.
 model SimulatorSession {
   id                  String    @id @default(cuid())
   userId              String

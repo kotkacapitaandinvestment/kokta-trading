@@ -73,11 +73,17 @@ export async function saveSettings(config, userId) {
 // Cron token: only a SHA-256 hash is stored; the plaintext is shown once.
 export const hashToken = (t) => crypto.createHash('sha256').update(t).digest('hex');
 
-export async function rotateCronToken(userId) {
-  const token = crypto.randomBytes(24).toString('base64url');
+export function generateCronToken() {
+  return crypto.randomBytes(24).toString('base64url');
+}
+
+// Persists a new token (hash only) plus the cron-job.org job it was synced to.
+export async function saveCronToken(token, userId, { jobId } = {}) {
   const settings = await loadSettings();
-  await saveSettings({ ...settings, cron: { ...settings.cron, tokenHash: hashToken(token), tokenHint: token.slice(-4) } }, userId);
-  return token;
+  await saveSettings(
+    { ...settings, cron: { ...settings.cron, tokenHash: hashToken(token), tokenHint: token.slice(-4), ...(jobId ? { jobId } : {}), rotatedAt: new Date().toISOString() } },
+    userId,
+  );
 }
 
 export function verifyCronToken(settings, presented) {

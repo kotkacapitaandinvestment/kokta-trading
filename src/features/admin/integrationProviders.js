@@ -1,4 +1,4 @@
-import { Sparkles, CreditCard, Globe2, Landmark } from 'lucide-react';
+import { Sparkles, CreditCard, Globe2, Landmark, CalendarClock } from 'lucide-react';
 
 export const INTEGRATION_PROVIDERS = [
   {
@@ -86,5 +86,14 @@ export const INTEGRATION_PROVIDERS = [
     description: 'Federal Reserve Bank of St. Louis API — US policy rates, inflation, GDP, labour and yield series for Fundamental Research.',
     fallbackNote: 'Optional. Without a key, Fundamental Research reads the same official series from FRED’s public CSV endpoint; a key gives the documented JSON API and higher reliability.',
     fields: [{ key: 'secret', label: 'API Key', type: 'password', placeholder: 'FRED API key (free at fred.stlouisfed.org)' }],
+  },
+  {
+    id: 'cronjob',
+    name: 'cron-job.org',
+    category: 'Scheduling',
+    icon: CalendarClock,
+    description: 'Runs the hourly job that refreshes Fundamental Research and re-tests the AI models. With a key here, rotating the cron token updates the job automatically.',
+    fallbackNote: 'Without a key, the cron token must be copied into cron-job.org by hand after every rotation (Admin → Fundamental Research).',
+    fields: [{ key: 'secret', label: 'API Key', type: 'password', placeholder: 'cron-job.org API key (Console → Settings)' }],
   },
 ];

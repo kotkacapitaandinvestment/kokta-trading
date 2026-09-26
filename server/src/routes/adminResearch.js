@@ -3,7 +3,9 @@ import { prisma } from '../lib/prisma.js';
 import { requireAuth, requireRole } from '../middleware/auth.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 import { CURRENCIES, SUPPORTED_CURRENCY_CODES, FACTORS } from '../lib/research/currencies.js';
-import { loadSettings, sanitizeSettings, saveSettings, rotateCronToken, SOURCE_KEYS } from '../lib/research/settings.js';
+import { loadSettings, sanitizeSettings, saveSettings, generateCronToken, saveCronToken, SOURCE_KEYS } from '../lib/research/settings.js';
+import { getCronJobOrgKey, syncCronJob, getCronJobStatus, CRON_PATH } from '../lib/cronJobOrg.js';
+import { cachedSource } from '../lib/research/cache.js';
 import { latestReportSummaries, freshnessOf } from '../lib/research/engine.js';
 import { RESEARCH_DEFAULT_MODEL } from '../lib/research/narrative.js';
 import { purgeExpiredSourceCache } from '../lib/research/cache.js';
@@ -16,7 +18,27 @@ const VALUATION_CLASSES = ['SUBSTANTIALLY UNDERVALUED', 'MODERATELY UNDERVALUED'
 
 function adminView(settings) {
   const { cron, ...rest } = settings;
-  return { ...rest, cron: { configured: !!cron.tokenHash, tokenHint: cron.tokenHint, batchSize: cron.batchSize } };
+  return { ...rest, cron: { configured: !!cron.tokenHash, tokenHint: cron.tokenHint, batchSize: cron.batchSize, jobId: cron.jobId ?? null, rotatedAt: cron.rotatedAt ?? null } };
+}
+
+// Live status of the cron-job.org job (cached 15 min; the API allows ~100 calls/day).
+async function cronJobView(settings, { fresh = false } = {}) {
+  const { configured, apiKey } = await getCronJobOrgKey();
+  if (!configured) return { managed: false };
+  if (!apiKey) return { managed: true, jobId: settings.cron?.jobId ?? null, error: 'The cron-job.org API key in Integrations is empty or unreadable.' };
+  if (!settings.cron?.jobId) return { managed: true, jobId: null };
+  try {
+    const { data } = await cachedSource(`cronjob:status:${settings.cron.jobId}`, 15 * 60 * 1000, () => getCronJobStatus(apiKey, settings.cron.jobId), { bypass: fresh });
+    return { managed: true, jobId: settings.cron.jobId, status: data };
+  } catch (err) {
+    return { managed: true, jobId: settings.cron.jobId, error: err.message };
+  }
+}
+
+function publicAppUrl(req) {
+  if (process.env.PUBLIC_APP_URL) return process.env.PUBLIC_APP_URL.replace(/\/$/, '');
+  if (process.env.VERCEL_PROJECT_PRODUCTION_URL) return `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`;
+  return `${req.get('x-forwarded-proto')?.split(',')[0] ?? req.protocol}://${req.get('x-forwarded-host') ?? req.get('host')}`;
 }
 
 adminResearchRouter.get('/settings', asyncHandler(async (req, res) => {
@@ -25,6 +47,7 @@ adminResearchRouter.get('/settings', asyncHandler(async (req, res) => {
   const fred = await prisma.integration.findUnique({ where: { provider: 'fred' } });
   res.json({
     settings: adminView(settings),
+    cronJob: await cronJobView(settings),
     catalog: {
       currencies: SUPPORTED_CURRENCY_CODES.map((c) => ({
         code: c,
@@ -52,10 +75,35 @@ adminResearchRouter.put('/settings', requireRole('super_admin'), asyncHandler(as
   res.json({ settings: adminView(saved) });
 }));
 
+// Rotates the cron token. When a cron-job.org key is configured, the job is
+// updated first and the new token is only saved if that succeeds, so the
+// schedule and the token can never fall out of sync.
 adminResearchRouter.post('/cron-token', requireRole('super_admin'), asyncHandler(async (req, res) => {
-  const token = await rotateCronToken(req.userId);
-  const origin = `${req.get('x-forwarded-proto')?.split(',')[0] ?? req.protocol}://${req.get('x-forwarded-host') ?? req.get('host')}`;
-  res.json({ token, url: `${origin}/api/research/cron?token=${token}`, header: `Authorization: Bearer ${token}` });
+  const settings = await loadSettings();
+  const token = generateCronToken();
+  const url = `${publicAppUrl(req)}${CRON_PATH}`;
+  const { configured, apiKey } = await getCronJobOrgKey();
+  if (configured && !apiKey) {
+    return res.status(409).json({ error: 'The cron-job.org API key in Integrations is empty or unreadable, so the job could not be updated. The token was not changed.' });
+  }
+  if (!configured && settings.cron.jobId) {
+    return res.status(409).json({ error: `The current token is used by cron-job.org job #${settings.cron.jobId}. Add the cron-job.org API key in Integrations so the job can be updated; the token was not changed.` });
+  }
+
+  if (apiKey) {
+    let sync;
+    try {
+      sync = await syncCronJob({ apiKey, jobId: settings.cron.jobId, url, token });
+    } catch (err) {
+      return res.status(502).json({ error: `cron-job.org could not be updated, so the token was not changed: ${err.message}` });
+    }
+    await saveCronToken(token, req.userId, { jobId: sync.jobId });
+    const fresh = await loadSettings();
+    return res.json({ managed: true, jobId: sync.jobId, created: sync.created, cronJob: await cronJobView(fresh, { fresh: true }) });
+  }
+
+  await saveCronToken(token, req.userId);
+  res.json({ managed: false, token, url: `${url}?token=${token}`, header: `Authorization: Bearer ${token}` });
 }));
 
 adminResearchRouter.get('/status', asyncHandler(async (req, res) => {

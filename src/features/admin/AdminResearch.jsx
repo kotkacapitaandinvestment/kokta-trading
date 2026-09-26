@@ -262,16 +262,30 @@ function SettingsCard({ data, canEdit, onSaved }) {
   );
 }
 
-function CronCard({ settings, lastCronRunAt, canEdit, onRotated }) {
+function CronCard({ settings, cronJob, lastCronRunAt, canEdit, onRotated }) {
   const [issued, setIssued] = useState(null);
+  const [result, setResult] = useState(null);
+  const [error, setError] = useState(null);
   const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState(false);
+  const managed = cronJob?.managed;
+  const job = cronJob?.status;
+
   const rotate = async () => {
-    if (settings.cron.configured && !window.confirm('Generate a new token? The current cron-job.org URL will stop working.')) return;
+    const warning = managed
+      ? 'Generate a new token? Kotka will update the cron-job.org job automatically.'
+      : 'Generate a new token? The current cron-job.org URL will stop working until you paste the new one.';
+    if (settings.cron.configured && !window.confirm(warning)) return;
     setBusy(true);
+    setError(null);
+    setResult(null);
     try {
-      setIssued(await api.post('/admin/research/cron-token', {}));
+      const data = await api.post('/admin/research/cron-token', {});
+      if (data.managed) setResult(data);
+      else setIssued(data);
       onRotated();
+    } catch (err) {
+      setError(err.message);
     } finally {
       setBusy(false);
     }
@@ -281,20 +295,53 @@ function CronCard({ settings, lastCronRunAt, canEdit, onRotated }) {
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
   };
+
+  const badge = managed && job ? (job.enabled ? (job.lastStatusOk || job.lastStatus === 'Not executed yet' ? 'profit' : 'warning') : 'loss') : settings.cron.configured ? 'profit' : 'warning';
+  const badgeText = managed && job ? (job.enabled ? 'Scheduled' : 'Disabled on cron-job.org') : settings.cron.configured ? 'Token active' : 'Not configured';
+
   return (
     <Card>
       <CardHeader
         title="Scheduled refresh (cron-job.org)"
-        subtitle={settings.cron.configured ? `Token active (ends in ${settings.cron.tokenHint}). Last scheduled run: ${when(lastCronRunAt)}.` : 'Not configured. Reports refresh only when someone opens a stale report.'}
-        action={<Badge tone={settings.cron.configured ? 'profit' : 'warning'}>{settings.cron.configured ? 'Active' : 'Not configured'}</Badge>}
+        subtitle={managed ? `Managed automatically${cronJob.jobId ? ` · job #${cronJob.jobId}` : ''}. Last run seen by Kotka: ${when(lastCronRunAt)}.` : `Last scheduled run: ${when(lastCronRunAt)}.`}
+        action={<Badge tone={badge}>{badgeText}</Badge>}
       />
       <CardBody className="space-y-3 text-sm text-ink-600 dark:text-ink-300">
-        <p>Each call refreshes up to {settings.cron.batchSize} of the stalest enabled pairs in the background and answers immediately, so it fits cron-job.org's free-tier request timeout.</p>
-        <ol className="list-decimal space-y-1 pl-5 text-xs text-ink-500 dark:text-ink-400">
-          <li>Generate a token below and copy the URL (it is shown only once).</li>
-          <li>In cron-job.org, create a job with that URL, method GET, every 60 minutes.</li>
-          <li>The job's history should show HTTP 202 responses; runs appear under Recent runs as "cron".</li>
-        </ol>
+        <p>Each hourly call refreshes up to {settings.cron.batchSize} of the stalest pairs and re-tests the AI models, answering immediately so it fits cron-job.org's request timeout.</p>
+
+        {managed && job ? (
+          <dl className="grid grid-cols-1 gap-2 text-xs sm:grid-cols-3">
+            <div className="rounded-lg bg-ink-50 px-3 py-2 dark:bg-ink-800">
+              <dt className="text-ink-400">Next run</dt>
+              <dd className="mt-0.5 text-ink-800 dark:text-ink-100">{when(job.nextExecution)}</dd>
+            </div>
+            <div className="rounded-lg bg-ink-50 px-3 py-2 dark:bg-ink-800">
+              <dt className="text-ink-400">Last run</dt>
+              <dd className="mt-0.5 text-ink-800 dark:text-ink-100">{job.lastExecution ? when(job.lastExecution) : 'Not yet'}</dd>
+            </div>
+            <div className="rounded-lg bg-ink-50 px-3 py-2 dark:bg-ink-800">
+              <dt className="text-ink-400">Last result</dt>
+              <dd className={clsx('mt-0.5', job.lastStatusOk ? 'text-profit-600 dark:text-profit-400' : job.lastStatus === 'Not executed yet' ? 'text-ink-800 dark:text-ink-100' : 'text-loss-500')}>{job.lastStatus}</dd>
+            </div>
+          </dl>
+        ) : null}
+        {managed && cronJob.error ? <p className="text-xs text-loss-500">Could not read the job from cron-job.org: {cronJob.error}</p> : null}
+        {!managed ? (
+          <>
+            <ol className="list-decimal space-y-1 pl-5 text-xs text-ink-500 dark:text-ink-400">
+              <li>Generate a token below and copy the URL (it is shown only once).</li>
+              <li>In cron-job.org, create a job with that URL, method GET, every 60 minutes.</li>
+            </ol>
+            <p className="text-xs text-ink-400">Add a cron-job.org API key in Integrations to have Kotka keep the job in sync automatically.</p>
+          </>
+        ) : null}
+
+        {result ? (
+          <p className="rounded-lg bg-profit-50 p-3 text-xs text-profit-700 dark:bg-profit-500/10 dark:text-profit-400">
+            Token rotated and cron-job.org job #{result.jobId} {result.created ? 'created' : 'updated'}. The next scheduled run will use the new token.
+          </p>
+        ) : null}
+        {error ? <p className="rounded-lg bg-loss-50 p-3 text-xs text-loss-600 dark:bg-loss-500/10 dark:text-loss-400">{error}</p> : null}
         {issued ? (
           <div className="rounded-lg border border-accent-500/40 bg-accent-50 p-3 dark:bg-accent-900/20">
             <p className="mb-1 text-xs font-medium text-ink-800 dark:text-ink-100">Cron URL (copy it now; it will not be shown again)</p>
@@ -302,15 +349,14 @@ function CronCard({ settings, lastCronRunAt, canEdit, onRotated }) {
               <code className="min-w-0 flex-1 break-all font-mono text-[11px] text-ink-800 dark:text-ink-100">{issued.url}</code>
               <Button size="sm" variant="secondary" icon={copied ? CheckCircle2 : Copy} onClick={copy}>{copied ? 'Copied' : 'Copy'}</Button>
             </div>
-            <p className="mt-1.5 text-[11px] text-ink-500">Alternatively, call /api/research/cron with the header "{issued.header.split(' ').slice(0, 2).join(' ')} …".</p>
           </div>
         ) : null}
         {canEdit ? (
           <Button variant="secondary" size="sm" icon={busy ? Loader2 : KeyRound} disabled={busy} onClick={rotate}>
-            {settings.cron.configured ? 'Generate new token' : 'Generate token'}
+            {busy ? 'Rotating' : settings.cron.configured ? 'Generate new token' : 'Generate token'}
           </Button>
         ) : (
-          <p className="text-xs text-ink-400">Only a Super Admin can generate the cron token.</p>
+          <p className="text-xs text-ink-400">Only a Super Admin can rotate the cron token.</p>
         )}
       </CardBody>
     </Card>
@@ -509,7 +555,7 @@ export default function AdminResearch() {
       </div>
       <SettingsCard data={data} canEdit={canEdit} onSaved={() => { loadSettings(); loadStatus(); }} />
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-        <CronCard settings={data.settings} lastCronRunAt={status?.lastCronRunAt} canEdit={canEdit} onRotated={loadSettings} />
+        <CronCard settings={data.settings} cronJob={data.cronJob} lastCronRunAt={status?.lastCronRunAt} canEdit={canEdit} onRotated={loadSettings} />
         <AssessmentsCard catalog={data.catalog} />
       </div>
       <RunsCard />

@@ -9,6 +9,7 @@ import { paystackTestConnection } from '../lib/paystack.js';
 import { finnhubTestConnection } from '../lib/finnhub.js';
 import { massiveTestConnection } from '../lib/massive.js';
 import { fredTestConnection } from '../lib/research/sources/timeseries.js';
+import { cronJobOrgTestConnection } from '../lib/cronJobOrg.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 
 export const adminIntegrationsRouter = Router();
@@ -43,6 +44,7 @@ const TEST_CONNECTIONS = {
   finnhub: async (row) => finnhubTestConnection(decryptSecret(row.secretCipher)),
   massive: async (row) => massiveTestConnection(decryptSecret(row.secretCipher)),
   fred: async (row) => fredTestConnection(decryptSecret(row.secretCipher)),
+  cronjob: async (row) => cronJobOrgTestConnection(decryptSecret(row.secretCipher)),
 };
 
 function toPublicIntegration(row, extras = {}) {
@@ -70,7 +72,8 @@ adminIntegrationsRouter.get('/', asyncHandler(async (req, res) => {
 
 adminIntegrationsRouter.put('/:provider', asyncHandler(async (req, res) => {
   const { provider } = req.params;
-  const { secret, publicKey, config, enabled } = req.body ?? {};
+  const { publicKey, config, enabled } = req.body ?? {};
+  const secret = typeof req.body?.secret === 'string' ? req.body.secret.trim() : undefined;
 
   const existing = await prisma.integration.findUnique({ where: { provider } });
   if (!secret && !existing) {
