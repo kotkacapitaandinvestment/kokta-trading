@@ -1,10 +1,10 @@
 import { Router } from 'express';
 import { prisma } from '../lib/prisma.js';
 import { requireAuth } from '../middleware/auth.js';
-import { decryptSecret } from '../lib/crypto.js';
 import { nvidiaChatCompletionStream } from '../lib/nvidia.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 import { TOOL_DEFINITIONS, executeToolCall } from '../lib/aiTools.js';
+import { connection, openStreamWithFallback } from '../lib/aiModels.js';
 
 export const aiRouter = Router();
 aiRouter.use(requireAuth);
@@ -165,18 +165,12 @@ aiRouter.post('/conversations/:id/messages', asyncHandler(async (req, res) => {
     return res.end();
   }
 
-  if (hasImage && !integration.config?.visionModel) {
-    const reply = "Chart image analysis isn't configured yet — ask your admin to set a vision model in Integrations.";
-    writeEvent(res, { type: 'meta', source: 'vision_unconfigured' });
-    writeEvent(res, { type: 'delta', text: reply });
-    const saved = await prisma.aIMessage.create({ data: { conversationId: conversation.id, role: 'assistant', content: reply } });
-    await prisma.aIConversation.update({ where: { id: conversation.id }, data: { updatedAt: new Date() } });
-    logUsage(req.userId, 'vision_unconfigured', 'none', startedAt);
-    writeEvent(res, { type: 'done', messageId: saved.id });
-    return res.end();
-  }
-
-  const model = hasImage ? integration.config.visionModel : integration.config?.model;
+  // Chat and chart images each walk a chain of vetted models, so a retired
+  // or unavailable model falls through to the next one instead of breaking chat.
+  const role = hasImage ? 'vision' : 'chat';
+  let model = null;
+  let modelSettings = null;
+  const { apiKey, baseUrl } = connection(integration);
   writeEvent(res, { type: 'meta', source: 'nvidia' });
 
   let full = '';
@@ -196,13 +190,18 @@ aiRouter.post('/conversations/:id/messages', asyncHandler(async (req, res) => {
       let roundText = '';
       let toolCalls = null;
 
-      for await (const event of nvidiaChatCompletionStream({
-        apiKey: decryptSecret(integration.secretCipher),
-        baseUrl: integration.config?.baseUrl,
-        model,
-        messages: conversationMessages,
-        tools: hasImage || isLastAllowedRound ? undefined : TOOL_DEFINITIONS,
-      })) {
+      const makeStream = (m, settings) =>
+        nvidiaChatCompletionStream({
+          apiKey,
+          baseUrl,
+          model: m,
+          messages: conversationMessages,
+          tools: hasImage || isLastAllowedRound ? undefined : TOOL_DEFINITIONS,
+          topP: settings.topP,
+          extraBody: settings.extraBody,
+        });
+
+      const handle = (event) => {
         if (event.type === 'text') {
           roundText += event.text;
           full += event.text;
@@ -210,6 +209,21 @@ aiRouter.post('/conversations/:id/messages', asyncHandler(async (req, res) => {
         } else if (event.type === 'tool_calls') {
           toolCalls = event.toolCalls;
         }
+      };
+
+      // A hosted model occasionally answers with nothing at all; retry the
+      // round once rather than saving an empty reply.
+      for (let attempt = 0; attempt < 2 && !roundText && !toolCalls?.length; attempt++) {
+        let gen;
+        let first;
+        if (!model) {
+          ({ gen, first, model, settings: modelSettings } = await openStreamWithFallback(role, integration, makeStream));
+        } else {
+          gen = makeStream(model, modelSettings);
+          first = await gen.next();
+        }
+        if (!first.done) handle(first.value);
+        for await (const event of gen) handle(event);
       }
 
       if (toolCalls?.length && !isLastAllowedRound) {
@@ -241,6 +255,7 @@ aiRouter.post('/conversations/:id/messages', asyncHandler(async (req, res) => {
       }
     }
 
+    if (!full.trim()) throw new Error('NVIDIA API error (502): the model returned an empty reply');
     const saved = await prisma.aIMessage.create({ data: { conversationId: conversation.id, role: 'assistant', content: full } });
     await prisma.aIConversation.update({ where: { id: conversation.id }, data: { updatedAt: new Date() } });
     logUsage(req.userId, 'nvidia', model, startedAt);
@@ -255,7 +270,7 @@ aiRouter.post('/conversations/:id/messages', asyncHandler(async (req, res) => {
       writeEvent(res, { type: 'done', messageId: saved.id });
     } else {
       const saved = await prisma.aIMessage.create({ data: { conversationId: conversation.id, role: 'assistant', content: full } });
-      logUsage(req.userId, 'nvidia', model, startedAt);
+      logUsage(req.userId, 'nvidia', model ?? 'unknown', startedAt);
       writeEvent(res, { type: 'error', message: 'Stream interrupted, but the partial reply was saved.' });
       writeEvent(res, { type: 'done', messageId: saved.id });
     }

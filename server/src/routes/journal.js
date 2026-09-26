@@ -5,6 +5,7 @@ import { asyncHandler } from '../lib/asyncHandler.js';
 import { decryptSecret } from '../lib/crypto.js';
 import { MASSIVE_SYMBOLS, fetchHistoricalBars } from '../lib/massive.js';
 import { nvidiaChatCompletion } from '../lib/nvidia.js';
+import { connection, withModelFallback } from '../lib/aiModels.js';
 
 export const journalRouter = Router();
 journalRouter.use(requireAuth);
@@ -151,12 +152,17 @@ journalRouter.post('/:id/critique', asyncHandler(async (req, res) => {
   }
 
   try {
-    const critique = await nvidiaChatCompletion({
-      apiKey: decryptSecret(nvidiaRow.secretCipher),
-      baseUrl: nvidiaRow.config?.baseUrl,
-      model: nvidiaRow.config?.model,
-      messages: [{ role: 'user', content: critiquePrompt(entry, priceContext) }],
-      maxTokens: 300,
+    const { result: critique } = await withModelFallback('chat', nvidiaRow, async (model, settings) => {
+      const text = await nvidiaChatCompletion({
+        ...connection(nvidiaRow),
+        model,
+        messages: [{ role: 'user', content: critiquePrompt(entry, priceContext) }],
+        maxTokens: 300,
+        topP: settings.topP,
+        extraBody: settings.extraBody,
+      });
+      if (!text?.trim()) throw new Error('NVIDIA API error (502): empty reply');
+      return text;
     });
     res.json({ source: 'nvidia', critique });
   } catch (err) {

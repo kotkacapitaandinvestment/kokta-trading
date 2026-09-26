@@ -1,5 +1,5 @@
 export const NVIDIA_DEFAULT_BASE_URL = 'https://integrate.api.nvidia.com/v1';
-export const NVIDIA_DEFAULT_MODEL = 'meta/llama-3.1-70b-instruct';
+export const NVIDIA_DEFAULT_MODEL = 'nvidia/nemotron-3-super-120b-a12b';
 
 // Some hosted models fix sampling parameters (e.g. top_p must stay at its
 // default); pass topP: null to omit it.
@@ -37,7 +37,7 @@ export async function nvidiaChatCompletion({ apiKey, baseUrl, model, messages, m
 // toolCalls: [{id, name, arguments}] } event once the stream finishes.
 // `arguments` arrives fragmented as partial JSON strings across many chunks
 // (keyed by index) and must be concatenated; this accumulates that for you.
-export async function* nvidiaChatCompletionStream({ apiKey, baseUrl, model, messages, maxTokens = 600, tools }) {
+export async function* nvidiaChatCompletionStream({ apiKey, baseUrl, model, messages, maxTokens = 600, tools, topP = 0.9, extraBody = {} }) {
   const res = await fetch(`${baseUrl}/chat/completions`, {
     method: 'POST',
     headers: {
@@ -49,10 +49,11 @@ export async function* nvidiaChatCompletionStream({ apiKey, baseUrl, model, mess
       model,
       messages,
       temperature: 0.5,
-      top_p: 0.9,
+      ...(topP === null ? {} : { top_p: topP }),
       max_tokens: maxTokens,
       stream: true,
       ...(tools?.length ? { tools, tool_choice: 'auto' } : {}),
+      ...extraBody,
     }),
   });
 

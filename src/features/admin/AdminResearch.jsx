@@ -192,7 +192,7 @@ function SettingsCard({ data, canEdit, onSaved }) {
           label="Narrative model (NVIDIA)"
           value={form.model}
           placeholder={cat.defaultModel}
-          hint={`Leave blank to use the verified default (${cat.defaultModel}). ${data.integrations.nvidia ? 'Uses the NVIDIA key from Integrations.' : 'The NVIDIA integration is not configured, so reports use the rules narrative.'}`}
+          hint={`Leave blank to use the verified default (${cat.defaultModel}). If this model is retired, Kotka falls back to other vetted models automatically. ${data.integrations.nvidia ? 'Uses the NVIDIA key from Integrations.' : 'The NVIDIA integration is not configured, so reports use the rules narrative.'}`}
           onChange={(e) => set('model', e.target.value)}
           disabled={!canEdit}
         />

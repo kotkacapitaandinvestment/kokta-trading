@@ -50,6 +50,81 @@ function ProviderCard({ provider, integration, onOpen }) {
   );
 }
 
+const STATUS_TONE = { ok: 'profit', degraded: 'warning', retired: 'loss', unavailable: 'loss' };
+const when = (iso) => (iso ? new Date(iso).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'UTC' }) + ' UTC' : 'never');
+
+// Which model each feature is actually using, per-model health from the last
+// check, and a log of automatic switches.
+function ModelHealthPanel({ integration, onUpdated }) {
+  const [checking, setChecking] = useState(false);
+  const [error, setError] = useState(null);
+  if (!integration?.models) return null;
+  const health = integration.config?.modelHealth ?? {};
+  const events = integration.config?.modelEvents ?? [];
+  const models = [...new Set([...Object.values(integration.models.vetted).flat(), ...Object.keys(health)])];
+  const check = async () => {
+    setChecking(true);
+    setError(null);
+    try {
+      const { integration: updated } = await api.post('/admin/integrations/nvidia/health', {});
+      onUpdated(updated);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setChecking(false);
+    }
+  };
+  return (
+    <div className="space-y-4 border-t border-ink-100 pt-4 dark:border-ink-800">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <p className="text-sm font-semibold text-ink-900 dark:text-ink-50">Model health</p>
+          <p className="text-xs text-ink-400">Last checked {when(integration.config?.modelHealthCheckedAt)}</p>
+        </div>
+        <Button type="button" size="sm" variant="secondary" disabled={checking} icon={checking ? Loader2 : undefined} onClick={check}>
+          {checking ? 'Checking' : 'Check models now'}
+        </Button>
+      </div>
+      {error ? <p className="text-xs text-loss-500">{error}</p> : null}
+      <dl className="grid grid-cols-1 gap-2 text-xs sm:grid-cols-3">
+        {[['Chat', 'chat'], ['Vision', 'vision'], ['Research narrative', 'narrative']].map(([label, role]) => (
+          <div key={role} className="rounded-lg bg-ink-50 px-3 py-2 dark:bg-ink-800">
+            <dt className="text-ink-400">{label} in use</dt>
+            <dd className="mt-0.5 break-all font-mono text-[11px] text-ink-800 dark:text-ink-100">{integration.models.effective[role] ?? 'none available'}</dd>
+          </div>
+        ))}
+      </dl>
+      <ul className="space-y-1.5">
+        {models.map((m) => {
+          const h = health[m];
+          return (
+            <li key={m} className="flex items-start justify-between gap-3 text-xs">
+              <span className="break-all font-mono text-[11px] text-ink-600 dark:text-ink-300">{m}</span>
+              <span className="flex shrink-0 items-center gap-2">
+                {h?.latencyMs ? <span className="font-mono text-[11px] text-ink-400">{(h.latencyMs / 1000).toFixed(1)}s</span> : null}
+                <Badge tone={STATUS_TONE[h?.status] ?? 'neutral'}>{h?.status ?? 'untested'}</Badge>
+              </span>
+            </li>
+          );
+        })}
+      </ul>
+      {events.length ? (
+        <div>
+          <p className="mb-1.5 text-xs font-medium text-ink-700 dark:text-ink-200">Recent model events</p>
+          <ul className="space-y-1">
+            {events.slice(0, 8).map((e, i) => (
+              <li key={i} className="text-[11px] text-ink-500 dark:text-ink-400">
+                <span className="text-ink-400">{when(e.at)}</span> · {e.role}: <span className="font-mono">{e.model}</span> {e.type}
+                {e.switchedTo ? <> → now using <span className="font-mono">{e.switchedTo}</span></> : null}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 export default function AdminIntegrations() {
   const [integrations, setIntegrations] = useState({});
   const [loading, setLoading] = useState(true);
@@ -146,7 +221,7 @@ export default function AdminIntegrations() {
         ))}
       </div>
 
-      <Modal open={!!activeProvider} onClose={() => setActiveProvider(null)} title={activeProvider ? `Configure ${activeProvider.name}` : ''}>
+      <Modal open={!!activeProvider} onClose={() => setActiveProvider(null)} title={activeProvider ? `Configure ${activeProvider.name}` : ''} width={activeProvider?.id === 'nvidia' ? 'max-w-2xl' : 'max-w-lg'}>
         {activeProvider ? (
           <form onSubmit={handleSave} className="space-y-4">
             <p className="text-xs text-ink-400">{activeProvider.fallbackNote}</p>
@@ -203,6 +278,13 @@ export default function AdminIntegrations() {
                 {testResult.ok ? <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" /> : <XCircle className="mt-0.5 h-4 w-4 shrink-0" />}
                 <span>{testResult.message}</span>
               </div>
+            ) : null}
+
+            {activeProvider.id === 'nvidia' ? (
+              <ModelHealthPanel
+                integration={integrations.nvidia}
+                onUpdated={(updated) => setIntegrations((prev) => ({ ...prev, nvidia: updated }))}
+              />
             ) : null}
           </form>
         ) : null}

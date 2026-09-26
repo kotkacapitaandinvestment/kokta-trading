@@ -6,25 +6,33 @@ import { asyncHandler } from '../lib/asyncHandler.js';
 import { CURRENCIES, parseSubject } from '../lib/research/currencies.js';
 import { loadSettings, publicSettings, verifyCronToken } from '../lib/research/settings.js';
 import { latestReport, freshnessOf, activeRun, runResearch, reportHistory, runCronBatch, ResearchError } from '../lib/research/engine.js';
+import { checkModelHealth } from '../lib/aiModels.js';
 
 export const researchRouter = Router();
 
 const PREMIUM_ROLES = ['premium', 'admin', 'super_admin'];
 const ADMIN_ROLES = ['admin', 'super_admin'];
 
-// ── Scheduled refresh (cron-job.org) — token auth, no session ─────────────
+// ── Scheduled maintenance (cron-job.org) — token auth, no session ─────────
 // Responds immediately (cron-job.org's free tier times out after ~30s) and
-// keeps refreshing stale pairs in the background via waitUntil.
+// continues in the background via waitUntil: refreshes stale research pairs
+// and re-tests the AI models (throttled to every 6 hours), so a model NVIDIA
+// retires is replaced before traders hit it.
 researchRouter.all('/cron', asyncHandler(async (req, res) => {
   const settings = await loadSettings();
   const bearer = req.get('authorization')?.replace(/^Bearer\s+/i, '');
   const token = bearer || req.query.token;
   if (!verifyCronToken(settings, token)) return res.status(401).json({ error: 'Invalid or missing research cron token.' });
-  if (!settings.enabled) return res.json({ ok: true, skipped: 'Fundamental Research is disabled.' });
 
-  const job = runCronBatch().catch((err) => console.error('Research cron batch failed:', err));
-  waitUntil(job);
-  res.status(202).json({ ok: true, accepted: true, batchSize: settings.cron.batchSize, message: 'Refreshing the stalest enabled pairs in the background.' });
+  const jobs = [checkModelHealth({ narrativePreferred: settings.model?.trim() || undefined }).catch((err) => console.error('Model health check failed:', err))];
+  if (settings.enabled) jobs.push(runCronBatch().catch((err) => console.error('Research cron batch failed:', err)));
+  waitUntil(Promise.all(jobs));
+  res.status(202).json({
+    ok: true,
+    accepted: true,
+    research: settings.enabled ? `Refreshing up to ${settings.cron.batchSize} stale pairs.` : 'Fundamental Research is disabled.',
+    models: 'AI model health check runs at most every 6 hours.',
+  });
 }));
 
 researchRouter.use(requireAuth);

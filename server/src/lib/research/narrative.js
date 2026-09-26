@@ -7,15 +7,93 @@
 //   - any rejected or missing field falls back to deterministic rules text.
 
 import { prisma } from '../prisma.js';
-import { decryptSecret } from '../crypto.js';
-import { nvidiaChatCompletion, NVIDIA_DEFAULT_BASE_URL } from '../nvidia.js';
+import { nvidiaChatCompletion } from '../nvidia.js';
+import { VETTED_MODELS, connection, withModelFallback } from '../aiModels.js';
 
 const KINDS = ['FACT', 'SOURCE ASSESSMENT', 'KOTKA INTERPRETATION'];
 
-// Verified live on the configured NVIDIA account (clean JSON, ~3s). Admins can
-// override it in Fundamental Research settings.
-export const RESEARCH_DEFAULT_MODEL = 'moonshotai/kimi-k3';
-const TRADE_LANGUAGE = /\b(buy|buying|sell|selling|go long|go short|long position|short position|going long|going short|entry point|enter a (?:long|short)|take[- ]profit|stop[- ]loss|price target|bullish|bearish|trade idea|should trade)\b/i;
+// First vetted narrative model; admins can prefer another in research settings,
+// and a retired model falls through the chain in aiModels.js.
+export const RESEARCH_DEFAULT_MODEL = VETTED_MODELS.narrative[0];
+const TRADE_LANGUAGE = /\b(buy|buying|sell|selling|go long|go short|long position|short position|going long|going short|entry point|enter a (?:long|short)|take[- ]profit|stop[- ]loss|price target|bullish|bearish|trade idea|should trade|appreciat\w*|depreciat\w*)\b/i;
+
+// ── Consistency with the rule-based scores ────────────────────────────────
+// Numbers can be checked mechanically; direction can too, approximately. A
+// clause that credits a currency with a factor the scores say favours the
+// other currency (or blames it for one it scores positively on) is rejected.
+const CURRENCY_ALIASES = {
+  USD: /\b(USD|dollar|U\.?S\.?|United States|Fed|Federal Reserve|American)\b/i,
+  EUR: /\b(EUR|euro|euro area|eurozone|ECB)\b/i,
+  GBP: /\b(GBP|pound|sterling|UK|U\.K\.|United Kingdom|British|BoE|Bank of England)\b/i,
+  JPY: /\b(JPY|yen|Japan|Japanese|BoJ|Bank of Japan)\b/i,
+  CHF: /\b(CHF|franc|Swiss|Switzerland|SNB)\b/i,
+  CAD: /\b(CAD|Canadian|Canada|loonie|BoC)\b/i,
+  AUD: /\b(AUD|Australian|Australia|aussie|RBA)\b/i,
+  NZD: /\b(NZD|New Zealand|kiwi|RBNZ)\b/i,
+};
+const FACTOR_WORDS = {
+  fiscal: /\b(fiscal|deficits?|debt)\b/i,
+  growth: /\bgrowth\b|(?<!of )\bGDP\b/i, // "% of GDP" is a unit, not a growth claim
+  external: /\b(current account|external position|external balance)\b/i,
+  reserves: /\breserves?\b(?![- ]currency status)/i,
+  inflation: /\binflation\b/i,
+  financial_stability: /\b(financial stress|systemic stress|financial stability|CISS)\b/i,
+};
+const POSITIVE = /\b(support\w*|favou?r\w*|benefit\w*|advantage\w*|edge|strength\w*|stronger|backed|bolster\w*|helps?|underpin\w*|superior)\b/i;
+const NEGATIVE = /\b(weigh\w*|drag|headwinds?|weak\w*|pressure\w*|vulnerab\w*|burden\w*|hurt\w*|undermin\w*)\b/i;
+const CONCESSION = /^\s*(despite|although|though|even though|while|whereas|but|however|tempered|offset)\b/i;
+
+const COMPARISON = /\b(than|versus|vs\.?|compared (?:to|with)|relative to)\b/i;
+
+function clauses(text) {
+  return String(text)
+    .split(/(?<=[.;:])\s+/)
+    .flatMap((sentence) => {
+      // "While X, Y" / "Despite X, Y": X is a concession, Y is the claim.
+      const lead = sentence.match(/^\s*(despite|although|though|even though|while|whereas)\b[^,]*,\s*/i);
+      const parts = lead ? [lead[0], sentence.slice(lead[0].length)] : [sentence];
+      return parts.flatMap((part) => part.split(/,?\s+(?=(?:despite|although|though|even though|whereas|but|however)\b)/i));
+    });
+}
+
+// The currency a clause is about: the only one named, or in a comparison
+// ("X is stronger than Y") the one named first.
+function clauseSubject(clause, codes, isPair) {
+  const hits = codes
+    .map((c) => ({ c, i: clause.search(CURRENCY_ALIASES[c] ?? /$^/) }))
+    .filter((h) => h.i >= 0)
+    .sort((a, b) => a.i - b.i);
+  if (hits.length === 1) return hits[0].c;
+  if (hits.length > 1 && COMPARISON.test(clause)) return hits[0].c;
+  if (!hits.length && !isPair) return codes[0];
+  return null;
+}
+
+export function consistencyProblem(text, report) {
+  const codes = Object.keys(report.currencies);
+  const isPair = report.kind === 'pair';
+  const favours = isPair ? Object.fromEntries(report.pair.factors.filter((f) => f.available).map((f) => [f.key, f.favors])) : {};
+  for (const clause of clauses(text)) {
+    if (CONCESSION.test(clause)) continue;
+    const subject = clauseSubject(clause, codes, isPair);
+    if (!subject) continue;
+    const positive = POSITIVE.test(clause);
+    const negative = NEGATIVE.test(clause);
+    if (positive === negative) continue; // no clear direction
+    const other = codes.find((c) => c !== subject);
+    for (const [factor, words] of Object.entries(FACTOR_WORDS)) {
+      if (!words.test(clause)) continue;
+      const own = report.currencies[subject].factors[factor];
+      if (!own?.available) continue;
+      if (positive) {
+        if (isPair && favours[factor] === other) return `credits ${subject} with ${factor.replace('_', ' ')}, which the scores favour ${other} on`;
+        if (!isPair && own.score < 0) return `describes ${factor.replace('_', ' ')} as supportive although it scores ${own.score}`;
+      }
+      if (negative && own.score > 0) return `describes ${subject} ${factor.replace('_', ' ')} as a weakness although it scores +${own.score}`;
+    }
+  }
+  return null;
+}
 
 const sign = (s) => (s > 0 ? `+${s}` : `${s}`);
 
@@ -87,9 +165,11 @@ function numbersIn(text) {
   return [...String(text).matchAll(/\d+(?:\.\d+)?/g)].map((m) => m[0]);
 }
 
-function checkText(text, allowed) {
+function checkText(text, allowed, report) {
   if (typeof text !== 'string' || !text.trim()) return 'empty';
   if (TRADE_LANGUAGE.test(text)) return 'contains trade-signal language';
+  const inconsistent = report ? consistencyProblem(text, report) : null;
+  if (inconsistent) return `contradicts the scores: ${inconsistent}`;
   for (const raw of numbersIn(text)) {
     const n = Number(raw);
     const dp = raw.includes('.') ? raw.split('.')[1].length : 0;
@@ -206,12 +286,7 @@ export async function getNarrativeModel(settings) {
   const integration = await prisma.integration.findUnique({ where: { provider: 'nvidia' } }).catch(() => null);
   if (!settings.aiNarrative) return { available: false, reason: 'AI narrative disabled by an administrator.' };
   if (!integration || !integration.enabled || !integration.secretCipher) return { available: false, reason: 'AI integration not configured.' };
-  return {
-    available: true,
-    apiKey: decryptSecret(integration.secretCipher),
-    baseUrl: integration.config?.baseUrl || NVIDIA_DEFAULT_BASE_URL,
-    model: settings.model?.trim() || RESEARCH_DEFAULT_MODEL,
-  };
+  return { available: true, integration, preferred: settings.model?.trim() || undefined };
 }
 
 export async function generateNarrative(report, settings) {
@@ -219,41 +294,49 @@ export async function generateNarrative(report, settings) {
   const model = await getNarrativeModel(settings);
   if (!model.available) return { ...fallback, source: 'rules', model: null, validation: { accepted: [], rejected: [], note: model.reason } };
 
+
   const pack = buildEvidencePack(report);
   const allowed = allowedNumberSet(pack);
   let parsed;
+  let usedModel = model.preferred ?? RESEARCH_DEFAULT_MODEL;
   const started = Date.now();
-  // Kimi's thinking mode intermittently returns only reasoning (or degenerate
-  // output) with no answer; the direct mode is reliable for structured JSON.
-  const extraBody = /^moonshotai\/kimi/.test(model.model) ? { chat_template_kwargs: { thinking: false } } : {};
+  const conn = connection(model.integration);
   const call = () =>
-    nvidiaChatCompletion({
-      apiKey: model.apiKey,
-      baseUrl: model.baseUrl,
-      model: model.model,
-      messages: [
-        { role: 'system', content: SYSTEM_PROMPT },
-        { role: 'user', content: userPrompt(pack) },
-      ],
-      maxTokens: 1600,
-      temperature: 0.2,
-      topP: null,
-      timeoutMs: 90000,
-      extraBody,
-    });
-  // Two attempts: the hosted model occasionally returns an empty answer or
-  // hits a rate limit; anything still unusable falls back to rules text.
+    withModelFallback(
+      'narrative',
+      model.integration,
+      (m, settings) =>
+        nvidiaChatCompletion({
+          ...conn,
+          model: m,
+          messages: [
+            { role: 'system', content: SYSTEM_PROMPT },
+            { role: 'user', content: userPrompt(pack) },
+          ],
+          maxTokens: 1600,
+          temperature: 0.2,
+          topP: settings.topP,
+          extraBody: settings.extraBody,
+          timeoutMs: 90000,
+        }),
+      { preferred: model.preferred },
+    );
+
+  // Retired or unavailable models fall through the chain inside
+  // withModelFallback; a model that answers with no usable JSON gets one retry.
   let lastError = null;
   for (let attempt = 0; attempt < 2 && !parsed; attempt++) {
     try {
-      parsed = parseModelJson(await call());
+      const { result, model: m } = await call();
+      usedModel = m;
+      parsed = parseModelJson(result);
     } catch (err) {
       lastError = err;
       if (attempt === 0) await new Promise((r) => setTimeout(r, /\((429|503)\)/.test(err.message) ? 4000 : 500));
     }
   }
   if (!parsed) {
-    return { ...fallback, source: 'rules', model: model.model, validation: { accepted: [], rejected: [{ field: 'all', reason: `Model call failed: ${String(lastError?.message).slice(0, 160)}` }] }, latencyMs: Date.now() - started };
+    return { ...fallback, source: 'rules', model: usedModel, validation: { accepted: [], rejected: [{ field: 'all', reason: `Model call failed: ${String(lastError?.message).slice(0, 160)}` }] }, latencyMs: Date.now() - started };
   }
 
   const accepted = [];
@@ -265,7 +348,7 @@ export async function generateNarrative(report, settings) {
   if (Array.isArray(parsed.why)) {
     const items = parsed.why
       .map((w) => ({ kind: KINDS.includes(String(w?.kind).toUpperCase()) ? String(w.kind).toUpperCase() : null, text: w?.text, evidence: Array.isArray(w?.evidence) ? w.evidence.filter((id) => obsIds.has(id)) : [] }))
-      .map((w) => ({ ...w, problem: w.kind ? checkText(w.text, allowed) : 'missing or invalid statement kind' }));
+      .map((w) => ({ ...w, problem: w.kind ? checkText(w.text, allowed, report) : 'missing or invalid statement kind' }));
     const bad = items.filter((w) => w.problem);
     if (items.length >= 3 && !bad.length) {
       out.why = items.slice(0, 3).map(({ problem, ...w }) => w);
@@ -276,7 +359,7 @@ export async function generateNarrative(report, settings) {
   }
 
   for (const field of ['bottomLine', 'biggestRisk']) {
-    const problem = checkText(parsed[field], allowed);
+    const problem = checkText(parsed[field], allowed, report);
     if (!problem) {
       out[field] = parsed[field].trim();
       accepted.push(field);
@@ -285,7 +368,7 @@ export async function generateNarrative(report, settings) {
 
   if (parsed.driverNotes && typeof parsed.driverNotes === 'object') {
     for (const [k, v] of Object.entries(parsed.driverNotes)) {
-      const problem = checkText(v, allowed);
+      const problem = checkText(v, allowed, report);
       if (!problem) out.driverNotes[k] = v.trim();
       else rejected.push({ field: `driverNotes.${k}`, reason: problem });
     }
@@ -294,7 +377,7 @@ export async function generateNarrative(report, settings) {
 
   if (report.kind === 'pair' && parsed.relativeView) {
     for (const side of ['favorsBase', 'favorsQuote']) {
-      const problem = checkText(parsed.relativeView[side], allowed);
+      const problem = checkText(parsed.relativeView[side], allowed, report);
       if (!problem) {
         out.relativeView = { ...out.relativeView, [side]: parsed.relativeView[side].trim() };
         accepted.push(`relativeView.${side}`);
@@ -305,7 +388,7 @@ export async function generateNarrative(report, settings) {
   return {
     ...out,
     source: accepted.length ? 'ai' : 'rules',
-    model: model.model,
+    model: usedModel,
     fieldSources: Object.fromEntries(['why', 'bottomLine', 'biggestRisk', 'driverNotes', 'relativeView.favorsBase', 'relativeView.favorsQuote'].map((f) => [f, accepted.includes(f) ? 'ai' : 'rules'])),
     validation: { accepted, rejected },
     latencyMs: Date.now() - started,

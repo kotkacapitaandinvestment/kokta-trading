@@ -3,6 +3,8 @@ import { prisma } from '../lib/prisma.js';
 import { requireAuth, requireRole } from '../middleware/auth.js';
 import { encryptSecret, decryptSecret, maskSecret } from '../lib/crypto.js';
 import { nvidiaChatCompletion } from '../lib/nvidia.js';
+import { connection, withModelFallback, effectiveModels, checkModelHealth, VETTED_MODELS } from '../lib/aiModels.js';
+import { loadSettings as loadResearchSettings } from '../lib/research/settings.js';
 import { paystackTestConnection } from '../lib/paystack.js';
 import { finnhubTestConnection } from '../lib/finnhub.js';
 import { massiveTestConnection } from '../lib/massive.js';
@@ -14,36 +16,27 @@ adminIntegrationsRouter.use(requireAuth, requireRole('super_admin'));
 
 const TEST_CONNECTIONS = {
   nvidia: async (row) => {
-    const reply = await nvidiaChatCompletion({
-      apiKey: decryptSecret(row.secretCipher),
-      baseUrl: row.config?.baseUrl,
-      model: row.config?.model,
-      messages: [{ role: 'user', content: 'Reply with the single word: pong' }],
-      maxTokens: 10,
-    });
-    let message = `Chat model replied: "${reply.trim()}"`;
-
-    if (row.config?.visionModel) {
-      try {
-        const visionReply = await nvidiaChatCompletion({
-          apiKey: decryptSecret(row.secretCipher),
-          baseUrl: row.config?.baseUrl,
-          model: row.config.visionModel,
-          messages: [{
-            role: 'user',
-            content: [
-              { type: 'text', text: 'What color is this image? One word.' },
-              { type: 'image_url', image_url: { url: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC' } },
-            ],
-          }],
+    const conn = connection(row);
+    const chat = await withModelFallback('chat', row, (model, settings) =>
+      nvidiaChatCompletion({ ...conn, model, messages: [{ role: 'user', content: 'Reply with the single word: pong' }], maxTokens: 10, topP: settings.topP, extraBody: settings.extraBody, timeoutMs: 30000 }),
+    );
+    let message = `Chat model ${chat.model} replied: "${String(chat.result).trim()}"${chat.fellBackFrom.length ? ` (fell back from ${chat.fellBackFrom.join(', ')})` : ''}`;
+    try {
+      const vision = await withModelFallback('vision', row, (model, settings) =>
+        nvidiaChatCompletion({
+          ...conn,
+          model,
+          messages: [{ role: 'user', content: [{ type: 'text', text: 'What color is this image? One word.' }, { type: 'image_url', image_url: { url: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC' } }] }],
           maxTokens: 10,
-        });
-        message += ` · Vision model replied: "${visionReply.trim()}"`;
-      } catch (err) {
-        message += ` · Vision model check FAILED: ${err.message}`;
-      }
+          topP: settings.topP,
+          extraBody: settings.extraBody,
+          timeoutMs: 30000,
+        }),
+      );
+      message += ` · Vision model ${vision.model} replied: "${String(vision.result).trim()}"${vision.fellBackFrom.length ? ` (fell back from ${vision.fellBackFrom.join(', ')})` : ''}`;
+    } catch (err) {
+      message += ` · Vision check FAILED: ${err.message}`;
     }
-
     return message;
   },
   paystack: async (row) => paystackTestConnection(decryptSecret(row.secretCipher)),
@@ -52,7 +45,7 @@ const TEST_CONNECTIONS = {
   fred: async (row) => fredTestConnection(decryptSecret(row.secretCipher)),
 };
 
-function toPublicIntegration(row) {
+function toPublicIntegration(row, extras = {}) {
   if (!row) return null;
   return {
     provider: row.provider,
@@ -61,12 +54,18 @@ function toPublicIntegration(row) {
     publicKey: row.publicKey,
     maskedSecret: row.secretCipher ? maskSecret(decryptSecret(row.secretCipher)) : null,
     updatedAt: row.updatedAt,
+    ...(row.provider === 'nvidia' ? { models: { effective: effectiveModels(row, extras), vetted: VETTED_MODELS } } : {}),
   };
+}
+
+async function narrativePreference() {
+  return (await loadResearchSettings()).model?.trim() || undefined;
 }
 
 adminIntegrationsRouter.get('/', asyncHandler(async (req, res) => {
   const rows = await prisma.integration.findMany();
-  res.json({ integrations: rows.map(toPublicIntegration) });
+  const narrativePreferred = await narrativePreference();
+  res.json({ integrations: rows.map((r) => toPublicIntegration(r, { narrativePreferred })) });
 }));
 
 adminIntegrationsRouter.put('/:provider', asyncHandler(async (req, res) => {
@@ -95,7 +94,15 @@ adminIntegrationsRouter.put('/:provider', asyncHandler(async (req, res) => {
     },
   });
 
-  res.json({ integration: toPublicIntegration(row) });
+  res.json({ integration: toPublicIntegration(row, { narrativePreferred: await narrativePreference() }) });
+}));
+
+// Re-tests every candidate model now (the scheduled job does this every 6h).
+adminIntegrationsRouter.post('/nvidia/health', asyncHandler(async (req, res) => {
+  const narrativePreferred = await narrativePreference();
+  const report = await checkModelHealth({ force: true, narrativePreferred });
+  const row = await prisma.integration.findUnique({ where: { provider: 'nvidia' } });
+  res.json({ report, integration: toPublicIntegration(row, { narrativePreferred }) });
 }));
 
 adminIntegrationsRouter.post('/:provider/test', asyncHandler(async (req, res) => {
