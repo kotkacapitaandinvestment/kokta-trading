@@ -361,7 +361,9 @@ export async function reportHistory(kind, subject, limit = 60) {
 
 // Refreshes the stalest enabled pairs. Designed for an external scheduler
 // (cron-job.org): the route responds immediately and this runs afterwards.
-export async function runCronBatch({ budgetMs = 240000 } = {}) {
+// No new pair is started after `budgetMs`; with the 100s narrative cap a
+// started run finishes well inside the 300s function limit.
+export async function runCronBatch({ budgetMs = 150000 } = {}) {
   const settings = await loadSettings();
   if (!settings.enabled) return { skipped: 'Fundamental Research is disabled.' };
   const started = Date.now();

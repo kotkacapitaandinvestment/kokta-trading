@@ -15,6 +15,7 @@ const KINDS = ['FACT', 'SOURCE ASSESSMENT', 'KOTKA INTERPRETATION'];
 // First vetted narrative model; admins can prefer another in research settings,
 // and a retired model falls through the chain in aiModels.js.
 export const RESEARCH_DEFAULT_MODEL = VETTED_MODELS.narrative[0];
+const NARRATIVE_BUDGET_MS = 100000;
 const TRADE_LANGUAGE = /\b(buy|buying|sell|selling|go long|go short|long position|short position|going long|going short|entry point|enter a (?:long|short)|take[- ]profit|stop[- ]loss|price target|bullish|bearish|trade idea|should trade|appreciat\w*|depreciat\w*)\b/i;
 
 // ── Consistency with the rule-based scores ────────────────────────────────
@@ -300,13 +301,18 @@ export async function generateNarrative(report, settings) {
   let parsed;
   let usedModel = model.preferred ?? RESEARCH_DEFAULT_MODEL;
   const started = Date.now();
+  // Hard budget so a run always finishes inside the 300s serverless limit,
+  // however many models time out; past it, the rules narrative is used.
+  const deadline = started + NARRATIVE_BUDGET_MS;
   const conn = connection(model.integration);
   const call = () =>
     withModelFallback(
       'narrative',
       model.integration,
-      (m, settings) =>
-        nvidiaChatCompletion({
+      (m, settings) => {
+        const remaining = deadline - Date.now();
+        if (remaining < 5000) throw new Error('Narrative time budget exhausted');
+        return nvidiaChatCompletion({
           ...conn,
           model: m,
           messages: [
@@ -317,15 +323,16 @@ export async function generateNarrative(report, settings) {
           temperature: 0.2,
           topP: settings.topP,
           extraBody: settings.extraBody,
-          timeoutMs: 90000,
-        }),
+          timeoutMs: Math.min(60000, remaining),
+        });
+      },
       { preferred: model.preferred },
     );
 
   // Retired or unavailable models fall through the chain inside
   // withModelFallback; a model that answers with no usable JSON gets one retry.
   let lastError = null;
-  for (let attempt = 0; attempt < 2 && !parsed; attempt++) {
+  for (let attempt = 0; attempt < 2 && !parsed && Date.now() < deadline - 5000; attempt++) {
     try {
       const { result, model: m } = await call();
       usedModel = m;
