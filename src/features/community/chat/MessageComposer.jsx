@@ -173,7 +173,7 @@ export default function MessageComposer({ conversationId, threadRootId = null, a
       ) : (
         <div className="flex items-end gap-1">
           {!editing ? (
-            <div className="flex items-center">
+            <div className="flex h-10 shrink-0 items-center">
               <ImagePicker uploads={uploads} label="Attach image or chart" />
               <button type="button" onClick={() => setShowMarket((s) => !s)} className="flex h-9 w-9 items-center justify-center rounded-lg text-ink-500 hover:bg-ink-100 dark:text-ink-400 dark:hover:bg-ink-800" aria-label="Attach market" title="Attach market"><LineChart className="h-4 w-4" /></button>
               {!threadRootId ? <button type="button" onClick={() => setPoll(poll ? null : { question: '', options: ['', ''] })} className="hidden h-9 w-9 items-center justify-center rounded-lg text-ink-500 hover:bg-ink-100 dark:text-ink-400 dark:hover:bg-ink-800 sm:flex" aria-label="Create poll" title="Poll"><BarChart3 className="h-4 w-4" /></button> : null}
@@ -181,6 +181,8 @@ export default function MessageComposer({ conversationId, threadRootId = null, a
           ) : null}
           <MentionTextarea
             ref={input}
+            wrapperClassName="min-w-0 flex-1"
+            autoGrow
             value={body}
             onChange={(v) => { setBody(v); typing(); }}
             onKeyDown={(e) => {
@@ -192,7 +194,7 @@ export default function MessageComposer({ conversationId, threadRootId = null, a
             rows={1}
             maxLength={4000}
             placeholder={placeholder ?? 'Message'}
-            className="max-h-40 min-h-[40px] w-full resize-none rounded-xl border border-ink-200 bg-ink-50/50 px-3 py-2 text-[15px] text-ink-900 outline-none placeholder:text-ink-400 focus:border-accent-500 focus:bg-white dark:border-ink-700 dark:bg-ink-800 dark:text-ink-50"
+            className="block max-h-40 min-h-[40px] w-full resize-none overflow-hidden rounded-xl border border-ink-200 bg-ink-50/50 px-3 py-[9px] text-[15px] leading-5 text-ink-900 outline-none placeholder:text-ink-400 focus:border-accent-500 focus:bg-white dark:border-ink-700 dark:bg-ink-800 dark:text-ink-50"
           />
           {!body.trim() && !uploads.items.length && !market && !poll && !editing && supportsVoice() ? (
             <button type="button" onClick={() => recorder.start().catch((err) => setState({ error: `Microphone unavailable: ${err.message}` }))} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-ink-500 hover:bg-ink-100 dark:text-ink-400 dark:hover:bg-ink-800" aria-label="Record voice message"><Mic className="h-4 w-4" /></button>

@@ -1,4 +1,4 @@
-import { forwardRef, useEffect, useRef, useState } from 'react';
+import { forwardRef, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import clsx from 'clsx';
 import { ImagePlus, Loader2, X } from 'lucide-react';
 import { api } from '../../../lib/api';
@@ -76,13 +76,22 @@ export function UploadPreviews({ uploads }) {
   );
 }
 
-// Textarea with @mention autocomplete.
-export const MentionTextarea = forwardRef(function MentionTextarea({ value, onChange, onKeyDown, className, ...props }, ref) {
+// Textarea with @mention autocomplete. autoGrow sizes it to its content up
+// to its CSS max-height, then it scrolls.
+export const MentionTextarea = forwardRef(function MentionTextarea({ value, onChange, onKeyDown, className, wrapperClassName, autoGrow = false, ...props }, ref) {
   const [q, setQ] = useState(null);
   const [users, setUsers] = useState([]);
   const [active, setActive] = useState(0);
   const inner = useRef(null);
   const el = ref ?? inner;
+  useLayoutEffect(() => {
+    const t = el.current;
+    if (!autoGrow || !t) return;
+    t.style.height = 'auto';
+    const max = parseFloat(getComputedStyle(t).maxHeight) || 160;
+    t.style.height = `${Math.min(t.scrollHeight + 2, max)}px`;
+    t.style.overflowY = t.scrollHeight > max ? 'auto' : 'hidden';
+  }, [value, autoGrow, el]);
   useEffect(() => {
     if (q === null || q.length < 1) return setUsers([]);
     const t = setTimeout(() => api.get(`/community/people?q=${encodeURIComponent(q)}`).then((r) => { setUsers(r.users.slice(0, 6)); setActive(0); }).catch(() => {}), 150);
@@ -100,7 +109,7 @@ export const MentionTextarea = forwardRef(function MentionTextarea({ value, onCh
     requestAnimationFrame(() => el.current?.setSelectionRange(before.length, before.length));
   };
   return (
-    <div className="relative">
+    <div className={clsx('relative', wrapperClassName)}>
       <textarea
         ref={el}
         value={value}

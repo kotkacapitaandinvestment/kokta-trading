@@ -234,7 +234,7 @@ export default function ChatView({ conversationId, variant = 'room', access, mem
           <MessageList conv={conv} meId={profile?.id} variant={variant} canModerate={access?.canModerate} receiptFor={receiptFor} onReply={setReplyTo} onThread={openThread} onEdit={setEditing} onReport={setReport} onAi={ai.run} emptyText={emptyText} />
         )}
         <Typing names={conv.typing} />
-        <MessageComposer conversationId={conversationId} access={access} replyTo={replyTo} onClearReply={() => setReplyTo(null)} editing={editing} onDoneEditing={() => setEditing(null)} placeholder={variant === 'room' ? 'Share what you see in this market…' : undefined} />
+        <MessageComposer conversationId={conversationId} access={access} replyTo={replyTo} onClearReply={() => setReplyTo(null)} editing={editing} onDoneEditing={() => setEditing(null)} placeholder={variant === 'room' ? 'Share your view…' : variant === 'event' ? 'Discuss this release…' : undefined} />
       </div>
       {thread ? <ThreadPanel key={thread.id} conversationId={conversationId} root={thread} variant={variant} isPublic={isPublic} access={access} canModerate={access?.canModerate} onClose={() => setThread(null)} onAi={ai.run} /> : null}
       {report ? <ReportDialog target={{ type: 'message', id: report.id, label: 'message' }} onClose={() => setReport(null)} /> : null}
