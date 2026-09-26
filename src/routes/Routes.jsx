@@ -23,25 +23,17 @@ import Notifications from '../features/notifications/Notifications';
 
 import AdminOverview from '../features/admin/AdminOverview';
 import AdminUsers from '../features/admin/AdminUsers';
-import AdminSubscriptions from '../features/admin/AdminSubscriptions';
 import AdminAIUsage from '../features/admin/AdminAIUsage';
 import AdminTradingStats from '../features/admin/AdminTradingStats';
 import AdminJournalStats from '../features/admin/AdminJournalStats';
-import AdminRevenue from '../features/admin/AdminRevenue';
-import AdminReports from '../features/admin/AdminReports';
 import AdminAnnouncements from '../features/admin/AdminAnnouncements';
-import AdminContent from '../features/admin/AdminContent';
-import AdminCourses from '../features/admin/AdminCourses';
-import AdminMarketNews from '../features/admin/AdminMarketNews';
-import AdminFeatureFlags from '../features/admin/AdminFeatureFlags';
-import AdminSupport from '../features/admin/AdminSupport';
 import AdminAuditLogs from '../features/admin/AdminAuditLogs';
 import AdminSystemHealth from '../features/admin/AdminSystemHealth';
-import AdminApiUsage from '../features/admin/AdminApiUsage';
 import AdminSettings from '../features/admin/AdminSettings';
 import AdminIntegrations from '../features/admin/AdminIntegrations';
 import AdminResearch from '../features/admin/AdminResearch';
 import AdminVerifications from '../features/admin/AdminVerifications';
+import AdminBilling from '../features/admin/AdminBilling';
 
 export default function AppRoutes() {
   return (
@@ -77,22 +69,20 @@ export default function AppRoutes() {
         <Route path="overview" element={<AdminOverview />} />
         <Route path="users" element={<AdminUsers />} />
         <Route path="verifications" element={<AdminVerifications />} />
-        <Route path="subscriptions" element={<AdminSubscriptions />} />
         <Route path="ai-usage" element={<AdminAIUsage />} />
         <Route path="trading-stats" element={<AdminTradingStats />} />
         <Route path="journal-stats" element={<AdminJournalStats />} />
-        <Route path="revenue" element={<AdminRevenue />} />
-        <Route path="reports" element={<AdminReports />} />
         <Route path="announcements" element={<AdminAnnouncements />} />
-        <Route path="content" element={<AdminContent />} />
-        <Route path="courses" element={<AdminCourses />} />
-        <Route path="market-news" element={<AdminMarketNews />} />
         <Route path="research" element={<AdminResearch />} />
-        <Route path="feature-flags" element={<AdminFeatureFlags />} />
-        <Route path="support" element={<AdminSupport />} />
+        <Route path="billing" element={<AdminBilling />} />
+        {['subscriptions', 'revenue'].map((p) => (
+          <Route key={p} path={p} element={<Navigate to="/admin/billing" replace />} />
+        ))}
+        {['reports', 'content', 'courses', 'market-news', 'feature-flags', 'support', 'api-usage'].map((p) => (
+          <Route key={p} path={p} element={<Navigate to="/admin/overview" replace />} />
+        ))}
         <Route path="audit-logs" element={<AdminAuditLogs />} />
         <Route path="system-health" element={<AdminSystemHealth />} />
-        <Route path="api-usage" element={<AdminApiUsage />} />
         <Route
           path="integrations"
           element={

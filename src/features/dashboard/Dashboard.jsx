@@ -1,25 +1,14 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import {
-  ShieldAlert,
-  NotebookPen,
-  ListChecks,
-  Sparkles,
-  ArrowUpRight,
-  ArrowDownRight,
-  Calendar,
-  Brain,
-  ChevronRight,
-  Target,
-} from 'lucide-react';
-import Card, { CardHeader, CardBody } from '../../components/ui/Card';
-import Badge from '../../components/ui/Badge';
+import clsx from 'clsx';
+import { ArrowDownRight, ArrowRight, ArrowUpRight, Brain, CalendarDays, ListChecks, Megaphone, NotebookPen, Sparkles } from 'lucide-react';
+import Card from '../../components/ui/Card';
 import Button from '../../components/ui/Button';
-import ProgressRing from '../../components/ui/ProgressRing';
 import { useAuth } from '../../context/AuthContext';
 import { api } from '../../lib/api';
-import { CHART_COLORS } from '../../lib/chartColors';
 import WeeklyPerformanceChart from './widgets/WeeklyPerformanceChart';
+
+const CHECKLIST_TOTAL = 8;
 
 function greeting() {
   const hour = new Date().getHours();
@@ -28,305 +17,286 @@ function greeting() {
   return 'Good evening';
 }
 
-export default function Dashboard() {
-  const { user } = useAuth();
-  const firstName = user?.name?.split(' ')[0] ?? 'Trader';
+const money = (v) => `${v < 0 ? '−' : v > 0 ? '+' : ''}$${Math.abs(v ?? 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
+
+function useGet(path) {
   const [data, setData] = useState(null);
-  const [checklist, setChecklist] = useState({});
-  const [market, setMarket] = useState(null);
-
+  const [failed, setFailed] = useState(false);
   useEffect(() => {
-    const today = new Date().toISOString().slice(0, 10);
-    api.get('/me/dashboard').then(setData);
-    api.get(`/checklist/${today}`).then(({ items }) => setChecklist(items));
-    api.get('/market/snapshot').then(setMarket);
-  }, []);
+    api.get(path).then(setData).catch(() => setFailed(true));
+  }, [path]);
+  return [data, failed];
+}
 
-  const watchlistAllLive = market?.watchlist?.length > 0 && market.watchlist.every((w) => w.live);
+// One readout inside the readiness panel. Big mono figure, small caption.
+function Gauge({ label, value, unit, caption, children }) {
+  return (
+    <div className="min-w-0 py-5 sm:px-6 sm:first:pl-0 sm:last:pr-0">
+      <p className="text-[11px] font-medium uppercase tracking-[0.12em] text-ink-400">{label}</p>
+      <p className="mt-2 flex items-baseline gap-1">
+        <span className="font-mono text-4xl font-semibold tabular-nums tracking-tight text-white">{value}</span>
+        {unit ? <span className="font-mono text-sm text-ink-400">{unit}</span> : null}
+      </p>
+      {children}
+      {caption ? <p className="mt-2 text-xs leading-relaxed text-ink-400">{caption}</p> : null}
+    </div>
+  );
+}
 
-  const checklistTotal = 8;
-  const checklistDone = Object.values(checklist).filter(Boolean).length;
+function Meter({ value, max, tone = 'gold' }) {
+  const pct = Math.min((value / (max || 1)) * 100, 100);
+  return (
+    <div className="mt-3 h-1 w-full overflow-hidden rounded-full bg-white/10" role="meter" aria-valuenow={value} aria-valuemin={0} aria-valuemax={max}>
+      <div className={clsx('h-full rounded-full transition-[width] duration-700', tone === 'loss' ? 'bg-loss-400' : 'bg-accent-400')} style={{ width: `${pct}%` }} />
+    </div>
+  );
+}
+
+function ReadinessPanel({ user, data, checklistDone }) {
+  const firstName = user?.name?.split(' ')[0] ?? 'Trader';
+  const risk = data?.riskUsedToday ?? 0;
+  const limit = data?.dailyLossLimit ?? 2;
+  const overLimit = risk >= limit;
+  const ready = checklistDone >= CHECKLIST_TOTAL && !overLimit;
 
   return (
-    <div className="space-y-8">
-      {/* Greeting */}
-      <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
+    <section className="relative overflow-hidden rounded-3xl bg-ink-950 p-6 text-white ring-1 ring-ink-800 sm:p-8 dark:bg-ink-900">
+      <div className="pointer-events-none absolute -right-24 -top-32 h-80 w-80 rounded-full bg-accent-500/10 blur-3xl" aria-hidden />
+      <div className="relative flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight text-ink-900 dark:text-ink-50">
+          <p className="text-xs text-ink-400">{new Date().toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' })}</p>
+          <h1 className="mt-1 text-2xl font-semibold tracking-tight sm:text-3xl">
             {greeting()}, {firstName}.
           </h1>
-          <p className="mt-1.5 text-sm text-ink-500 dark:text-ink-400">
-            Here's what you need to know before you trade today.
-          </p>
         </div>
-        <Badge tone="accent" className="w-fit">
-          <Calendar className="h-3 w-3" />
-          {new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}
-        </Badge>
+        <p className={clsx('flex items-center gap-2 rounded-full px-3 py-1 text-xs font-medium', ready ? 'bg-profit-500/15 text-profit-400' : overLimit ? 'bg-loss-500/15 text-loss-400' : 'bg-accent-500/15 text-accent-300')}>
+          <span className={clsx('h-1.5 w-1.5 rounded-full', ready ? 'bg-profit-400' : overLimit ? 'bg-loss-400' : 'bg-accent-400')} />
+          {ready ? 'Process complete for today' : overLimit ? 'Daily loss limit reached' : 'Finish your process before trading'}
+        </p>
       </div>
 
-      {/* Hero stat row */}
-      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
-        <Card className="flex items-center gap-5 p-6">
-          <ProgressRing value={data?.disciplineScore ?? 0} size={72} strokeWidth={6} label={data?.disciplineScore ?? '—'} color={CHART_COLORS.accent} />
-          <div>
-            <p className="text-xs font-medium uppercase tracking-wide text-ink-400">Discipline Score</p>
-            <p className="mt-0.5 text-sm text-ink-600 dark:text-ink-300">Checklist completion rate</p>
+      <div className="relative mt-4 grid grid-cols-1 divide-y divide-white/10 sm:grid-cols-3 sm:divide-x sm:divide-y-0">
+        <Gauge label="Risk used today" value={risk} unit={`/ ${limit}R`} caption={overLimit ? 'Stop for today. The limit exists for days like this.' : `${Math.max(limit - risk, 0)}R left before your daily stop.`}>
+          <Meter value={risk} max={limit} tone={overLimit ? 'loss' : 'gold'} />
+        </Gauge>
+        <Gauge label="Pre-trade checklist" value={checklistDone} unit={`/ ${CHECKLIST_TOTAL}`} caption={checklistDone >= CHECKLIST_TOTAL ? 'Every condition checked.' : 'Conditions still open for today.'}>
+          <Meter value={checklistDone} max={CHECKLIST_TOTAL} />
+        </Gauge>
+        <Gauge label="Discipline score" value={data?.disciplineScore ?? 0} unit="/ 100" caption={data?.totalEntries ? `Checklist completion across ${data.totalEntries} journaled trades. ${data.streak} day${data.streak === 1 ? '' : 's'} within your loss limit.` : 'Builds as you journal trades.'} />
+      </div>
+
+      <div className="relative mt-2 flex flex-wrap gap-2 border-t border-white/10 pt-5">
+        <Button as={Link} to="/app/checklist" variant="accent" size="sm" icon={ListChecks} className="active:scale-[0.98]">
+          {checklistDone >= CHECKLIST_TOTAL ? 'Review checklist' : 'Complete checklist'}
+        </Button>
+        <Button as={Link} to="/app/journal" variant="onDark" size="sm" icon={NotebookPen}>
+          {data?.hasJournaledToday ? 'Open journal' : 'Log a trade'}
+        </Button>
+        <Button as={Link} to="/app/ai" variant="ghostOnDark" size="sm" icon={Sparkles}>
+          Pressure-test an idea
+        </Button>
+      </div>
+    </section>
+  );
+}
+
+function SideNotice({ announcement, releases }) {
+  if (announcement) {
+    return (
+      <Card className="flex h-full flex-col p-6">
+        <p className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-accent-700 dark:text-accent-400">
+          <Megaphone className="h-3.5 w-3.5" /> From the Kotka team
+        </p>
+        <h2 className="mt-3 text-lg font-semibold leading-snug tracking-tight text-ink-900 dark:text-ink-50">{announcement.title}</h2>
+        {announcement.body ? <p className="mt-2 line-clamp-5 whitespace-pre-line text-sm leading-relaxed text-ink-600 dark:text-ink-300">{announcement.body}</p> : null}
+        <p className="mt-auto pt-4 text-xs text-ink-400">{new Date(announcement.publishedAt).toLocaleDateString(undefined, { day: 'numeric', month: 'long' })}</p>
+      </Card>
+    );
+  }
+  const [first, ...rest] = releases;
+  const when = (e) =>
+    `${new Date(e.date).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' })}${e.dateOnly ? '' : ` · ${new Date(e.date).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}`}`;
+  const title = (e) => e.title.replace(/\s*—\s*/g, ': ');
+  return (
+    <Card className="flex h-full flex-col p-6">
+      <p className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-ink-400">
+        <CalendarDays className="h-3.5 w-3.5" /> Coming up, official releases
+      </p>
+      {first ? (
+        <>
+          <p className="mt-3 font-mono text-sm tabular-nums text-accent-700 dark:text-accent-400">{when(first)}</p>
+          <h2 className="mt-1 text-lg font-semibold leading-snug tracking-tight text-ink-900 dark:text-ink-50">{title(first)}</h2>
+          <p className="mt-1 text-xs text-ink-500 dark:text-ink-400">
+            {first.currency} · {first.importance} importance · {first.source.name.split(/ [—-] /)[0]}
+          </p>
+          {rest.length ? (
+            <ul className="mt-4 space-y-2.5 border-t border-ink-100 pt-4 dark:border-ink-800">
+              {rest.slice(0, 3).map((e, i) => (
+                <li key={i} className="grid grid-cols-[2.5rem_1fr] gap-2 text-xs">
+                  <span className="font-mono font-semibold text-ink-500 dark:text-ink-400">{e.currency}</span>
+                  <span className="min-w-0">
+                    <span className="block truncate text-ink-800 dark:text-ink-100">{title(e)}</span>
+                    <span className="font-mono text-[11px] tabular-nums text-ink-400">{when(e)}</span>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+        </>
+      ) : (
+        <p className="mt-3 text-sm text-ink-400">No covered releases in the next 7 days.</p>
+      )}
+      <Link to="/app/market" className="mt-auto flex items-center gap-1 pt-4 text-xs font-medium text-accent-600 hover:underline dark:text-accent-400">
+        Full calendar and research <ArrowRight className="h-3 w-3" />
+      </Link>
+    </Card>
+  );
+}
+
+function PulseList({ pulse }) {
+  return (
+    <Card className="p-6">
+      <div className="flex items-baseline justify-between gap-3">
+        <h2 className="text-sm font-semibold text-ink-900 dark:text-ink-50">Market pulse</h2>
+        <Link to="/app/market" className="text-xs font-medium text-accent-600 hover:underline dark:text-accent-400">Research</Link>
+      </div>
+      <p className="mt-0.5 text-[11px] text-ink-400">Previous daily close · end-of-day data</p>
+      <ul className="mt-4 divide-y divide-ink-100 dark:divide-ink-800">
+        {!pulse
+          ? [0, 1, 2, 3, 4].map((i) => <li key={i} className="my-2 h-8 animate-pulse rounded bg-ink-50 dark:bg-ink-800" />)
+          : pulse.instruments.map((i) => (
+              <li key={i.symbol} className="flex items-center justify-between gap-3 py-2.5">
+                <span className="font-mono text-xs font-semibold text-ink-800 dark:text-ink-100">{i.symbol}</span>
+                {i.available ? (
+                  <span className="flex items-center gap-3">
+                    <span className="font-mono text-xs tabular-nums text-ink-600 dark:text-ink-300">{Number(i.close).toLocaleString(undefined, { minimumFractionDigits: i.decimals, maximumFractionDigits: i.decimals })}</span>
+                    <span className={clsx('flex w-16 items-center justify-end gap-0.5 font-mono text-xs tabular-nums', i.changePct > 0 ? 'text-profit-600 dark:text-profit-400' : i.changePct < 0 ? 'text-loss-500' : 'text-ink-400')}>
+                      {i.changePct > 0 ? <ArrowUpRight className="h-3 w-3" /> : i.changePct < 0 ? <ArrowDownRight className="h-3 w-3" /> : null}
+                      {i.changePct > 0 ? '+' : ''}
+                      {i.changePct}%
+                    </span>
+                  </span>
+                ) : (
+                  <span className="text-[11px] text-ink-400">{i.reason === 'rate_limited' ? 'loading' : 'unavailable'}</span>
+                )}
+              </li>
+            ))}
+      </ul>
+    </Card>
+  );
+}
+
+export default function Dashboard() {
+  const { user } = useAuth();
+  const today = new Date().toISOString().slice(0, 10);
+  const [data] = useGet('/me/dashboard');
+  const [checklist] = useGet(`/checklist/${today}`);
+  const [pulse] = useGet('/market/pulse');
+  const [calendar] = useGet('/market/calendar?days=7');
+  const [ann] = useGet('/me/announcements');
+
+  const checklistDone = Object.values(checklist?.items ?? {}).filter(Boolean).length;
+  const weekNet = data?.weeklyPerformance?.reduce((s, d) => s + d.pnl, 0) ?? 0;
+  const announcement = ann?.announcements?.[0];
+  // High-importance releases first, in date order.
+  const releases = [...(calendar?.events ?? []).filter((e) => e.importance === 'High'), ...(calendar?.events ?? []).filter((e) => e.importance !== 'High')];
+
+  return (
+    <div className="space-y-6">
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-12">
+        <div className="xl:col-span-8">
+          <ReadinessPanel user={user} data={data} checklistDone={checklistDone} />
+        </div>
+        <div className="xl:col-span-4">
+          <SideNotice announcement={announcement} releases={releases} />
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-12">
+        <Card className="p-6 xl:col-span-8">
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <div>
+              <h2 className="text-sm font-semibold text-ink-900 dark:text-ink-50">Realized P&amp;L, last 7 days</h2>
+              <p className="mt-0.5 text-xs text-ink-400">Closed trades from your journal, by day</p>
+            </div>
+            <div className="text-right">
+              <p className="text-[11px] uppercase tracking-wide text-ink-400">Net</p>
+              <p className={clsx('font-mono text-xl font-semibold tabular-nums', weekNet > 0 ? 'text-profit-600 dark:text-profit-400' : weekNet < 0 ? 'text-loss-500' : 'text-ink-900 dark:text-ink-50')}>{money(weekNet)}</p>
+            </div>
           </div>
+          <div className="mt-4">{data ? <WeeklyPerformanceChart data={data.weeklyPerformance} /> : <div className="h-48 animate-pulse rounded-xl bg-ink-50 dark:bg-ink-800" />}</div>
+          <Link to="/app/analytics" className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-accent-600 hover:underline dark:text-accent-400">
+            Full analytics <ArrowRight className="h-3 w-3" />
+          </Link>
+        </Card>
+        <div className="xl:col-span-4">
+          <PulseList pulse={pulse} />
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-12">
+        <Card className="overflow-hidden xl:col-span-8">
+          <div className="flex items-baseline justify-between gap-3 px-6 pt-6">
+            <h2 className="text-sm font-semibold text-ink-900 dark:text-ink-50">Recent trades</h2>
+            {data?.openPositions?.length ? <span className="text-xs text-ink-400">{data.openPositions.length} open position{data.openPositions.length === 1 ? '' : 's'}</span> : null}
+          </div>
+          {!data?.recentTrades?.length ? (
+            <div className="px-6 pb-8 pt-6 text-center">
+              <p className="text-sm text-ink-500 dark:text-ink-400">Nothing journaled yet. Your first entry starts your discipline record.</p>
+              <Button as={Link} to="/app/journal" variant="secondary" size="sm" icon={NotebookPen} className="mt-4">Log a trade</Button>
+            </div>
+          ) : (
+            <div className="mt-3 overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-y border-ink-100 text-left text-[11px] uppercase tracking-wide text-ink-400 dark:border-ink-800">
+                    <th className="px-6 py-2 font-medium">Date</th>
+                    <th className="px-3 py-2 font-medium">Market</th>
+                    <th className="px-3 py-2 font-medium">Side</th>
+                    <th className="hidden px-3 py-2 font-medium sm:table-cell">Session</th>
+                    <th className="px-6 py-2 text-right font-medium">P&amp;L</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-ink-100 dark:divide-ink-800">
+                  {data.recentTrades.map((t) => (
+                    <tr key={t.id}>
+                      <td className="whitespace-nowrap px-6 py-3 font-mono text-xs tabular-nums text-ink-500 dark:text-ink-400">{t.date.slice(5)}</td>
+                      <td className="px-3 py-3 font-medium text-ink-800 dark:text-ink-100">{t.symbol}</td>
+                      <td className="px-3 py-3 text-ink-500 dark:text-ink-400">{t.direction}</td>
+                      <td className="hidden px-3 py-3 text-ink-500 dark:text-ink-400 sm:table-cell">{t.session || '—'}</td>
+                      <td className={clsx('px-6 py-3 text-right font-mono tabular-nums', t.pnl > 0 ? 'text-profit-600 dark:text-profit-400' : t.pnl < 0 ? 'text-loss-500' : 'text-ink-400')}>{t.pnl == null ? 'open' : money(t.pnl)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </Card>
 
-        <Card className="p-6">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-medium uppercase tracking-wide text-ink-400">Today's Risk Limit</span>
-            <ShieldAlert className="h-4 w-4 text-ink-300" strokeWidth={1.75} />
-          </div>
-          <div className="mt-3 flex items-baseline gap-1">
-            <span className="text-2xl font-semibold text-ink-900 dark:text-ink-50">{data?.riskUsedToday ?? 0}R</span>
-            <span className="text-sm text-ink-400">/ {data?.dailyLossLimit ?? 2}R used</span>
-          </div>
-          <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-ink-100 dark:bg-ink-800">
-            <div
-              className="h-full rounded-full bg-accent-500"
-              style={{ width: `${Math.min(((data?.riskUsedToday ?? 0) / (data?.dailyLossLimit ?? 2)) * 100, 100)}%` }}
-            />
-          </div>
-        </Card>
-
-        <Card className="p-6">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-medium uppercase tracking-wide text-ink-400">Current Streak</span>
-            <ShieldAlert className="h-4 w-4 text-amber-500" strokeWidth={1.75} />
-          </div>
-          <div className="mt-3 flex items-baseline gap-1">
-            <span className="text-2xl font-semibold text-ink-900 dark:text-ink-50">{data?.streak ?? 0}</span>
-            <span className="text-sm text-ink-400">days within risk limit</span>
-          </div>
-        </Card>
-
-        <Card className="p-6">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-medium uppercase tracking-wide text-ink-400">Open Positions</span>
-            <Target className="h-4 w-4 text-ink-300" strokeWidth={1.75} />
-          </div>
-          <div className="mt-3 flex items-baseline gap-1">
-            <span className="text-2xl font-semibold text-ink-900 dark:text-ink-50">{data?.openPositions?.length ?? 0}</span>
-            <span className="text-sm text-ink-400">logged, not yet closed</span>
-          </div>
-          {data?.openPositions?.length ? (
-            <div className="mt-3 flex flex-wrap gap-1.5">
-              {data.openPositions.slice(0, 3).map((p) => (
-                <Badge key={p.id} tone="accent">
-                  {p.symbol} {p.direction}
-                </Badge>
+        <div className="space-y-6 xl:col-span-4">
+          <Card className="p-6">
+            <p className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-ink-400">
+              <Brain className="h-3.5 w-3.5 text-accent-600 dark:text-accent-400" /> Pattern in your journal
+            </p>
+            <p className="mt-3 text-sm leading-relaxed text-ink-700 dark:text-ink-200">
+              {data?.insights?.length ? data.insights[0] : 'Journal a few more trades and Kotka will surface real patterns in your behaviour here.'}
+            </p>
+          </Card>
+          <Card className="p-6">
+            <h2 className="text-sm font-semibold text-ink-900 dark:text-ink-50">This week</h2>
+            <div className="mt-4 space-y-4">
+              {(data?.weeklyGoals ?? []).map((g) => (
+                <div key={g.id}>
+                  <div className="mb-1.5 flex items-baseline justify-between gap-3 text-xs">
+                    <span className="text-ink-600 dark:text-ink-300">{g.label}</span>
+                    <span className="font-mono tabular-nums text-ink-500 dark:text-ink-400">{g.progress}%</span>
+                  </div>
+                  <div className="h-1 w-full overflow-hidden rounded-full bg-ink-100 dark:bg-ink-800">
+                    <div className={clsx('h-full rounded-full', g.progress >= 100 ? 'bg-profit-500' : 'bg-accent-500')} style={{ width: `${g.progress}%` }} />
+                  </div>
+                </div>
               ))}
             </div>
-          ) : null}
-        </Card>
-      </div>
-
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        {/* Main column */}
-        <div className="space-y-6 lg:col-span-2">
-          <Card>
-            <CardHeader
-              title="Weekly Performance"
-              subtitle="Realized P&L, last 7 days"
-              action={
-                <Link to="/app/analytics" className="flex items-center text-xs font-medium text-accent-600 hover:underline dark:text-accent-400">
-                  View analytics <ChevronRight className="h-3 w-3" />
-                </Link>
-              }
-            />
-            <CardBody>
-              {data ? <WeeklyPerformanceChart data={data.weeklyPerformance} /> : null}
-            </CardBody>
-          </Card>
-
-          <Card>
-            <CardHeader
-              title="Talk to Kotka AI"
-              subtitle="Your institutional trading mentor"
-              action={<Sparkles className="mt-0.5 h-4 w-4 text-accent-500" />}
-            />
-            <CardBody className="space-y-3">
-              <p className="text-sm leading-relaxed text-ink-600 dark:text-ink-300">
-                Bring Kotka AI your thesis before you take the trade. It will challenge your bias, question your risk,
-                and push you toward process over impulse — not hand you a signal.
-              </p>
-              <Button as={Link} to="/app/ai" variant="secondary" size="sm">
-                Open Kotka AI
-              </Button>
-            </CardBody>
-          </Card>
-
-          <Card>
-            <CardHeader title="Recent Trades" subtitle="Last 5 logged entries" />
-            <CardBody className="overflow-x-auto">
-              {!data?.recentTrades?.length ? (
-                <p className="py-6 text-center text-sm text-ink-400">No trades logged yet.</p>
-              ) : (
-                <table className="w-full min-w-[480px] text-sm">
-                  <thead>
-                    <tr className="border-b border-ink-100 text-left text-xs uppercase tracking-wide text-ink-400 dark:border-ink-800">
-                      <th className="pb-2 font-medium">Symbol</th>
-                      <th className="pb-2 font-medium">Direction</th>
-                      <th className="pb-2 font-medium">Session</th>
-                      <th className="pb-2 font-medium">R:R</th>
-                      <th className="pb-2 text-right font-medium">P&L</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {data.recentTrades.map((t) => (
-                      <tr key={t.id} className="border-b border-ink-50 last:border-0 dark:border-ink-800/60">
-                        <td className="py-2.5 font-medium text-ink-800 dark:text-ink-100">{t.symbol}</td>
-                        <td className="py-2.5 text-ink-500 dark:text-ink-400">{t.direction}</td>
-                        <td className="py-2.5 text-ink-500 dark:text-ink-400">{t.session}</td>
-                        <td className="py-2.5 text-ink-500 dark:text-ink-400">{t.rr}R</td>
-                        <td className="py-2.5 text-right font-medium">
-                          <span className={t.pnl >= 0 ? 'text-profit-600 dark:text-profit-400' : 'text-loss-500'}>
-                            {t.pnl >= 0 ? '+' : ''}${t.pnl}
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-            </CardBody>
-          </Card>
-        </div>
-
-        {/* Side column */}
-        <div className="space-y-6">
-          <Card>
-            <CardHeader title="Today's Checklist" subtitle={`${checklistDone} of ${checklistTotal} complete`} />
-            <CardBody>
-              <div className="mb-3 h-2 w-full overflow-hidden rounded-full bg-ink-100 dark:bg-ink-800">
-                <div className="h-full rounded-full bg-accent-500" style={{ width: `${(checklistDone / checklistTotal) * 100}%` }} />
-              </div>
-              <Button as={Link} to="/app/checklist" variant="secondary" size="sm" icon={ListChecks} className="w-full">
-                Complete checklist
-              </Button>
-            </CardBody>
-          </Card>
-
-          <Card>
-            <CardHeader title="Journal Reminder" />
-            <CardBody className="space-y-3">
-              <p className="text-sm text-ink-500 dark:text-ink-400">
-                {data?.hasJournaledToday
-                  ? "You've logged at least one entry today. Nice discipline."
-                  : "You haven't logged a journal entry yet today."}
-              </p>
-              <Button as={Link} to="/app/journal" variant="secondary" size="sm" icon={NotebookPen} className="w-full">
-                {data?.hasJournaledToday ? 'View journal' : 'Log trade'}
-              </Button>
-            </CardBody>
-          </Card>
-
-          <Card>
-            <CardHeader title="Watchlist" action={watchlistAllLive ? <Badge tone="profit">Live</Badge> : null} />
-            <CardBody className="space-y-1">
-              {market?.watchlist?.slice(0, 5).map((w) => (
-                <div key={w.symbol} className="flex items-center justify-between py-1.5">
-                  <div className="flex items-center gap-1.5">
-                    <div>
-                      <p className="text-sm font-medium text-ink-800 dark:text-ink-100">{w.symbol}</p>
-                      <p className="text-xs text-ink-400">{w.market}</p>
-                    </div>
-                    {!w.live ? (
-                      <span className="rounded bg-ink-100 px-1 py-0.5 text-[9px] font-medium uppercase tracking-wide text-ink-400 dark:bg-ink-800">
-                        sample
-                      </span>
-                    ) : null}
-                  </div>
-                  <div className="text-right">
-                    <p className="text-sm font-medium text-ink-800 dark:text-ink-100">{w.price ?? '—'}</p>
-                    {w.change !== null ? (
-                      <p className={`flex items-center justify-end gap-0.5 text-xs font-medium ${w.change >= 0 ? 'text-profit-600 dark:text-profit-400' : 'text-loss-500'}`}>
-                        {w.change >= 0 ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownRight className="h-3 w-3" />}
-                        {Math.abs(w.change)}%
-                      </p>
-                    ) : null}
-                  </div>
-                </div>
-              ))}
-            </CardBody>
-          </Card>
-
-          <Card>
-            <CardHeader title="Economic Events" subtitle="Today" action={!market?.economicEventsLive ? <Badge tone="warning">Sample data</Badge> : <Badge tone="profit">Live</Badge>} />
-            <CardBody className="space-y-3">
-              {!market?.economicEvents?.length ? (
-                <p className="text-sm text-ink-400">No high-impact events found for today.</p>
-              ) : (
-                market.economicEvents.slice(0, 4).map((e, i) => (
-                  <div key={i} className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="text-sm font-medium text-ink-800 dark:text-ink-100">{e.title}</p>
-                      <p className="text-xs text-ink-400">
-                        {e.time} · {e.currency}
-                      </p>
-                    </div>
-                    <Badge tone={e.impact === 'high' ? 'loss' : 'warning'}>{e.impact}</Badge>
-                  </div>
-                ))
-              )}
-            </CardBody>
-          </Card>
-
-          <Card>
-            <CardHeader
-              title="Market Sentiment"
-              subtitle={market?.sentimentLive ? "Derived from your watchlist's real price moves" : undefined}
-              action={!market?.sentimentLive ? <Badge tone="warning">Sample data</Badge> : <Badge tone="profit">Live</Badge>}
-            />
-            <CardBody>
-              <div className="mb-2 flex items-center justify-between text-xs text-ink-400">
-                <span>Bearish</span>
-                <span>Bullish</span>
-              </div>
-              <div className="h-2 w-full overflow-hidden rounded-full bg-gradient-to-r from-loss-400 via-ink-100 to-profit-500">
-                <div
-                  className="h-full w-0.5 bg-ink-900 dark:bg-white"
-                  style={{ marginLeft: `${market?.sentiment?.overall ?? 50}%` }}
-                />
-              </div>
-              <p className="mt-2 text-center text-sm font-medium text-ink-700 dark:text-ink-200">
-                {market?.sentiment?.overall ?? '—'}/100
-              </p>
-            </CardBody>
-          </Card>
-
-          <Card>
-            <CardHeader title="Psychology Insights" action={<Brain className="mt-0.5 h-4 w-4 text-accent-500" />} />
-            <CardBody>
-              {data?.insights?.length ? (
-                <p className="text-sm leading-relaxed text-ink-600 dark:text-ink-300">{data.insights[0]}</p>
-              ) : (
-                <p className="text-sm text-ink-400">Log a few more trades and Kotka will start surfacing real patterns in your behavior here.</p>
-              )}
-            </CardBody>
-          </Card>
-
-          <Card>
-            <CardHeader title="Weekly Goals" />
-            <CardBody className="space-y-4">
-              {data?.weeklyGoals?.map((g) => (
-                <div key={g.id}>
-                  <div className="mb-1.5 flex items-center justify-between text-xs">
-                    <span className="text-ink-600 dark:text-ink-300">{g.label}</span>
-                    <span className="font-medium text-ink-400">{g.progress}%</span>
-                  </div>
-                  <div className="h-1.5 w-full overflow-hidden rounded-full bg-ink-100 dark:bg-ink-800">
-                    <div
-                      className={`h-full rounded-full ${g.progress >= 100 ? 'bg-profit-500' : 'bg-accent-500'}`}
-                      style={{ width: `${g.progress}%` }}
-                    />
-                  </div>
-                </div>
-              ))}
-            </CardBody>
           </Card>
         </div>
       </div>

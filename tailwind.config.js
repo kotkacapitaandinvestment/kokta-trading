@@ -5,17 +5,8 @@ export default {
   theme: {
     extend: {
       fontFamily: {
-        sans: [
-          '"Inter var"',
-          'Inter',
-          '-apple-system',
-          'BlinkMacSystemFont',
-          '"Segoe UI"',
-          'Helvetica',
-          'Arial',
-          'sans-serif',
-        ],
-        mono: ['"JetBrains Mono"', 'ui-monospace', 'SFMono-Regular', 'Menlo', 'monospace'],
+        sans: ['"Geist Variable"', 'Geist', 'ui-sans-serif', 'system-ui', '-apple-system', '"Segoe UI"', 'sans-serif'],
+        mono: ['"Geist Mono Variable"', '"Geist Mono"', 'ui-monospace', 'SFMono-Regular', 'Menlo', 'monospace'],
       },
       colors: {
         // Warm, bronze-tinted neutral scale anchored at the exact brand

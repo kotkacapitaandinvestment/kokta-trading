@@ -5,7 +5,7 @@ import { nvidiaChatCompletionStream } from '../lib/nvidia.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 import { TOOL_DEFINITIONS, executeToolCall } from '../lib/aiTools.js';
 import { connection, openStreamWithFallback } from '../lib/aiModels.js';
-import { loadAppSettings, aiDailyLimitFor } from '../lib/appSettings.js';
+import { logUsage, usageSnapshot, limitReached, tonePreference } from '../lib/aiUsage.js';
 
 export const aiRouter = Router();
 aiRouter.use(requireAuth);
@@ -33,29 +33,6 @@ Use this depth to sharpen your Socratic questions — ask whether their order bl
 Current context: the trader is discussing the ${market} market on the ${timeframe} timeframe.`;
 }
 
-function logUsage(userId, source, model, startedAt) {
-  const latencyMs = Date.now() - startedAt;
-  prisma.aIUsageLog.create({ data: { userId, source, model, latencyMs } }).catch((err) => {
-    console.error('Failed to record AI usage log:', err.message);
-  });
-}
-
-// Daily limits reset at midnight UTC.
-function startOfDay(d = new Date()) {
-  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
-}
-
-const TONES = {
-  'Direct & challenging': 'Be direct and challenging: name weak reasoning plainly and push back hard on bias.',
-  'Supportive & measured': 'Be supportive and measured: still challenge weak reasoning, but in a calm, encouraging way.',
-  'Purely analytical': 'Be purely analytical: stick to structure, probability and risk, with minimal commentary on psychology unless asked.',
-};
-
-async function tonePreference(userId) {
-  const settings = await prisma.userSettings.findUnique({ where: { userId }, select: { aiPreferences: true } }).catch(() => null);
-  return TONES[settings?.aiPreferences?.tone] ?? null;
-}
-
 function toNvidiaMessage(m) {
   if (!m.image) return { role: m.role, content: m.content };
   return {
@@ -65,22 +42,6 @@ function toNvidiaMessage(m) {
       { type: 'image_url', image_url: { url: m.image } },
     ],
   };
-}
-
-async function getUserRole(userId) {
-  const user = await prisma.user.findUnique({ where: { id: userId }, select: { role: true } });
-  return user?.role ?? 'trader';
-}
-
-// usageLimit is null when uncapped. limitKind says why a cap applies: 'plan'
-// (free tier, only once paid plans are switched on) or 'fair_use' (everyone,
-// to protect the shared model quota).
-async function usageSnapshot(userId) {
-  const [role, settings] = await Promise.all([getUserRole(userId), loadAppSettings()]);
-  const usageLimit = aiDailyLimitFor(role, settings);
-  const usageToday = await prisma.aIUsageLog.count({ where: { userId, source: 'nvidia', createdAt: { gte: startOfDay() } } });
-  const onFreePlan = settings.paidPlansEnabled && !['premium', 'admin', 'super_admin'].includes(role);
-  return { usageToday, usageLimit, limitKind: usageLimit === null ? null : onFreePlan ? 'plan' : 'fair_use', paidPlansEnabled: settings.paidPlansEnabled };
 }
 
 async function loadOwnedConversation(id, userId) {
@@ -147,7 +108,7 @@ aiRouter.post('/conversations/:id/messages', asyncHandler(async (req, res) => {
   if (!content && !image) return res.status(400).json({ error: 'A message or image is required.' });
 
   const usage = await usageSnapshot(req.userId);
-  if (usage.usageLimit !== null && usage.usageToday >= usage.usageLimit) {
+  if (limitReached(usage)) {
     return res.status(429).json({ error: 'daily_limit_reached', ...usage });
   }
 

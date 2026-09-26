@@ -1,6 +1,10 @@
 import { Router } from 'express';
 import { prisma } from '../lib/prisma.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
+import { effectiveModels } from '../lib/aiModels.js';
+import { cronJobView } from '../lib/cronJobOrg.js';
+import { loadSettings as loadResearchSettings } from '../lib/research/settings.js';
+import { loadAppSettings } from '../lib/appSettings.js';
 
 export const adminStatsRouter = Router();
 
@@ -117,12 +121,18 @@ adminStatsRouter.get('/overview', asyncHandler(async (req, res) => {
     dailyActive.push({ day: dayStart.toISOString().slice(5, 10), dau: count });
   }
 
+  const [pendingKyc, newSignups7d] = await Promise.all([
+    prisma.kycProfile.count({ where: { status: 'pending' } }),
+    prisma.user.count({ where: { createdAt: { gte: daysAgo(7) } } }),
+  ]);
   const aiUsageCount30d = await prisma.aIUsageLog.count({ where: { createdAt: { gte: since30d } } });
   const checklistDays30d = await prisma.checklistDay.count({ where: { date: { gte: since30d.toISOString().slice(0, 10) } } });
 
   res.json({
     totalUsers,
     newSignups30d,
+    newSignups7d,
+    pendingKyc,
     dau,
     mau,
     aiRequestsToday,
@@ -132,5 +142,86 @@ adminStatsRouter.get('/overview', asyncHandler(async (req, res) => {
       { feature: 'Journal', count: journalEntries30d },
       { feature: 'Checklist', count: checklistDays30d },
     ].sort((a, b) => b.count - a.count),
+  });
+}));
+
+// Live checks of everything Kotka depends on. Each check reports what it
+// actually observed; nothing is assumed healthy.
+const PROVIDERS = [
+  { key: 'nvidia', name: 'NVIDIA (Kotka AI)', role: 'AI chat, chart reading, research narratives, journal reviews' },
+  { key: 'massive', name: 'Massive', role: 'End-of-day prices and volatility' },
+  { key: 'fred', name: 'FRED', role: 'US data for research (works without a key)' },
+  { key: 'cronjob', name: 'cron-job.org', role: 'Hourly research refresh and AI model checks' },
+  { key: 'paystack', name: 'Paystack', role: 'Billing (not used while paid plans are off)' },
+  { key: 'finnhub', name: 'Finnhub', role: 'Not used' },
+];
+
+adminStatsRouter.get('/system', asyncHandler(async (req, res) => {
+  const dbStarted = Date.now();
+  let database;
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+    database = { ok: true, latencyMs: Date.now() - dbStarted };
+  } catch (err) {
+    database = { ok: false, error: String(err.message).slice(0, 160) };
+  }
+
+  const rows = await prisma.integration.findMany();
+  const byKey = Object.fromEntries(rows.map((r) => [r.provider, r]));
+  const integrations = PROVIDERS.map((p) => {
+    const r = byKey[p.key];
+    return { key: p.key, name: p.name, role: p.role, configured: !!r?.secretCipher, enabled: !!r?.enabled, updatedAt: r?.updatedAt ?? null };
+  });
+
+  const nvidia = byKey.nvidia;
+  const cfg = nvidia?.config ?? {};
+  const health = Object.entries(cfg.modelHealth ?? {}).map(([model, h]) => ({ model, ...h }));
+  const researchSettings = await loadResearchSettings();
+  const ai = nvidia?.enabled
+    ? {
+        configured: true,
+        active: effectiveModels(nvidia, { narrativePreferred: researchSettings.model?.trim() || undefined }),
+        checkedAt: cfg.modelHealthCheckedAt ?? null,
+        healthy: health.filter((h) => h.status === 'ok').length,
+        unhealthy: health.filter((h) => h.status !== 'ok').map((h) => ({ model: h.model, status: h.status })),
+        recentEvents: (cfg.modelEvents ?? []).slice(0, 5),
+      }
+    : { configured: false };
+
+  const [lastRun, lastCronRun, runs24h, failed24h] = await Promise.all([
+    prisma.researchRun.findFirst({ where: { status: { in: ['succeeded', 'failed'] } }, orderBy: { startedAt: 'desc' } }),
+    prisma.researchRun.findFirst({ where: { trigger: 'cron' }, orderBy: { startedAt: 'desc' } }),
+    prisma.researchRun.count({ where: { startedAt: { gte: daysAgo(1) } } }),
+    prisma.researchRun.count({ where: { startedAt: { gte: daysAgo(1) }, status: 'failed' } }),
+  ]);
+  const sources = lastRun?.sourceStatus ?? [];
+  const research = {
+    enabled: researchSettings.enabled,
+    lastRunAt: lastRun?.startedAt ?? null,
+    lastRunStatus: lastRun?.status ?? null,
+    lastCronRunAt: lastCronRun?.startedAt ?? null,
+    runs24h,
+    failed24h,
+    sourcesOk: sources.filter((s) => s.status !== 'failed' && s.status !== 'disabled').length,
+    sourcesFailed: sources.filter((s) => s.status === 'failed').map((s) => s.name),
+  };
+
+  const since24h = daysAgo(1);
+  const [failedLogins24h, signups24h, pendingKyc] = await Promise.all([
+    prisma.authAttempt.count({ where: { kind: 'login', success: false, createdAt: { gte: since24h } } }),
+    prisma.user.count({ where: { createdAt: { gte: since24h } } }),
+    prisma.kycProfile.count({ where: { status: 'pending' } }),
+  ]);
+
+  res.json({
+    checkedAt: new Date(),
+    database,
+    integrations,
+    ai,
+    research,
+    cronJob: await cronJobView(researchSettings),
+    security: { failedLogins24h, signups24h, pendingKyc },
+    platform: await loadAppSettings(),
+    runtime: { node: process.version, region: process.env.VERCEL_REGION ?? 'local', deployment: process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 7) ?? null },
   });
 }));

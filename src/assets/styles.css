@@ -7,7 +7,7 @@
     -webkit-font-smoothing: antialiased;
   }
   body {
-    font-feature-settings: 'cv11', 'ss01';
+    font-feature-settings: 'ss01';
   }
   ::selection {
     background-color: theme('colors.accent.100');

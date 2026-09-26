@@ -147,12 +147,10 @@ export function evaluatePair(base, quote, { marketPrice = null } = {}) {
 
 // Spot performance from the existing Massive market-data integration. This is
 // what price has done — reported beside, never mixed into, the fundamentals.
-export async function fetchPairPricePerformance(pair, { getMassiveKey, fetchHistoricalBars }) {
+export async function fetchPairPricePerformance(pair, { getMassiveKey, getDailyBars }) {
   const apiKey = await getMassiveKey();
   if (!apiKey) return { available: false, reason: 'Massive market-data integration is not configured.' };
-  const to = new Date();
-  const from = new Date(to.getTime() - 100 * 24 * 60 * 60 * 1000);
-  const bars = await fetchHistoricalBars(apiKey, `C:${pair}`, 1, 'day', from.toISOString().slice(0, 10), to.toISOString().slice(0, 10));
+  const { bars } = await getDailyBars(apiKey, `C:${pair}`);
   if (!bars?.length) return { available: false, reason: 'No price history returned.' };
   const last = bars[bars.length - 1];
   const byAge = (days) => {

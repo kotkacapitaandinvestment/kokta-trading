@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react';
-import { AreaChart, Area, BarChart, Bar, ResponsiveContainer, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
-import { Users, DollarSign, Cpu, TrendingUp } from 'lucide-react';
+import { AreaChart, Area, ResponsiveContainer, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
+import { Link } from 'react-router-dom';
+import { Users, UserPlus, Cpu, TrendingUp, BadgeCheck } from 'lucide-react';
 import PageHeader from '../../components/ui/PageHeader';
 import Card, { CardHeader, CardBody } from '../../components/ui/Card';
 import StatTile from '../../components/ui/StatTile';
 import { api } from '../../lib/api';
-import { revenueByMonth } from '../../lib/mockData';
 import { CHART_COLORS } from '../../lib/chartColors';
 
 export default function AdminOverview() {
@@ -24,9 +24,17 @@ export default function AdminOverview() {
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <StatTile label="Daily Active Users" value={stats.dau.toLocaleString()} icon={Users} />
         <StatTile label="Monthly Active Users" value={stats.mau.toLocaleString()} icon={TrendingUp} />
-        <StatTile label="MRR" value="—" icon={DollarSign} hint="Pending Paystack integration" />
+        <StatTile label="New sign-ups, 7 days" value={stats.newSignups7d.toLocaleString()} icon={UserPlus} hint={`${stats.totalUsers.toLocaleString()} accounts in total`} />
         <StatTile label="AI Requests Today" value={stats.aiRequestsToday.toLocaleString()} icon={Cpu} />
       </div>
+
+      {stats.pendingKyc ? (
+        <Link to="/admin/verifications" className="flex items-center gap-3 rounded-2xl border border-amber-500/25 bg-amber-50 px-5 py-3 text-sm text-amber-800 transition-colors hover:bg-amber-100 dark:bg-amber-500/10 dark:text-amber-300 dark:hover:bg-amber-500/15">
+          <BadgeCheck className="h-4 w-4 shrink-0" />
+          <span className="flex-1">{stats.pendingKyc} identity verification{stats.pendingKyc === 1 ? '' : 's'} waiting for review</span>
+          <span className="font-medium">Review</span>
+        </Link>
+      ) : null}
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <Card className="lg:col-span-2">
@@ -77,22 +85,6 @@ export default function AdminOverview() {
         </Card>
       </div>
 
-      <Card>
-        <CardHeader title="Revenue Growth" subtitle="Illustrative — connects to real data once Paystack billing is live" />
-        <CardBody>
-          <div className="h-56 w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={revenueByMonth} margin={{ top: 8, right: 8, left: -20, bottom: 0 }}>
-                <CartesianGrid vertical={false} stroke={CHART_COLORS.grid.light} strokeDasharray="3 3" />
-                <XAxis dataKey="month" tickLine={false} axisLine={false} tick={{ fontSize: 12, fill: CHART_COLORS.tick.light }} />
-                <YAxis tickLine={false} axisLine={false} tick={{ fontSize: 12, fill: CHART_COLORS.tick.light }} />
-                <Tooltip contentStyle={{ borderRadius: 12, border: `1px solid ${CHART_COLORS.grid.light}`, fontSize: 12 }} formatter={(v) => [`$${v.toLocaleString()}`, 'Revenue']} />
-                <Bar dataKey="revenue" radius={[6, 6, 0, 0]} fill={CHART_COLORS.accent} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </CardBody>
-      </Card>
     </div>
   );
 }

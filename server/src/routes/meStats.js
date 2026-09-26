@@ -3,6 +3,7 @@ import { prisma } from '../lib/prisma.js';
 import { requireAuth } from '../middleware/auth.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 import { computeScores, computeAnalytics, generatePsychologyInsights } from '../lib/traderMetrics.js';
+import { announcementsFor } from './adminAnnouncements.js';
 
 export const meStatsRouter = Router();
 meStatsRouter.use(requireAuth);
@@ -125,6 +126,16 @@ meStatsRouter.get('/notifications', asyncHandler(async (req, res) => {
   const riskUsedToday = todayEntries.filter((e) => e.result === 'loss').reduce((s, e) => s + e.risk, 0);
 
   const notifications = [];
+  const me = await prisma.user.findUnique({ where: { id: req.userId }, select: { role: true } });
+  for (const a of await announcementsFor(me?.role ?? 'trader', { sinceDays: 14 })) {
+    notifications.push({
+      id: `a-${a.id}`,
+      type: 'announcement',
+      title: a.title,
+      body: a.body ?? '',
+      time: a.publishedAt.toISOString(),
+    });
+  }
   if (notify.checklist && checklistDone < checklistTotal) {
     notifications.push({
       id: 'n-checklist',
@@ -163,4 +174,9 @@ meStatsRouter.get('/notifications', asyncHandler(async (req, res) => {
   }
 
   res.json({ notifications });
+}));
+
+meStatsRouter.get('/announcements', asyncHandler(async (req, res) => {
+  const me = await prisma.user.findUnique({ where: { id: req.userId }, select: { role: true } });
+  res.json({ announcements: await announcementsFor(me?.role ?? 'trader', { sinceDays: 14 }) });
 }));

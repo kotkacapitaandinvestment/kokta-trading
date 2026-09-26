@@ -5,8 +5,7 @@ import { audit } from '../lib/audit.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 import { CURRENCIES, SUPPORTED_CURRENCY_CODES, FACTORS } from '../lib/research/currencies.js';
 import { loadSettings, sanitizeSettings, saveSettings, generateCronToken, saveCronToken, SOURCE_KEYS } from '../lib/research/settings.js';
-import { getCronJobOrgKey, syncCronJob, getCronJobStatus, CRON_PATH } from '../lib/cronJobOrg.js';
-import { cachedSource } from '../lib/research/cache.js';
+import { getCronJobOrgKey, syncCronJob, cronJobView, CRON_PATH } from '../lib/cronJobOrg.js';
 import { latestReportSummaries, freshnessOf } from '../lib/research/engine.js';
 import { RESEARCH_DEFAULT_MODEL } from '../lib/research/narrative.js';
 import { purgeExpiredSourceCache } from '../lib/research/cache.js';
@@ -23,19 +22,6 @@ function adminView(settings) {
 }
 
 // Live status of the cron-job.org job (cached 15 min; the API allows ~100 calls/day).
-async function cronJobView(settings, { fresh = false } = {}) {
-  const { configured, apiKey } = await getCronJobOrgKey();
-  if (!configured) return { managed: false };
-  if (!apiKey) return { managed: true, jobId: settings.cron?.jobId ?? null, error: 'The cron-job.org API key in Integrations is empty or unreadable.' };
-  if (!settings.cron?.jobId) return { managed: true, jobId: null };
-  try {
-    const { data } = await cachedSource(`cronjob:status:${settings.cron.jobId}`, 15 * 60 * 1000, () => getCronJobStatus(apiKey, settings.cron.jobId), { bypass: fresh });
-    return { managed: true, jobId: settings.cron.jobId, status: data };
-  } catch (err) {
-    return { managed: true, jobId: settings.cron.jobId, error: err.message };
-  }
-}
-
 function publicAppUrl(req) {
   if (process.env.PUBLIC_APP_URL) return process.env.PUBLIC_APP_URL.replace(/\/$/, '');
   if (process.env.VERCEL_PROJECT_PRODUCTION_URL) return `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`;

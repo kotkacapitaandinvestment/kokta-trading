@@ -5,6 +5,7 @@
 
 import { prisma } from './prisma.js';
 import { decryptSecret } from './crypto.js';
+import { cachedSource } from './research/cache.js';
 
 const API = 'https://api.cron-job.org';
 export const CRON_PATH = '/api/research/cron';
@@ -113,4 +114,19 @@ export async function getCronJobStatus(apiKey, jobId) {
     lastDurationMs: d.lastDuration ?? null,
     nextExecution: at(d.nextExecution),
   };
+}
+
+// Status of the Kotka job for admin views; cached 15 minutes (cron-job.org
+// rate-limits its API).
+export async function cronJobView(settings, { fresh = false } = {}) {
+  const { configured, apiKey } = await getCronJobOrgKey();
+  if (!configured) return { managed: false };
+  if (!apiKey) return { managed: true, jobId: settings.cron?.jobId ?? null, error: 'The cron-job.org API key in Integrations is empty or unreadable.' };
+  if (!settings.cron?.jobId) return { managed: true, jobId: null };
+  try {
+    const { data } = await cachedSource(`cronjob:status:${settings.cron.jobId}`, 15 * 60 * 1000, () => getCronJobStatus(apiKey, settings.cron.jobId), { bypass: fresh });
+    return { managed: true, jobId: settings.cron.jobId, status: data };
+  } catch (err) {
+    return { managed: true, jobId: settings.cron.jobId, error: err.message };
+  }
 }

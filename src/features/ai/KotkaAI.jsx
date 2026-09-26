@@ -7,7 +7,7 @@ import Badge from '../../components/ui/Badge';
 import Card from '../../components/ui/Card';
 import ConversationList from './components/ConversationList';
 import ChatMessage from './components/ChatMessage';
-import { markets, timeframes } from './mockAssistant';
+import { markets, timeframes } from './options';
 import { api } from '../../lib/api';
 
 export default function KotkaAI() {

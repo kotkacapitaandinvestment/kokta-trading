@@ -14,14 +14,40 @@ import { api } from '../../lib/api';
 
 const resultTone = { win: 'profit', loss: 'loss', breakeven: 'neutral' };
 
-function aiReviewFor(entry) {
-  if (entry.result === 'loss') {
-    return "This loss looks process-consistent if your invalidation was hit cleanly. The real question: did you size this the same as your winning trades, or did conviction creep in?";
-  }
-  if (!entry.checklistComplete) {
-    return 'This trade worked out, but it bypassed your own checklist. Outcome bias will tell you it was fine — track whether this becomes a pattern.';
-  }
-  return 'Clean process: checklist complete, defined invalidation, reward-to-risk above 2. This is the trade to study when building size confidence.';
+// Kotka AI's review is generated on request and saved with the entry.
+function AiReview({ entry, onReviewed }) {
+  const [state, setState] = useState(null);
+
+  const run = async () => {
+    setState({ loading: true });
+    try {
+      const { entry: updated } = await api.post(`/journal/${entry.id}/review`, {});
+      onReviewed(updated);
+      setState(null);
+    } catch (err) {
+      setState({ error: err.message });
+    }
+  };
+
+  return (
+    <Card className="border-accent-100 bg-accent-50/50 p-4 dark:border-accent-900/30 dark:bg-accent-900/10">
+      <div className="mb-2 flex items-center justify-between gap-3">
+        <span className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-accent-700 dark:text-accent-400">
+          <Sparkles className="h-3.5 w-3.5" /> Kotka AI review
+        </span>
+        {entry.aiReviewAt ? <span className="text-[11px] text-ink-400">{new Date(entry.aiReviewAt).toLocaleDateString()}</span> : null}
+      </div>
+      {entry.aiReview ? (
+        <p className="whitespace-pre-line text-sm leading-relaxed text-ink-700 dark:text-ink-200">{entry.aiReview.replace(/\s*—\s*/g, ', ')}</p>
+      ) : (
+        <p className="text-sm text-ink-500 dark:text-ink-400">Ask Kotka AI to review the process behind this trade, in the context of your recent record. It won't comment on direction or give signals.</p>
+      )}
+      {state?.error ? <p role="alert" className="mt-2 text-xs text-loss-500">{state.error}</p> : null}
+      <Button size="sm" variant={entry.aiReview ? 'ghost' : 'secondary'} className="mt-3" icon={Sparkles} disabled={state?.loading} onClick={run}>
+        {state?.loading ? 'Reviewing…' : entry.aiReview ? 'Review again' : 'Review this trade'}
+      </Button>
+    </Card>
+  );
 }
 
 export default function Journal() {
@@ -187,12 +213,13 @@ export default function Journal() {
               <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-ink-400">Lessons</p>
               <p className="text-sm text-ink-600 dark:text-ink-300">{detail.lessons || 'None recorded'}</p>
             </div>
-            <Card className="border-accent-100 bg-accent-50/50 p-4 dark:border-accent-900/30 dark:bg-accent-900/10">
-              <div className="mb-1.5 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-accent-700 dark:text-accent-400">
-                <Sparkles className="h-3.5 w-3.5" /> Kotka AI Review
-              </div>
-              <p className="text-sm text-ink-700 dark:text-ink-200">{aiReviewFor(detail)}</p>
-            </Card>
+            <AiReview
+              entry={detail}
+              onReviewed={(updated) => {
+                setDetail(updated);
+                setEntries((prev) => prev.map((e) => (e.id === updated.id ? updated : e)));
+              }}
+            />
           </div>
         ) : null}
       </Modal>

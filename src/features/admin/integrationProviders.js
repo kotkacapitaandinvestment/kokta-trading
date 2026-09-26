@@ -65,8 +65,8 @@ export const INTEGRATION_PROVIDERS = [
     name: 'Finnhub',
     category: 'Market Data',
     icon: Globe2,
-    description: 'Real watchlist quotes and the economic calendar shown on the Dashboard and Market Intelligence.',
-    fallbackNote: 'Without an active Finnhub connection, Watchlist, Economic Events, and Sentiment show illustrative sample data instead of live figures.',
+    description: 'Not used at the moment. Its free plan does not include forex quotes or the economic calendar; Kotka now uses Massive for prices and official central-bank and statistics calendars for events.',
+    fallbackNote: 'Nothing depends on this connection. You can leave it disabled.',
     fields: [{ key: 'secret', label: 'API Key', type: 'password', placeholder: 'Finnhub API key' }],
   },
   {
@@ -74,8 +74,8 @@ export const INTEGRATION_PROVIDERS = [
     name: 'Massive',
     category: 'Market Data',
     icon: Globe2,
-    description: 'Formerly Polygon.io — forex, metals, indices, and crypto data powering the Watchlist and Market Intelligence volatility (ATR).',
-    fallbackNote: 'Without an active Massive connection, symbols and volatility figures it would otherwise cover fall back to sample data.',
+    description: 'Formerly Polygon.io. End-of-day forex, metals, index and crypto bars for the market pulse (last close, daily change, 14-day ATR) and pair price performance in Fundamental Research.',
+    fallbackNote: 'Without an active Massive connection, prices and volatility are shown as unavailable. Nothing is substituted.',
     fields: [{ key: 'secret', label: 'API Key', type: 'password', placeholder: 'Massive API key' }],
   },
   {

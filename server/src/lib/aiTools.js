@@ -4,7 +4,7 @@
 
 import { prisma } from './prisma.js';
 import { computeScores, computeAnalytics, computeIdentity } from './traderMetrics.js';
-import { getMarketSnapshot } from './marketSnapshot.js';
+import { getMarketPulse, getOfficialCalendar } from './marketPulse.js';
 import { parseSubject } from './research/currencies.js';
 import { latestReport } from './research/engine.js';
 
@@ -66,7 +66,7 @@ export const TOOL_DEFINITIONS = [
     function: {
       name: 'get_market_snapshot',
       description:
-        'Get real live prices and daily change for the tracked watchlist (EUR/USD, GBP/JPY, XAU/USD, NAS100, BTC/USD), current volatility (ATR) readings and regime, and derived market sentiment. Each item is labeled live or sample depending on whether real data was actually available.',
+        'Get end-of-day market context for EUR/USD, GBP/USD, USD/JPY, XAU/USD, NAS100 and BTC/USD: last daily close and its date, the close-to-close change, 14-day ATR and volatility regime, and the 20-day range. These are previous-session closes, not live quotes. Also returns the next 7 days of official USD and EUR releases (FOMC, ECB, BLS, BEA, Eurostat). Unavailable items are marked unavailable; never guess them.',
       parameters: { type: 'object', properties: {}, required: [] },
     },
   },
@@ -121,12 +121,13 @@ export async function executeToolCall(name, args, userId) {
       }));
     }
     case 'get_market_snapshot': {
-      const snapshot = await getMarketSnapshot();
+      const [pulse, calendar] = await Promise.all([getMarketPulse(), getOfficialCalendar({ days: 7 })]);
       return {
-        watchlist: snapshot.watchlist.map((w) => ({ symbol: w.symbol, price: w.price, change: w.change, live: w.live })),
-        sentiment: snapshot.sentiment,
-        sentimentLive: snapshot.sentimentLive,
-        volatility: snapshot.volatility,
+        note: 'End-of-day data (previous session close), not live quotes.',
+        instruments: pulse.instruments.map(({ symbol, available, reason, close, closeDate, changePct, atr, atrPct, regime, range }) =>
+          available ? { symbol, close, closeDate, changePct, atr, atrPct, regime, range20d: range } : { symbol, available: false, reason },
+        ),
+        upcomingOfficialReleases: calendar.events.map((e) => ({ date: e.dateOnly ? e.date.slice(0, 10) : e.date, currency: e.currency, title: e.title, importance: e.importance })),
       };
     }
     case 'get_fundamental_research': {

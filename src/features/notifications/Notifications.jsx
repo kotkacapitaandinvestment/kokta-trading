@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ListChecks, NotebookPen, ShieldAlert, Sparkles, CheckCheck } from 'lucide-react';
+import { ListChecks, NotebookPen, ShieldAlert, Sparkles, CheckCheck, Megaphone } from 'lucide-react';
 import PageHeader from '../../components/ui/PageHeader';
 import Card from '../../components/ui/Card';
 import Button from '../../components/ui/Button';
@@ -7,7 +7,10 @@ import EmptyState from '../../components/ui/EmptyState';
 import { usePersistedState } from '../../lib/usePersistedState';
 import { api } from '../../lib/api';
 
-const iconFor = { checklist: ListChecks, journal: NotebookPen, risk: ShieldAlert };
+const iconFor = { checklist: ListChecks, journal: NotebookPen, risk: ShieldAlert, announcement: Megaphone };
+
+// Announcements carry a publish timestamp; computed reminders say "Today".
+const when = (t) => (/^\d{4}-\d{2}-\d{2}T/.test(t) ? new Date(t).toLocaleDateString(undefined, { day: 'numeric', month: 'short' }) : t);
 
 export default function Notifications() {
   const [items, setItems] = useState([]);
@@ -38,6 +41,7 @@ export default function Notifications() {
   const tabs = [
     { id: 'all', label: 'All' },
     { id: 'unread', label: 'Unread' },
+    { id: 'announcement', label: 'Announcements' },
     { id: 'checklist', label: 'Checklist' },
     { id: 'journal', label: 'Journal' },
     { id: 'risk', label: 'Risk' },
@@ -48,7 +52,7 @@ export default function Notifications() {
       <PageHeader
         eyebrow="Alerts"
         title="Notifications"
-        description="Checklist reminders, journal nudges, and risk warnings — computed live from today's activity."
+        description="Announcements from the Kotka team, plus checklist reminders, journal nudges and risk warnings computed from today's activity."
         actions={
           <Button variant="secondary" size="sm" icon={CheckCheck} onClick={markAllRead}>
             Mark all read
@@ -86,9 +90,9 @@ export default function Notifications() {
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center justify-between gap-2">
                     <p className={`text-sm font-medium ${n.read ? 'text-ink-600 dark:text-ink-300' : 'text-ink-900 dark:text-ink-50'}`}>{n.title}</p>
-                    <span className="shrink-0 text-xs text-ink-400">{n.time}</span>
+                    <span className="shrink-0 text-xs text-ink-400">{when(n.time)}</span>
                   </div>
-                  <p className="mt-0.5 text-xs text-ink-400">{n.body}</p>
+                  {n.body ? <p className="mt-0.5 whitespace-pre-line text-xs leading-relaxed text-ink-500 dark:text-ink-400">{n.body}</p> : null}
                 </div>
                 {!n.read ? <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-accent-500" /> : null}
               </button>

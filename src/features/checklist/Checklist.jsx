@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom';
 import { useEffect, useMemo, useState } from 'react';
 import { CheckCircle2, Circle, Sparkles, RotateCcw } from 'lucide-react';
 import PageHeader from '../../components/ui/PageHeader';
@@ -82,11 +83,16 @@ export default function Checklist() {
           <div className={`flex items-start gap-3 rounded-2xl border p-4 ${aiApproved ? 'border-accent-200 bg-accent-50/60 dark:border-accent-900/40 dark:bg-accent-900/10' : 'border-dashed border-ink-200 dark:border-ink-700'}`}>
             <Sparkles className={`mt-0.5 h-5 w-5 shrink-0 ${aiApproved ? 'text-accent-500' : 'text-ink-300'}`} />
             <div>
-              <p className="text-sm font-medium text-ink-800 dark:text-ink-100">Kotka AI approval</p>
+              <p className="text-sm font-medium text-ink-800 dark:text-ink-100">{aiApproved ? 'Checklist complete' : 'Before you trade'}</p>
               <p className="mt-0.5 text-xs text-ink-500 dark:text-ink-400">
-                {aiApproved
-                  ? 'All conditions met. Kotka AI has no objection to this trade — the discipline is on you now.'
-                  : 'Complete every item above to request Kotka AI\'s final review.'}
+                {aiApproved ? (
+                  <>
+                    Every condition is met. The checklist is your process, not a signal, so the decision is still yours.{' '}
+                    <Link to="/app/ai" className="font-medium text-accent-600 hover:underline dark:text-accent-400">Pressure-test the idea with Kotka AI</Link>
+                  </>
+                ) : (
+                  'Complete every item above. Skipped items are how most losing trades start.'
+                )}
               </p>
             </div>
           </div>

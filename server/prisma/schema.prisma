@@ -66,6 +66,10 @@ model JournalEntry {
   positionStatus    String   @default("closed")
   closedAt          DateTime?
   createdAt         DateTime @default(now())
+  // Kotka AI review, generated on request and kept with the entry.
+  aiReview          String?
+  aiReviewModel     String?
+  aiReviewAt        DateTime?
 
   @@index([userId])
 }
@@ -121,6 +125,7 @@ model Course {
 model Announcement {
   id          String    @id @default(cuid())
   title       String
+  body        String?
   audience    String    @default("All users")
   status      String    @default("draft")
   publishedAt DateTime?

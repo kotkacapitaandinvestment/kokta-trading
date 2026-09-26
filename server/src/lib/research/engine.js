@@ -4,7 +4,8 @@
 
 import { prisma } from '../prisma.js';
 import { decryptSecret } from '../crypto.js';
-import { fetchHistoricalBars } from '../massive.js';
+import { getDailyBarsCached } from '../massive.js';
+import { cachedSource } from './cache.js';
 import { CURRENCIES, parseSubject } from './currencies.js';
 import { collectEvidence } from './collect.js';
 import { evaluateCurrency } from './evaluate.js';
@@ -292,7 +293,7 @@ export async function runResearch({ subject: rawSubject, trigger = 'user', userI
       step('pair', `Relative analysis — ${parsed.base} vs ${parsed.quote}`);
       let marketPrice = null;
       try {
-        marketPrice = await fetchPairPricePerformance(parsed.subject, { getMassiveKey, fetchHistoricalBars });
+        marketPrice = await fetchPairPricePerformance(parsed.subject, { getMassiveKey, getDailyBars: (key, ticker) => getDailyBarsCached(key, ticker, { cachedSource }) });
       } catch (err) {
         marketPrice = { available: false, reason: `Price history unavailable: ${String(err.message).slice(0, 120)}` };
       }

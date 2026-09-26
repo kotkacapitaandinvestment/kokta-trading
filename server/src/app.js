@@ -19,9 +19,8 @@ import { adminKycRouter } from './routes/adminKyc.js';
 import { adminPlatformRouter } from './routes/adminPlatform.js';
 import { appConfigRouter } from './routes/appConfig.js';
 import { accountRouter } from './routes/account.js';
+import { adminAnnouncementsRouter } from './routes/adminAnnouncements.js';
 import { requireAuth, requireRole } from './middleware/auth.js';
-import { createCrudRouter } from './lib/crudRouter.js';
-import { prisma } from './lib/prisma.js';
 
 export const app = express();
 
@@ -41,10 +40,7 @@ app.use('/api/checklist', checklistRouter);
 app.use('/api/settings', settingsRouter);
 app.use('/api/admin/integrations', adminIntegrationsRouter);
 app.use('/api/admin/users', requireAdmin, adminUsersRouter);
-app.use('/api/admin/content', requireAdmin, createCrudRouter(prisma.contentItem));
-app.use('/api/admin/courses', requireAdmin, createCrudRouter(prisma.course));
-app.use('/api/admin/announcements', requireAdmin, createCrudRouter(prisma.announcement));
-app.use('/api/admin/market-news', requireAdmin, createCrudRouter(prisma.marketNewsItem, { orderBy: { publishedAt: 'desc' } }));
+app.use('/api/admin/announcements', requireAdmin, adminAnnouncementsRouter);
 app.use('/api/admin/stats', requireAdmin, adminStatsRouter);
 app.use('/api/admin/kyc', requireAdmin, adminKycRouter);
 app.use('/api/admin/platform', requireAdmin, adminPlatformRouter);
