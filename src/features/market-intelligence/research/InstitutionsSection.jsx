@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import clsx from 'clsx';
 import Tabs from '../../../components/ui/Tabs';
-import { fmt, formatDate, KindTag, NotAvailable, reasonAfterPrefix, reportCodes, Section, signedFixed, SourceLink, txt } from './primitives';
+import { CurrencyChip, CurrencyHeading, fmt, formatDate, KindTag, NotAvailable, reasonAfterPrefix, reportCodes, Section, signedFixed, SourceLink, toneOf, txt } from './primitives';
 
 export function CentralBanksSection({ report }) {
   const codes = reportCodes(report).filter((c) => report.centralBanks?.[c]);
@@ -12,14 +12,20 @@ export function CentralBanksSection({ report }) {
           const cb = report.centralBanks[code];
           return (
             <div key={code} className="space-y-3">
+              <CurrencyHeading report={report} code={code}>{cb.name}</CurrencyHeading>
               <div className="flex items-baseline justify-between gap-3">
-                <p className="text-sm font-semibold text-ink-900 dark:text-ink-50">{cb.name}</p>
-                <span className="font-mono text-sm tabular-nums text-ink-900 dark:text-ink-50">{txt(cb.rate ?? 'n/a')}</span>
+                <span className="font-mono text-2xl tabular-nums text-ink-900 dark:text-ink-50">{txt(cb.rate ?? 'n/a')}</span>
+                <span
+                  className={clsx(
+                    'rounded-full px-2.5 py-0.5 text-xs font-semibold',
+                    cb.stance === 'HAWKISH' ? 'bg-profit-50 text-profit-600 dark:bg-profit-500/10 dark:text-profit-400' : cb.stance === 'DOVISH' ? 'bg-loss-50 text-loss-600 dark:bg-loss-500/10 dark:text-loss-400' : 'bg-ink-100 text-ink-600 dark:bg-ink-800 dark:text-ink-300',
+                  )}
+                  title="Actual policy stance, from official rate decisions"
+                >
+                  {cb.stance ?? 'n/a'}
+                </span>
               </div>
               <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
-                <span className="text-ink-400">
-                  Stance <span className="font-medium text-ink-800 dark:text-ink-100">{cb.stance ?? 'n/a'}</span>
-                </span>
                 <span className="text-ink-400">
                   Real rate <span className="font-mono tabular-nums text-ink-800 dark:text-ink-100">{cb.realRate !== null && cb.realRate !== undefined ? `${signedFixed(cb.realRate)} pts` : 'n/a'}</span>
                 </span>
@@ -83,10 +89,7 @@ export function ImfSection({ report }) {
           const v = report.imfView[code];
           return (
             <div key={code} className="space-y-3">
-              <div className="flex items-baseline justify-between gap-2">
-                <p className="text-sm font-semibold text-ink-900 dark:text-ink-50">{report.currencies[code].economy}</p>
-                {v.vintage ? <p className="text-xs text-ink-400">{v.vintage} WEO, published {formatDate(v.published)}</p> : null}
-              </div>
+              <CurrencyHeading report={report} code={code}>{report.currencies[code].economy}{v.vintage ? ` · ${v.vintage} WEO, published ${formatDate(v.published)}` : ''}</CurrencyHeading>
               {v.available ? (
                 <ul className="space-y-2">
                   {v.statements.map((s) => (
@@ -140,7 +143,7 @@ export function RevisionsSection({ report }) {
     <Section
       title="IMF forecast revisions"
       subtitle={first ? `${first.previousVintage} WEO (published ${formatDate(first.previousPublished)}) compared with the ${first.currentVintage} WEO (published ${formatDate(first.currentPublished)}).` : 'Previous vs current IMF World Economic Outlook.'}
-      action={codes.length > 1 ? <Tabs tabs={codes.map((code) => ({ value: code, label: code }))} active={active} onChange={setActive} /> : null}
+      action={codes.length > 1 ? <Tabs tabs={codes.map((code) => ({ value: code, label: <CurrencyChip code={code} tone={toneOf(report, code)} /> }))} active={active} onChange={setActive} /> : null}
     >
       {revs.length ? (
         <div className="-mx-5 overflow-x-auto">

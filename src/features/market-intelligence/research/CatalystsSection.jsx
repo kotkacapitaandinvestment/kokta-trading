@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import clsx from 'clsx';
 import Tabs from '../../../components/ui/Tabs';
-import { NotAvailable, Section, SourceLink, formatDate, reasonAfterPrefix, txt } from './primitives';
+import { CurrencyChip, formatDate, NotAvailable, reasonAfterPrefix, Section, SourceLink, toneOf, txt } from './primitives';
 
 function when(c) {
   if (!c.date) return null;
@@ -38,8 +38,8 @@ export default function CatalystsSection({ report }) {
                 <th className="px-5 py-2 font-medium">Date</th>
                 <th className="px-2 py-2 font-medium">Event</th>
                 <th className="px-2 py-2 font-medium">Importance</th>
-                <th className="w-[22%] px-2 py-2 font-medium">Potential positive effect</th>
-                <th className="w-[22%] px-5 py-2 font-medium">Potential negative effect</th>
+                <th className="w-[22%] px-2 py-2 font-medium text-profit-600 dark:text-profit-400">Potential positive effect</th>
+                <th className="w-[22%] px-5 py-2 font-medium text-loss-500">Potential negative effect</th>
               </tr>
             </thead>
             <tbody>
@@ -47,7 +47,9 @@ export default function CatalystsSection({ report }) {
                 <tr key={`${c.date}-${c.event}-${i}`} className="border-b border-ink-50 align-top dark:border-ink-800/60">
                   <td className="whitespace-nowrap px-5 py-3 text-xs">
                     {c.date ? <span className="font-mono tabular-nums text-ink-800 dark:text-ink-100">{when(c)}</span> : <span className="font-mono text-[11px] text-ink-400">DATE NOT AVAILABLE</span>}
-                    <p className="mt-0.5 text-ink-400">{c.currency}</p>
+                    <div className="mt-1 flex gap-1">
+                      {String(c.currency).split('/').map((code) => (report.currencies[code] ? <CurrencyChip key={code} code={code} tone={toneOf(report, code)} /> : <span key={code} className="text-ink-400">{code}</span>))}
+                    </div>
                   </td>
                   <td className="px-2 py-3">
                     <p className="text-sm text-ink-800 dark:text-ink-100">{txt(c.event)}</p>
@@ -57,10 +59,16 @@ export default function CatalystsSection({ report }) {
                     <SourceLink href={c.source?.url} className="mt-0.5 text-[11px]">{txt(c.source?.name)}</SourceLink>
                   </td>
                   <td className="px-2 py-3">
-                    <span className={clsx('text-xs font-medium', c.importance === 'High' ? 'text-ink-900 dark:text-ink-50' : 'text-ink-500 dark:text-ink-400')}>{c.importance}</span>
+                    <span className={clsx('rounded-full px-2 py-0.5 text-[11px] font-semibold', c.importance === 'High' ? 'bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400' : 'bg-ink-100 text-ink-500 dark:bg-ink-800 dark:text-ink-400')}>{c.importance}</span>
                   </td>
-                  <td className="max-w-[16rem] px-2 py-3 text-xs leading-relaxed text-ink-600 dark:text-ink-300">{txt(c.scenarios?.positive)}</td>
-                  <td className="max-w-[16rem] px-5 py-3 text-xs leading-relaxed text-ink-600 dark:text-ink-300">{txt(c.scenarios?.negative)}</td>
+                  <td className="max-w-[16rem] px-2 py-3 text-xs leading-relaxed text-ink-600 dark:text-ink-300">
+                    <span className="mb-0.5 block text-[10px] font-semibold uppercase tracking-wide text-profit-600 dark:text-profit-400 md:hidden">Positive</span>
+                    <span className="border-l-2 border-profit-500/60 pl-2 md:block">{txt(c.scenarios?.positive)}</span>
+                  </td>
+                  <td className="max-w-[16rem] px-5 py-3 text-xs leading-relaxed text-ink-600 dark:text-ink-300">
+                    <span className="mb-0.5 block text-[10px] font-semibold uppercase tracking-wide text-loss-500 md:hidden">Negative</span>
+                    <span className="border-l-2 border-loss-500/60 pl-2 md:block">{txt(c.scenarios?.negative)}</span>
+                  </td>
                 </tr>
               ))}
             </tbody>

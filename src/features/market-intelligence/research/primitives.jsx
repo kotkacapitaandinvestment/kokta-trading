@@ -36,24 +36,86 @@ export function formatDate(iso, { time = false } = {}) {
   return `${date}, ${d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: 'UTC' })} UTC`;
 }
 
+// Evidence type colours: each kind of statement has one hue, used everywhere.
 const KIND_STYLES = {
-  FACT: 'border-ink-300 text-ink-600 dark:border-ink-600 dark:text-ink-300',
-  ACTUAL: 'border-ink-300 text-ink-600 dark:border-ink-600 dark:text-ink-300',
-  'SOURCE ASSESSMENT': 'border-accent-500/60 text-accent-700 dark:text-accent-300',
-  'KOTKA INTERPRETATION': 'border-transparent bg-accent-50 text-accent-800 dark:bg-accent-900/30 dark:text-accent-200',
-  FORECAST: 'border-dashed border-ink-400 text-ink-600 dark:border-ink-500 dark:text-ink-300',
-  'MARKET EXPECTATION': 'border-dotted border-ink-400 text-ink-600 dark:border-ink-500 dark:text-ink-300',
-  'MARKET PRICE': 'border-dotted border-ink-400 text-ink-600 dark:border-ink-500 dark:text-ink-300',
+  FACT: 'bg-slate-100 text-slate-700 ring-slate-300/70 dark:bg-slate-400/15 dark:text-slate-200 dark:ring-slate-400/30',
+  'SOURCE ASSESSMENT': 'bg-teal-50 text-teal-800 ring-teal-600/25 dark:bg-teal-400/10 dark:text-teal-200 dark:ring-teal-400/30',
+  'KOTKA INTERPRETATION': 'bg-violet-50 text-violet-800 ring-violet-600/20 dark:bg-violet-400/10 dark:text-violet-200 dark:ring-violet-400/30',
+  FORECAST: 'bg-white text-ink-600 ring-ink-300 dark:bg-transparent dark:text-ink-300 dark:ring-ink-600',
+  'MARKET EXPECTATION': 'bg-white text-ink-600 ring-ink-300 dark:bg-transparent dark:text-ink-300 dark:ring-ink-600',
+  'MARKET PRICE': 'bg-white text-ink-600 ring-ink-300 dark:bg-transparent dark:text-ink-300 dark:ring-ink-600',
 };
 
-const KIND_LABEL = { ACTUAL: 'FACT' };
+const KIND_LABEL = { ACTUAL: 'FACT', 'KOTKA INTERPRETATION': 'KOTKA VIEW', 'SOURCE ASSESSMENT': 'SOURCE' };
 
 export function KindTag({ kind, className }) {
-  const k = String(kind ?? 'FACT').toUpperCase();
+  const raw = String(kind ?? 'FACT').toUpperCase();
+  const k = raw === 'ACTUAL' ? 'FACT' : raw;
   return (
-    <span className={clsx('inline-flex shrink-0 items-center rounded border px-1.5 py-px font-mono text-[9.5px] font-medium tracking-wide', KIND_STYLES[k] ?? KIND_STYLES.FACT, className)}>
+    <span
+      title={k === 'KOTKA INTERPRETATION' ? "Kotka's interpretation of the evidence" : k === 'SOURCE ASSESSMENT' ? 'What an institution projected or stated' : k === 'FACT' ? 'Verified data' : undefined}
+      className={clsx('inline-flex shrink-0 items-center rounded px-1.5 py-px font-mono text-[9.5px] font-semibold tracking-wide ring-1 ring-inset', KIND_STYLES[k] ?? KIND_STYLES.FACT, className)}
+    >
       {KIND_LABEL[k] ?? k}
     </span>
+  );
+}
+
+// ── Currency identity (base = gold, quote = blue) ──
+export const toneOf = (report, code) => (report?.quote && code === report.quote ? 'quote' : 'base');
+
+const CCY = {
+  base: {
+    dot: 'bg-ccybase',
+    text: 'text-ccybase-ink dark:text-ccybase-light',
+    soft: 'bg-ccybase/10 dark:bg-ccybase/15',
+    ring: 'ring-ccybase/40',
+    border: 'border-ccybase',
+  },
+  quote: {
+    dot: 'bg-ccyquote dark:bg-ccyquote-dark',
+    text: 'text-ccyquote-ink dark:text-ccyquote-light',
+    soft: 'bg-ccyquote/10 dark:bg-ccyquote-dark/15',
+    ring: 'ring-ccyquote/40 dark:ring-ccyquote-dark/40',
+    border: 'border-ccyquote dark:border-ccyquote-dark',
+  },
+};
+export const ccy = (tone) => CCY[tone] ?? CCY.base;
+
+export function CurrencyChip({ code, tone = 'base', size = 'sm', className }) {
+  const c = ccy(tone);
+  return (
+    <span className={clsx('inline-flex items-center gap-1.5 rounded-md font-mono font-semibold ring-1 ring-inset', c.soft, c.text, c.ring, size === 'sm' ? 'px-1.5 py-0.5 text-[11px]' : 'px-2 py-1 text-xs', className)}>
+      <span className={clsx('h-1.5 w-1.5 rounded-full', c.dot)} />
+      {code}
+    </span>
+  );
+}
+
+// Which currency a factor favours, in that currency's colour.
+export function FavoursPill({ report, favors }) {
+  if (!favors) return <span className="font-mono text-[11px] text-ink-400">n/a</span>;
+  if (favors === 'NEITHER') return <span className="text-xs text-ink-400">Neither</span>;
+  return <CurrencyChip code={favors} tone={toneOf(report, favors)} />;
+}
+
+// A chapter of the report: anchor target for the chapter bar.
+export function Chapter({ id, icon: Icon, title, description, children }) {
+  return (
+    <section id={id} data-chapter={id} className="scroll-mt-20 space-y-4">
+      <header className="flex items-start gap-3 pt-2">
+        {Icon ? (
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-ink-900 text-accent-400 dark:bg-ink-800">
+            <Icon className="h-4 w-4" strokeWidth={1.75} />
+          </span>
+        ) : null}
+        <div>
+          <h2 className="text-base font-semibold tracking-tight text-ink-900 dark:text-ink-50">{title}</h2>
+          {description ? <p className="mt-0.5 max-w-3xl text-xs text-ink-500 dark:text-ink-400">{txt(description)}</p> : null}
+        </div>
+      </header>
+      {children}
+    </section>
   );
 }
 
@@ -114,9 +176,15 @@ export function SourceLink({ href, children, className }) {
   );
 }
 
-export function Section({ title, subtitle, action, children, className }) {
+export function Section({ title, subtitle, action, children, className, tone }) {
   return (
-    <section className={clsx('rounded-2xl border border-ink-100 bg-white dark:border-ink-700 dark:bg-ink-900', className)}>
+    <section
+      className={clsx(
+        'rounded-2xl border border-ink-100 bg-white dark:border-ink-700 dark:bg-ink-900',
+        tone && clsx('border-t-2', ccy(tone).border),
+        className,
+      )}
+    >
       <header className="flex flex-wrap items-start justify-between gap-3 px-5 pt-5">
         <div>
           <h3 className="text-sm font-semibold text-ink-900 dark:text-ink-50">{title}</h3>
@@ -126,6 +194,20 @@ export function Section({ title, subtitle, action, children, className }) {
       </header>
       <div className="px-5 pb-5 pt-3">{children}</div>
     </section>
+  );
+}
+
+// Column header for per-currency panels inside a section.
+export function CurrencyHeading({ report, code, children }) {
+  const c = ccy(toneOf(report, code));
+  return (
+    <div className={clsx('mb-3 flex items-center justify-between gap-2 border-b pb-2', 'border-ink-100 dark:border-ink-800')}>
+      <div className="flex items-center gap-2">
+        <span className={clsx('h-4 w-1 rounded-full', c.dot)} />
+        <span className={clsx('text-xs font-semibold', c.text)}>{code}</span>
+        {children ? <span className="text-xs text-ink-400">{children}</span> : null}
+      </div>
+    </div>
   );
 }
 

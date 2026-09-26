@@ -63,6 +63,10 @@ export default {
           500: '#C24A3F',
           600: '#A83B32',
         },
+        // Currency identity in pair research (base vs quote). Same pair as the
+        // research trend charts, validated for colour-vision deficiency.
+        ccybase: { DEFAULT: '#B58637', ink: '#8A6528', light: '#E4C078' },
+        ccyquote: { DEFAULT: '#2a78d6', dark: '#3987e5', ink: '#1F5FAE', light: '#8DB9F0' },
       },
       boxShadow: {
         card: '0 1px 2px 0 rgba(17, 19, 24, 0.04), 0 1px 8px 0 rgba(17, 19, 24, 0.04)',

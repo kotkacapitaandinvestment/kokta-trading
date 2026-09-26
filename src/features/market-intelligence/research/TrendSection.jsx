@@ -159,7 +159,7 @@ export default function TrendSection({ report, history }) {
   return (
     <Section
       title="Fundamental trend"
-      subtitle={`${directionWord(subjectTrend?.direction?.label)} over the last six month-ends.`}
+      subtitle={`${isPair && subjectTrend?.direction?.label === 'STRENGTHENING' ? `Shifting toward ${report.base}` : isPair && subjectTrend?.direction?.label === 'WEAKENING' ? `Shifting toward ${report.quote}` : directionWord(subjectTrend?.direction?.label)} over the last six month-ends.`}
       action={<Tabs tabs={[{ value: 'chart', label: 'Chart' }, { value: 'table', label: 'Table' }]} active={view} onChange={setView} />}
     >
       {view === 'chart' ? (

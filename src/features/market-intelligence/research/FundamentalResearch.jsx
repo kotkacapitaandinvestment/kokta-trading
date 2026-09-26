@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import clsx from 'clsx';
-import { AlertTriangle, Check, Landmark, Loader2, RefreshCw } from 'lucide-react';
+import { AlertTriangle, CalendarClock, Check, Globe2, History, Landmark, Layers, Library, Loader2, RefreshCw, Scale } from 'lucide-react';
 import Button from '../../../components/ui/Button';
 import EmptyState from '../../../components/ui/EmptyState';
 import Skeleton from '../../../components/ui/Skeleton';
@@ -14,7 +14,8 @@ import { CentralBanksSection, ImfSection, RevisionsSection } from './Institution
 import CatalystsSection from './CatalystsSection';
 import TrendSection from './TrendSection';
 import SourcesSection, { FreshnessStrip } from './SourcesSection';
-import { txt } from './primitives';
+import { Chapter, txt } from './primitives';
+import { ReadingGuide, ReportNav } from './ReportNav';
 
 function InstrumentPicker({ config, value, onChange }) {
   const pill = (subject, label) => (
@@ -87,33 +88,64 @@ function ReportSkeleton() {
   );
 }
 
+const CHAPTERS = [
+  { id: 'ch-verdict', label: 'Verdict', icon: Scale },
+  { id: 'ch-drivers', label: 'Macro drivers', icon: Layers },
+  { id: 'ch-policy', label: 'Policy & markets', icon: Landmark },
+  { id: 'ch-imf', label: 'IMF & forecasts', icon: Globe2 },
+  { id: 'ch-changes', label: 'Changes & trend', icon: History },
+  { id: 'ch-outlook', label: 'Outlook & risks', icon: CalendarClock },
+  { id: 'ch-sources', label: 'Sources', icon: Library },
+];
+
 function Report({ report, history }) {
   const isPair = report.kind === 'pair';
+  const pairName = isPair ? `${report.base} relative to ${report.quote}` : report.subject;
   return (
     <EvidenceProvider report={report}>
-      <div className="space-y-6">
-        <VerdictSection report={report} />
-        <div className="grid grid-cols-1 gap-6 xl:grid-cols-12">
-          <div className="space-y-6 xl:col-span-8">
+      {/* The chapter bar must share a parent with the chapters to stay sticky. */}
+      <div>
+        <ReadingGuide report={report} />
+        <div className="mt-4" />
+        <ReportNav chapters={CHAPTERS} />
+        <div className="mt-6 space-y-12">
+          <Chapter id="ch-verdict" icon={Scale} title="Verdict" description={`The fundamental condition of ${pairName}, how confident Kotka is, and the reasons behind it.`}>
+            <VerdictSection report={report} />
+            <WhySection report={report} />
+          </Chapter>
+
+          <Chapter id="ch-drivers" icon={Layers} title="Macro drivers" description="Every factor scored from official data, side by side, with the evidence and the rule behind each score.">
             <MacroDrivers report={report} />
             {isPair ? <RelativeSection report={report} /> : null}
-          </div>
-          <div className="xl:col-span-4">
-            <WhySection report={report} />
-          </div>
+            <MainDrivers report={report} />
+          </Chapter>
+
+          <Chapter id="ch-policy" icon={Landmark} title="Policy & markets" description="What the central banks are actually doing, and what markets appear to expect, kept apart.">
+            <CentralBanksSection report={report} />
+            <RealityVsExpectations report={report} />
+          </Chapter>
+
+          <Chapter id="ch-imf" icon={Globe2} title="IMF & forecasts" description="IMF projections and how they were revised between World Economic Outlook editions.">
+            <ImfSection report={report} />
+            <RevisionsSection report={report} />
+          </Chapter>
+
+          <Chapter id="ch-changes" icon={History} title="Changes & trend" description="What moved since last month, and how the fundamental score has evolved.">
+            <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+              <WhatChangedSection report={report} />
+              <TrendSection report={report} history={history} />
+            </div>
+          </Chapter>
+
+          <Chapter id="ch-outlook" icon={CalendarClock} title="Outlook & risks" description="Scheduled events that could move the assessment, and the developments that would change it.">
+            <InvalidationSection report={report} />
+            <CatalystsSection report={report} />
+          </Chapter>
+
+          <Chapter id="ch-sources" icon={Library} title="Sources" description="Every publication behind this report, and how retrieval went on this run.">
+            <SourcesSection report={report} />
+          </Chapter>
         </div>
-        <MainDrivers report={report} />
-        <RealityVsExpectations report={report} />
-        <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-          <WhatChangedSection report={report} />
-          <TrendSection report={report} history={history} />
-        </div>
-        <RevisionsSection report={report} />
-        <CentralBanksSection report={report} />
-        <ImfSection report={report} />
-        <CatalystsSection report={report} />
-        <InvalidationSection report={report} />
-        <SourcesSection report={report} />
       </div>
     </EvidenceProvider>
   );

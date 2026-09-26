@@ -1,7 +1,7 @@
 import { Fragment, useState } from 'react';
 import clsx from 'clsx';
 import { ChevronRight } from 'lucide-react';
-import { FactorBar, KindTag, NotAvailable, reportCodes, Section, signed, txt } from './primitives';
+import { ccy, CurrencyChip, CurrencyHeading, FactorBar, FavoursPill, KindTag, NotAvailable, reportCodes, Section, signed, toneOf, txt } from './primitives';
 import { EvidenceList } from './Evidence';
 
 function FactorDetail({ f, code }) {
@@ -50,8 +50,8 @@ function PairMatrix({ report }) {
         <thead>
           <tr className="border-b border-ink-100 text-[11px] text-ink-400 dark:border-ink-800">
             <th className="px-5 py-2 font-medium">Factor</th>
-            <th className="px-2 py-2 font-medium">{base}</th>
-            <th className="px-2 py-2 font-medium">{quote}</th>
+            <th className="px-2 py-2 font-medium"><CurrencyChip code={base} tone="base" /></th>
+            <th className="px-2 py-2 font-medium"><CurrencyChip code={quote} tone="quote" /></th>
             <th className="px-2 py-2 font-medium">Favours</th>
             <th className="w-8" />
           </tr>
@@ -66,7 +66,7 @@ function PairMatrix({ report }) {
                   onClick={() => setOpen(isOpen ? null : row.key)}
                   className={clsx('cursor-pointer border-b border-ink-50 transition-colors hover:bg-ink-50/60 dark:border-ink-800/60 dark:hover:bg-ink-800/40', isOpen && 'bg-ink-50/60 dark:bg-ink-800/40')}
                 >
-                  <td className="whitespace-nowrap px-5 py-2.5">
+                  <td className={clsx('whitespace-nowrap border-l-[3px] py-2.5 pl-[17px] pr-5', row.available && row.favors && row.favors !== 'NEITHER' ? ccy(toneOf(report, row.favors)).border : 'border-transparent')}>
                     <p className="text-sm text-ink-800 dark:text-ink-100">{row.label}</p>
                     {isDiff ? <p className="text-[11px] text-ink-400">Pair-level evidence</p> : null}
                   </td>
@@ -89,11 +89,7 @@ function PairMatrix({ report }) {
                     </>
                   )}
                   <td className="px-2 py-2.5 text-xs">
-                    {row.available ? (
-                      <span className={clsx('font-medium', row.favors === 'NEITHER' ? 'text-ink-400' : 'text-ink-800 dark:text-ink-100')}>{row.favors === 'NEITHER' ? 'Neither' : row.favors}</span>
-                    ) : (
-                      <span className="font-mono text-[11px] text-ink-400">n/a</span>
-                    )}
+                    <FavoursPill report={report} favors={row.available ? row.favors : null} />
                   </td>
                   <td className="pr-4">
                     <ChevronRight className={clsx('h-4 w-4 text-ink-300 transition-transform', isOpen && 'rotate-90')} />
@@ -118,11 +114,11 @@ function PairMatrix({ report }) {
                       ) : (
                         <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
                           <div>
-                            <p className="mb-2 text-xs font-semibold text-ink-500 dark:text-ink-400">{base}</p>
+                            <CurrencyHeading report={report} code={base} />
                             <FactorDetail f={B.factors[row.key]} code={base} />
                           </div>
                           <div>
-                            <p className="mb-2 text-xs font-semibold text-ink-500 dark:text-ink-400">{quote}</p>
+                            <CurrencyHeading report={report} code={quote} />
                             <FactorDetail f={Q.factors[row.key]} code={quote} />
                           </div>
                         </div>
@@ -174,7 +170,7 @@ export function MacroDrivers({ report }) {
   const isPair = report.kind === 'pair';
   return (
     <Section
-      title="Macro drivers"
+      title="Factor scores"
       subtitle="Each factor is scored from -2 (strongly negative) to +2 (strongly positive) by fixed rules applied to official data. Select a factor for its evidence."
     >
       {isPair ? <PairMatrix report={report} /> : <CurrencyMatrix c={report.currencies[report.subject]} />}
@@ -193,7 +189,7 @@ export function MainDrivers({ report }) {
           const c = report.currencies[code];
           return (
             <div key={code}>
-              {codes.length > 1 ? <p className="mb-3 text-xs font-semibold text-ink-500 dark:text-ink-400">{code}</p> : null}
+              {codes.length > 1 ? <CurrencyHeading report={report} code={code}>{c.name}</CurrencyHeading> : null}
               {c.drivers.length ? (
                 <ol className="space-y-4">
                   {c.drivers.map((d, i) => (
@@ -203,8 +199,13 @@ export function MainDrivers({ report }) {
                           <span className="mr-1.5 font-mono text-xs text-ink-400">{i + 1}</span>
                           {d.label}
                         </p>
-                        <span className={clsx('text-xs font-medium', d.effect === 'POSITIVE' ? 'text-profit-600 dark:text-profit-400' : d.effect === 'NEGATIVE' ? 'text-loss-500' : 'text-ink-500')}>
-                          {d.effect === 'POSITIVE' ? 'Positive' : d.effect === 'NEGATIVE' ? 'Negative' : 'Mixed'} ({signed(d.score)})
+                        <span
+                          className={clsx(
+                            'shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium',
+                            d.effect === 'POSITIVE' ? 'bg-profit-50 text-profit-600 dark:bg-profit-500/10 dark:text-profit-400' : d.effect === 'NEGATIVE' ? 'bg-loss-50 text-loss-600 dark:bg-loss-500/10 dark:text-loss-400' : 'bg-ink-100 text-ink-600 dark:bg-ink-800 dark:text-ink-300',
+                          )}
+                        >
+                          {d.effect === 'POSITIVE' ? 'Supportive' : d.effect === 'NEGATIVE' ? 'Weighs' : 'Mixed'} {signed(d.score)}
                         </span>
                       </div>
                       <div className="mt-1.5">
