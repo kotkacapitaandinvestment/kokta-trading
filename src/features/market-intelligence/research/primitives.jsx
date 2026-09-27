@@ -1,5 +1,21 @@
+import { useSyncExternalStore } from 'react';
 import clsx from 'clsx';
 import { ArrowUpRight } from 'lucide-react';
+
+// True below a width (default: Tailwind's md, 768px). Tables switch to
+// compact layouts and bars get narrower there.
+export function useNarrow(maxWidth = 767) {
+  const query = `(max-width: ${maxWidth}px)`;
+  return useSyncExternalStore(
+    (cb) => {
+      const mq = window.matchMedia(query);
+      mq.addEventListener('change', cb);
+      return () => mq.removeEventListener('change', cb);
+    },
+    () => window.matchMedia(query).matches,
+    () => false,
+  );
+}
 
 // Kotka-authored copy never renders em/en dashes; verbatim institutional
 // quotes are rendered untouched and never pass through this.

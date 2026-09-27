@@ -1,7 +1,7 @@
 import { Fragment, useState } from 'react';
 import clsx from 'clsx';
 import { ChevronRight } from 'lucide-react';
-import { ccy, CurrencyChip, CurrencyHeading, FactorBar, FavoursPill, KindTag, NotAvailable, reportCodes, Section, signed, toneOf, txt } from './primitives';
+import { ccy, CurrencyChip, CurrencyHeading, FactorBar, FavoursPill, KindTag, NotAvailable, reportCodes, Section, signed, toneOf, txt, useNarrow } from './primitives';
 import { EvidenceList } from './Evidence';
 
 function FactorDetail({ f, code }) {
@@ -30,9 +30,10 @@ function FactorDetail({ f, code }) {
 }
 
 function ScoreCell({ score, classification }) {
+  const narrow = useNarrow();
   return (
-    <div className="flex items-center gap-2.5">
-      <FactorBar score={score} />
+    <div className="flex items-center gap-1.5 sm:gap-2.5">
+      <FactorBar score={score} width={narrow ? 40 : 88} />
       <span className="w-6 font-mono text-xs tabular-nums text-ink-800 dark:text-ink-100">{score === null || score === undefined ? 'n/a' : signed(score)}</span>
       <span className="hidden max-w-[10rem] truncate text-[11px] text-ink-400 xl:inline" title={txt(classification)}>{classification?.includes('NOT AVAILABLE') ? 'Not available' : txt(classification)}</span>
     </div>
@@ -41,19 +42,21 @@ function ScoreCell({ score, classification }) {
 
 function PairMatrix({ report }) {
   const [open, setOpen] = useState(null);
+  const narrow = useNarrow();
   const { base, quote } = report.pair;
   const B = report.currencies[base];
   const Q = report.currencies[quote];
   return (
     <div className="-mx-5 overflow-x-auto">
-      <table className="w-full min-w-[640px] text-left">
+      {/* Phones: no Favours column; the coloured left edge shows the side. */}
+      <table className="w-full text-left md:min-w-[640px]">
         <thead>
           <tr className="border-b border-ink-100 text-[11px] text-ink-400 dark:border-ink-800">
-            <th className="px-5 py-2 font-medium">Factor</th>
-            <th className="px-2 py-2 font-medium"><CurrencyChip code={base} tone="base" /></th>
-            <th className="px-2 py-2 font-medium"><CurrencyChip code={quote} tone="quote" /></th>
-            <th className="px-2 py-2 font-medium">Favours</th>
-            <th className="w-8" />
+            <th className="py-2 pl-4 pr-2 font-medium md:px-5">Factor</th>
+            <th className="px-1 py-2 font-medium sm:px-2"><CurrencyChip code={base} tone="base" /></th>
+            <th className="px-1 py-2 font-medium sm:px-2"><CurrencyChip code={quote} tone="quote" /></th>
+            <th className="hidden px-2 py-2 font-medium md:table-cell">Favours</th>
+            <th className="w-6 md:w-8" />
           </tr>
         </thead>
         <tbody>
@@ -66,15 +69,15 @@ function PairMatrix({ report }) {
                   onClick={() => setOpen(isOpen ? null : row.key)}
                   className={clsx('cursor-pointer border-b border-ink-50 transition-colors hover:bg-ink-50/60 dark:border-ink-800/60 dark:hover:bg-ink-800/40', isOpen && 'bg-ink-50/60 dark:bg-ink-800/40')}
                 >
-                  <td className={clsx('whitespace-nowrap border-l-[3px] py-2.5 pl-[17px] pr-5', row.available && row.favors && row.favors !== 'NEITHER' ? ccy(toneOf(report, row.favors)).border : 'border-transparent')}>
+                  <td className={clsx('border-l-[3px] py-2.5 pl-[13px] pr-2 md:whitespace-nowrap md:pl-[17px] md:pr-5', row.available && row.favors && row.favors !== 'NEITHER' ? ccy(toneOf(report, row.favors)).border : 'border-transparent')}>
                     <p className="text-sm text-ink-800 dark:text-ink-100">{row.label}</p>
                     {isDiff ? <p className="text-[11px] text-ink-400">Pair-level evidence</p> : null}
                   </td>
                   {isDiff ? (
-                    <td colSpan={2} className="px-2 py-2.5">
+                    <td colSpan={2} className="px-1 py-2.5 sm:px-2">
                       {row.available ? (
                         <div className="flex items-center gap-2.5">
-                          <FactorBar score={row.score} />
+                          <FactorBar score={row.score} width={narrow ? 40 : 88} />
                           <span className="font-mono text-xs tabular-nums text-ink-800 dark:text-ink-100">{signed(row.score)}</span>
                           <span className="hidden text-[11px] text-ink-400 lg:inline">toward {row.favors === 'NEITHER' ? 'neither' : row.favors}</span>
                         </div>
@@ -84,20 +87,20 @@ function PairMatrix({ report }) {
                     </td>
                   ) : (
                     <>
-                      <td className="px-2 py-2.5"><ScoreCell score={row.base} classification={row.baseClassification} /></td>
-                      <td className="px-2 py-2.5"><ScoreCell score={row.quote} classification={row.quoteClassification} /></td>
+                      <td className="px-1 py-2.5 sm:px-2"><ScoreCell score={row.base} classification={row.baseClassification} /></td>
+                      <td className="px-1 py-2.5 sm:px-2"><ScoreCell score={row.quote} classification={row.quoteClassification} /></td>
                     </>
                   )}
-                  <td className="px-2 py-2.5 text-xs">
+                  <td className="hidden px-2 py-2.5 text-xs md:table-cell">
                     <FavoursPill report={report} favors={row.available ? row.favors : null} />
                   </td>
-                  <td className="pr-4">
+                  <td className="pr-2 md:pr-4">
                     <ChevronRight className={clsx('h-4 w-4 text-ink-300 transition-transform', isOpen && 'rotate-90')} />
                   </td>
                 </tr>
                 {isOpen ? (
                   <tr className="border-b border-ink-100 dark:border-ink-800">
-                    <td colSpan={5} className="px-5 pb-5 pt-3">
+                    <td colSpan={5} className="px-4 pb-5 pt-3 sm:px-5">
                       {isDiff ? (
                         row.available ? (
                           <div className="space-y-2">
@@ -149,7 +152,7 @@ function CurrencyMatrix({ c }) {
         return (
           <div key={f.key}>
             <button type="button" onClick={() => setOpen(isOpen ? null : f.key)} className="flex w-full items-center gap-3 px-5 py-2.5 text-left hover:bg-ink-50/60 dark:hover:bg-ink-800/40">
-              <span className="w-44 shrink-0 text-sm text-ink-800 dark:text-ink-100">{f.label}</span>
+              <span className="w-32 shrink-0 text-sm text-ink-800 dark:text-ink-100 sm:w-44">{f.label}</span>
               <ScoreCell score={f.available ? f.score : null} classification={f.available ? f.classification : 'DATA NOT AVAILABLE'} />
               <span className="ml-auto hidden font-mono text-[11px] text-ink-400 sm:inline">weight {Math.round(f.weight * 100)}%</span>
               <ChevronRight className={clsx('h-4 w-4 shrink-0 text-ink-300 transition-transform', isOpen && 'rotate-90')} />

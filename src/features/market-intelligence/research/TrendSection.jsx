@@ -110,24 +110,27 @@ function Legend({ series }) {
 function TrendTable({ rows, series }) {
   return (
     <div className="-mx-5 overflow-x-auto">
-      <table className="w-full min-w-[420px] text-left text-xs">
+      <table className="w-full text-left text-xs sm:min-w-[420px]">
         <thead>
           <tr className="border-b border-ink-100 text-ink-400 dark:border-ink-800">
-            <th className="px-5 py-2 font-medium">As of</th>
+            <th className="py-2 pl-4 pr-2 font-medium sm:px-5">As of</th>
             {series.map((s) => (
               <th key={s.key} className="px-2 py-2 text-right font-medium">{s.label}</th>
             ))}
-            <th className="px-5 py-2 font-medium">Basis</th>
+            <th className="py-2 pl-2 pr-4 font-medium sm:px-5">Basis</th>
           </tr>
         </thead>
         <tbody className="font-mono tabular-nums">
           {rows.map((r) => (
             <tr key={r.label} className="border-b border-ink-50 dark:border-ink-800/60">
-              <td className="px-5 py-1.5 font-sans text-ink-700 dark:text-ink-200">{r.label}</td>
+              <td className="whitespace-nowrap py-1.5 pl-4 pr-2 font-sans text-ink-700 dark:text-ink-200 sm:px-5">{r.label}</td>
               {series.map((s) => (
                 <td key={s.key} className="px-2 py-1.5 text-right text-ink-900 dark:text-ink-50">{r[s.key] ?? 'n/a'}</td>
               ))}
-              <td className="px-5 py-1.5 font-sans text-ink-400">{r.reconstructed ? 'Reconstructed' : 'Current research'}</td>
+              <td className="py-1.5 pl-2 pr-4 font-sans text-ink-400 sm:px-5">
+                <span className="sm:hidden">{r.reconstructed ? 'Rebuilt' : 'Current'}</span>
+                <span className="hidden sm:inline">{r.reconstructed ? 'Reconstructed' : 'Current research'}</span>
+              </td>
             </tr>
           ))}
         </tbody>

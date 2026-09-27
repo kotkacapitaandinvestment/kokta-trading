@@ -35,18 +35,22 @@ function InstrumentPicker({ config, value, onChange }) {
       {label}
     </button>
   );
+  // Every choice stays visible: groups wrap instead of scrolling sideways.
+  const group = (label, items, { always = false } = {}) => (
+    <div className="flex flex-wrap items-center gap-1">
+      <span className={clsx('w-full px-1 text-[10px] font-semibold uppercase tracking-wide text-ink-400 lg:w-auto', !always && 'lg:hidden')}>{label}</span>
+      {items}
+    </div>
+  );
   return (
-    <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:gap-4">
-      <div className="-mx-1 flex gap-1 overflow-x-auto px-1 pb-1 scrollbar-thin lg:flex-wrap lg:overflow-visible lg:pb-0">{config.settings.pairs.map((p) => pill(p, `${p.slice(0, 3)}/${p.slice(3)}`))}</div>
+    <div className="flex flex-col gap-3 lg:flex-row lg:flex-wrap lg:items-center lg:gap-4">
+      {group('Pairs', config.settings.pairs.map((p) => pill(p, `${p.slice(0, 3)}/${p.slice(3)}`)))}
       <div className="hidden h-5 w-px bg-ink-200 dark:bg-ink-700 lg:block" />
-      <div className="-mx-1 flex gap-1 overflow-x-auto px-1 pb-1 scrollbar-thin lg:flex-wrap lg:overflow-visible lg:pb-0">{config.currencies.map((c) => pill(c.code, c.code))}</div>
+      {group('Currencies', config.currencies.map((c) => pill(c.code, c.code)))}
       {config.crypto?.length ? (
         <>
           <div className="hidden h-5 w-px bg-ink-200 dark:bg-ink-700 lg:block" />
-          <div className="-mx-1 flex items-center gap-1 overflow-x-auto px-1 pb-1 scrollbar-thin lg:overflow-visible lg:pb-0">
-            <span className="shrink-0 px-1 text-[10px] font-semibold uppercase tracking-wide text-ink-400">Crypto</span>
-            {config.crypto.map((c) => pill(c.symbol, c.display))}
-          </div>
+          {group('Crypto', config.crypto.map((c) => pill(c.symbol, c.display)), { always: true })}
         </>
       ) : null}
     </div>
@@ -205,8 +209,8 @@ function ResearchView({ config, subject, onInstrumentChange }) {
         <InstrumentPicker config={config} value={subject} onChange={onInstrumentChange} />
         <div className="mt-4 flex flex-col gap-3 border-t border-ink-100 pt-4 dark:border-ink-800 lg:flex-row lg:items-center lg:justify-between">
           <FreshnessStrip freshness={freshness} report={report} />
-          <div className="flex shrink-0 items-center gap-3">
-            {config.usage?.limit !== null && config.usage?.limit !== undefined ? <span className="text-[11px] text-ink-400">{config.usage.refreshesToday}/{config.usage.limit} refreshes today</span> : null}
+          <div className="flex shrink-0 flex-wrap items-center gap-2 sm:gap-3">
+            {config.usage?.limit !== null && config.usage?.limit !== undefined ? <span className="mr-auto whitespace-nowrap text-[11px] text-ink-400 lg:mr-0">{config.usage.refreshesToday}/{config.usage.limit} refreshes today</span> : null}
             {report ? (
               <Button
                 as={Link}

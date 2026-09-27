@@ -146,7 +146,26 @@ export function RevisionsSection({ report }) {
       action={codes.length > 1 ? <Tabs tabs={codes.map((code) => ({ value: code, label: <CurrencyChip code={code} tone={toneOf(report, code)} /> }))} active={active} onChange={setActive} /> : null}
     >
       {revs.length ? (
-        <div className="-mx-5 overflow-x-auto">
+        <>
+        {/* Up to xl: one block per forecast (the table needs ~720px). */}
+        <ul className="-mx-5 divide-y divide-ink-50 border-t border-ink-100 dark:divide-ink-800/60 dark:border-ink-800 xl:hidden">
+          {revs.map((r) => (
+            <li key={`${r.indicator}-${r.year}`} className="px-4 py-2.5">
+              <div className="flex items-baseline justify-between gap-3">
+                <p className="text-sm text-ink-800 dark:text-ink-100">{r.label} <span className="font-mono text-xs text-ink-400">{r.year}</span></p>
+                <span className={clsx('shrink-0 font-mono text-xs tabular-nums', r.tone === 'positive' ? 'text-profit-600 dark:text-profit-400' : r.tone === 'negative' ? 'text-loss-500' : 'text-ink-400')}>
+                  {r.direction === 'UNCHANGED' ? '0.00' : signedFixed(r.revision)}
+                </span>
+              </div>
+              <p className="mt-0.5 font-mono text-xs tabular-nums text-ink-500 dark:text-ink-400">
+                {fmt(r.previous)} <span className="font-sans">→</span> <span className="text-ink-900 dark:text-ink-50">{fmt(r.current)}</span>
+                <span className="ml-1.5 font-sans text-[11px] text-ink-400">{r.unit}{r.kind === 'OUTTURN_VS_FORECAST' ? ', outturn vs earlier forecast' : ''}</span>
+              </p>
+              {r.interpretation ? <p className="mt-1 text-xs leading-relaxed text-ink-500 dark:text-ink-400">{txt(r.interpretation)}</p> : null}
+            </li>
+          ))}
+        </ul>
+        <div className="-mx-5 hidden overflow-x-auto xl:block">
           <table className="w-full min-w-[720px] text-left">
             <thead>
               <tr className="border-b border-ink-100 text-[11px] text-ink-400 dark:border-ink-800">
@@ -177,6 +196,7 @@ export function RevisionsSection({ report }) {
             </tbody>
           </table>
         </div>
+        </>
       ) : (
         <NotAvailable reason="No earlier IMF World Economic Outlook vintage is available to compare against.">FORECAST REVISIONS: NOT AVAILABLE</NotAvailable>
       )}

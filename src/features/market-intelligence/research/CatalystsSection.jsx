@@ -31,7 +31,41 @@ export default function CatalystsSection({ report }) {
       }
     >
       {shown.length ? (
-        <div className="-mx-5 overflow-x-auto">
+        <>
+        {/* Up to xl: one card per event (the table needs ~860px). */}
+        <ul className="-mx-5 divide-y divide-ink-50 border-t border-ink-100 dark:divide-ink-800/60 dark:border-ink-800 xl:hidden">
+          {shown.map((c, i) => (
+            <li key={`${c.date}-${c.event}-${i}`} className="space-y-1.5 px-4 py-3">
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                {c.date ? <span className="font-mono text-xs tabular-nums text-ink-800 dark:text-ink-100">{when(c)}</span> : <span className="font-mono text-[11px] text-ink-400">DATE NOT AVAILABLE</span>}
+                {String(c.currency).split('/').map((code) => (report.currencies[code] ? <CurrencyChip key={code} code={code} tone={toneOf(report, code)} /> : <span key={code} className="text-xs text-ink-400">{code}</span>))}
+                {c.importance === 'High' ? <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-700 dark:bg-amber-500/10 dark:text-amber-400">High</span> : null}
+              </div>
+              <p className="text-sm font-medium text-ink-800 dark:text-ink-100">{txt(c.event)}</p>
+              {c.referencePeriod ? <p className="text-[11px] text-ink-400">Reference period: {c.referencePeriod}</p> : null}
+              {c.scenarios?.context ? <p className="text-xs text-ink-500 dark:text-ink-400">{txt(c.scenarios.context)}</p> : null}
+              {c.dateText ? <p className="text-[11px] text-ink-400">{reasonAfterPrefix(c.dateText)}</p> : null}
+              {c.scenarios?.positive || c.scenarios?.negative ? (
+                <div className="grid grid-cols-1 gap-2 pt-1 sm:grid-cols-2">
+                  {c.scenarios?.positive ? (
+                    <p className="border-l-2 border-profit-500/60 pl-2 text-xs leading-relaxed text-ink-600 dark:text-ink-300">
+                      <span className="block text-[10px] font-semibold uppercase tracking-wide text-profit-600 dark:text-profit-400">Potential positive</span>
+                      {txt(c.scenarios.positive)}
+                    </p>
+                  ) : null}
+                  {c.scenarios?.negative ? (
+                    <p className="border-l-2 border-loss-500/60 pl-2 text-xs leading-relaxed text-ink-600 dark:text-ink-300">
+                      <span className="block text-[10px] font-semibold uppercase tracking-wide text-loss-500">Potential negative</span>
+                      {txt(c.scenarios.negative)}
+                    </p>
+                  ) : null}
+                </div>
+              ) : null}
+              <SourceLink href={c.source?.url} className="text-[11px]">{txt(c.source?.name)}</SourceLink>
+            </li>
+          ))}
+        </ul>
+        <div className="-mx-5 hidden overflow-x-auto xl:block">
           <table className="w-full min-w-[860px] text-left">
             <thead>
               <tr className="border-b border-ink-100 text-[11px] text-ink-400 dark:border-ink-800">
@@ -74,6 +108,7 @@ export default function CatalystsSection({ report }) {
             </tbody>
           </table>
         </div>
+        </>
       ) : (
         <NotAvailable reason="No events of this importance fall within the horizon.">NO SCHEDULED CATALYSTS</NotAvailable>
       )}

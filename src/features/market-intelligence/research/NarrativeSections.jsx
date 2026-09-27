@@ -107,7 +107,28 @@ export function RelativeSection({ report }) {
         ))}
       </div>
       {rows.length ? (
-        <div className="-mx-5 mt-5 overflow-x-auto border-t border-ink-100 dark:border-ink-800">
+        <>
+        {/* Phones: one block per differential. */}
+        <ul className="-mx-5 mt-5 divide-y divide-ink-50 border-t border-ink-100 dark:divide-ink-800/60 dark:border-ink-800 sm:hidden">
+          {rows.map((r) => {
+            const lean = leanTone(r);
+            return (
+              <li key={r.label} className="px-4 py-2.5">
+                <div className="flex items-baseline justify-between gap-3">
+                  <span className="text-sm text-ink-700 dark:text-ink-200">{r.label}</span>
+                  <span className="shrink-0 font-mono text-xs tabular-nums text-ink-900 dark:text-ink-50">{signedFixed(r.diff, r.dp ?? 2)} {r.unit}</span>
+                </div>
+                <div className="mt-1 flex flex-wrap gap-x-4 gap-y-0.5 font-mono text-xs tabular-nums">
+                  <span className={lean === 'base' ? clsx(cb.text, 'font-semibold') : 'text-ink-600 dark:text-ink-300'}><span className="font-sans text-[11px] text-ink-400">{base} </span>{r.b ?? 'n/a'}</span>
+                  <span className={lean === 'quote' ? clsx(cq.text, 'font-semibold') : 'text-ink-600 dark:text-ink-300'}><span className="font-sans text-[11px] text-ink-400">{quote} </span>{r.q ?? 'n/a'}</span>
+                </div>
+                {r.note ? <p className="mt-0.5 text-[11px] text-ink-400">{r.note}</p> : null}
+              </li>
+            );
+          })}
+          <li className="px-4 pt-2 text-[11px] text-ink-400">Right-hand figure is {base} minus {quote}. The stronger side is highlighted in its currency colour (for inflation, the side closer to target).</li>
+        </ul>
+        <div className="-mx-5 mt-5 hidden overflow-x-auto border-t border-ink-100 dark:border-ink-800 sm:block">
           <table className="w-full min-w-[560px] text-left text-sm">
             <thead>
               <tr className="text-[11px] text-ink-400">
@@ -136,6 +157,7 @@ export function RelativeSection({ report }) {
           </table>
           <p className="px-5 pt-2 text-[11px] text-ink-400">The side with the stronger reading on each line is highlighted in its currency colour (for inflation, the side closer to target).</p>
         </div>
+        </>
       ) : null}
     </Section>
   );

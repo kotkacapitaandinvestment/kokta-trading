@@ -32,7 +32,7 @@ export default function Button({
   return (
     <Comp
       className={clsx(
-        'inline-flex items-center justify-center gap-2 rounded-lg font-medium transition-colors duration-150 disabled:opacity-50 disabled:pointer-events-none',
+        'inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-lg font-medium transition-colors duration-150 disabled:opacity-50 disabled:pointer-events-none',
         variants[variant],
         sizes[size],
         className,

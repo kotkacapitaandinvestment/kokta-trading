@@ -103,9 +103,10 @@ export function EvidenceChip({ id }) {
     <button
       type="button"
       onClick={() => open(id)}
-      className="inline-flex max-w-full items-center gap-1.5 rounded-md border border-ink-100 bg-ink-50/60 px-2 py-1 text-left text-xs transition-colors hover:border-accent-500/50 hover:bg-accent-50 dark:border-ink-800 dark:bg-ink-800/60 dark:hover:bg-accent-900/20"
+      className="inline-flex max-w-full flex-wrap items-center gap-x-1.5 gap-y-0.5 rounded-md border border-ink-100 bg-ink-50/60 px-2 py-1 text-left text-xs transition-colors hover:border-accent-500/50 hover:bg-accent-50 dark:border-ink-800 dark:bg-ink-800/60 dark:hover:bg-accent-900/20"
+      title={txt(obs.label)}
     >
-      <span className="truncate text-ink-600 dark:text-ink-300">{txt(obs.label)}</span>
+      <span className="line-clamp-2 min-w-0 text-ink-600 dark:text-ink-300">{txt(obs.label)}</span>
       {obs.value !== null && obs.value !== undefined ? <span className="shrink-0 font-mono tabular-nums text-ink-900 dark:text-ink-50">{formatValue(obs.value, obs.unit)}</span> : null}
       <span className="shrink-0 text-ink-400">{obs.periodLabel}</span>
     </button>

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import clsx from 'clsx';
 import { CurrencyChip, KindTag, reportCodes, toneOf } from './primitives';
 
@@ -6,6 +6,17 @@ import { CurrencyChip, KindTag, reportCodes, toneOf } from './primitives';
 // (no scroll listeners); jumps respect prefers-reduced-motion.
 export function ReportNav({ chapters }) {
   const [active, setActive] = useState(chapters[0]?.id);
+  const strip = useRef(null);
+
+  // On narrow screens the bar scrolls sideways; keep the current chapter in view.
+  useEffect(() => {
+    const ol = strip.current;
+    const el = ol?.querySelector('[aria-current="true"]');
+    if (!ol || !el || ol.scrollWidth <= ol.clientWidth) return;
+    const a = ol.getBoundingClientRect();
+    const b = el.getBoundingClientRect();
+    ol.scrollTo({ left: ol.scrollLeft + b.left - a.left - (a.width - b.width) / 2, behavior: 'smooth' });
+  }, [active]);
 
   useEffect(() => {
     const els = chapters.map((c) => document.getElementById(c.id)).filter(Boolean);
@@ -28,7 +39,7 @@ export function ReportNav({ chapters }) {
 
   return (
     <nav aria-label="Report chapters" className="sticky top-0 z-10 -mx-1 rounded-xl border border-ink-100 bg-white/90 px-1 py-1 backdrop-blur dark:border-ink-800 dark:bg-ink-900/90">
-      <ol className="flex gap-0.5 overflow-x-auto scrollbar-thin">
+      <ol ref={strip} className="flex gap-0.5 overflow-x-auto scrollbar-thin">
         {chapters.map((c) => (
           <li key={c.id} className="shrink-0">
             <button
