@@ -73,16 +73,16 @@ export function ReadingGuide({ report }) {
         ))}
       </span>
       <span className="flex items-center gap-2">
-        <span className="font-medium text-ink-600 dark:text-ink-300">Effect</span>
+        <span className="font-medium text-ink-600 dark:text-ink-300">Colours</span>
         <span className="flex items-center gap-1">
-          <span className="h-2 w-3 rounded-sm bg-profit-500" /> supportive
+          <span className="h-2 w-3 rounded-sm bg-profit-500" /> helps the currency
         </span>
         <span className="flex items-center gap-1">
-          <span className="h-2 w-3 rounded-sm bg-loss-500" /> weighs
+          <span className="h-2 w-3 rounded-sm bg-loss-500" /> hurts it
         </span>
       </span>
       <span className="flex items-center gap-2">
-        <span className="font-medium text-ink-600 dark:text-ink-300">Evidence</span>
+        <span className="font-medium text-ink-600 dark:text-ink-300">Labels</span>
         <KindTag kind="FACT" />
         <KindTag kind="SOURCE ASSESSMENT" />
         <KindTag kind="KOTKA INTERPRETATION" />

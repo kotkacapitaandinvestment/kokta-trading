@@ -1,3 +1,4 @@
+import { Lightbulb } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import clsx from 'clsx';
 import { api } from '../../../lib/api';
@@ -5,6 +6,7 @@ import PostCard from '../components/PostCard';
 import Composer from '../components/Composer';
 import { InstrumentSelect } from '../components/inputs';
 import Hint from '../../../components/ui/Hint';
+import EmptyState from '../../../components/ui/EmptyState';
 
 export default function Ideas() {
   const [filters, setFilters] = useState({ instrument: null, status: 'active', direction: null, sort: 'latest' });
@@ -39,7 +41,7 @@ export default function Ideas() {
       </div>
       <div className="divide-y divide-ink-100 dark:divide-ink-800">
         {!ideas ? <div className="m-5 h-32 animate-pulse rounded-xl bg-ink-50 dark:bg-ink-800" /> : null}
-        {ideas && !ideas.length ? <p className="px-6 py-16 text-center text-sm text-ink-400">No trade ideas match. Publish the first one.</p> : null}
+        {ideas && !ideas.length ? <EmptyState size="section" icon={Lightbulb} title="No trade ideas here yet" description="Try other filters, or publish yours above: entry, stop, target and the thesis behind it." /> : null}
         {ideas?.map((p) => <PostCard key={p.id} post={p} />)}
       </div>
       {next ? <button type="button" onClick={() => load(next.before)} className="w-full border-t border-ink-100 py-3 text-xs font-medium text-accent-700 dark:border-ink-800 dark:text-accent-300">Load more</button> : null}

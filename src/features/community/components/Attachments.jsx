@@ -7,6 +7,7 @@ import { price, signedPct, timeAgo } from '../util';
 import { UserName } from './Identity';
 import IdeaBlock from './IdeaBlock';
 import AchievementPost from '../../goals/AchievementPost';
+import { confirmDialog, promptDialog, toast } from '../../../lib/dialogs';
 
 export function MarketSnapshot({ snapshot, compact = false }) {
   if (!snapshot) return null;
@@ -43,7 +44,7 @@ export function PollView({ poll, onVoted }) {
       setState(p);
       onVoted?.(p);
     } catch (err) {
-      window.alert(err.message);
+      toast(err.message, { tone: 'error' });
     } finally {
       setBusy(false);
     }

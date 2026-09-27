@@ -18,7 +18,7 @@ export default function CatalystsSection({ report }) {
   return (
     <Section
       title="Upcoming catalysts"
-      subtitle={`Scheduled events in the next ${report.catalysts?.horizonDays ?? 45} days, from official calendars. Scenarios describe what would change the assessment, not what will happen.`}
+      subtitle={`Official releases and meetings in the next ${report.catalysts?.horizonDays ?? 45} days, and what each outcome could mean. These describe possibilities, not predictions.`}
       action={
         <Tabs
           tabs={[
@@ -37,12 +37,12 @@ export default function CatalystsSection({ report }) {
           {shown.map((c, i) => (
             <li key={`${c.date}-${c.event}-${i}`} className="space-y-1.5 px-4 py-3">
               <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                {c.date ? <span className="font-mono text-xs tabular-nums text-ink-800 dark:text-ink-100">{when(c)}</span> : <span className="font-mono text-[11px] text-ink-400">DATE NOT AVAILABLE</span>}
+                {c.date ? <span className="font-mono text-xs tabular-nums text-ink-800 dark:text-ink-100">{when(c)}</span> : <span className="text-[11px] text-ink-400">Date to be confirmed</span>}
                 {String(c.currency).split('/').map((code) => (report.currencies[code] ? <CurrencyChip key={code} code={code} tone={toneOf(report, code)} /> : <span key={code} className="text-xs text-ink-400">{code}</span>))}
                 {c.importance === 'High' ? <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-700 dark:bg-amber-500/10 dark:text-amber-400">High</span> : null}
               </div>
               <p className="text-sm font-medium text-ink-800 dark:text-ink-100">{txt(c.event)}</p>
-              {c.referencePeriod ? <p className="text-[11px] text-ink-400">Reference period: {c.referencePeriod}</p> : null}
+              {c.referencePeriod ? <p className="text-[11px] text-ink-400">Covers: {c.referencePeriod}</p> : null}
               {c.scenarios?.context ? <p className="text-xs text-ink-500 dark:text-ink-400">{txt(c.scenarios.context)}</p> : null}
               {c.dateText ? <p className="text-[11px] text-ink-400">{reasonAfterPrefix(c.dateText)}</p> : null}
               {c.scenarios?.positive || c.scenarios?.negative ? (
@@ -80,14 +80,14 @@ export default function CatalystsSection({ report }) {
               {shown.map((c, i) => (
                 <tr key={`${c.date}-${c.event}-${i}`} className="border-b border-ink-50 align-top dark:border-ink-800/60">
                   <td className="whitespace-nowrap px-5 py-3 text-xs">
-                    {c.date ? <span className="font-mono tabular-nums text-ink-800 dark:text-ink-100">{when(c)}</span> : <span className="font-mono text-[11px] text-ink-400">DATE NOT AVAILABLE</span>}
+                    {c.date ? <span className="font-mono tabular-nums text-ink-800 dark:text-ink-100">{when(c)}</span> : <span className="text-[11px] text-ink-400">Date to be confirmed</span>}
                     <div className="mt-1 flex gap-1">
                       {String(c.currency).split('/').map((code) => (report.currencies[code] ? <CurrencyChip key={code} code={code} tone={toneOf(report, code)} /> : <span key={code} className="text-ink-400">{code}</span>))}
                     </div>
                   </td>
                   <td className="px-2 py-3">
                     <p className="text-sm text-ink-800 dark:text-ink-100">{txt(c.event)}</p>
-                    {c.referencePeriod ? <p className="text-[11px] text-ink-400">Reference period: {c.referencePeriod}</p> : null}
+                    {c.referencePeriod ? <p className="text-[11px] text-ink-400">Covers: {c.referencePeriod}</p> : null}
                     {c.scenarios?.context ? <p className="mt-0.5 text-[11px] text-ink-500 dark:text-ink-400">{txt(c.scenarios.context)}</p> : null}
                     {c.dateText ? <p className="mt-0.5 max-w-xs text-[11px] text-ink-400">{reasonAfterPrefix(c.dateText)}</p> : null}
                     <SourceLink href={c.source?.url} className="mt-0.5 text-[11px]">{txt(c.source?.name)}</SourceLink>
@@ -110,15 +110,15 @@ export default function CatalystsSection({ report }) {
         </div>
         </>
       ) : (
-        <NotAvailable reason="No events of this importance fall within the horizon.">NO SCHEDULED CATALYSTS</NotAvailable>
+        <NotAvailable>Nothing of this importance is scheduled in this period</NotAvailable>
       )}
       {missing.length || unretrieved.length ? (
         <div className="mt-3 space-y-1 text-[11px] text-ink-400">
           {missing.map(([code]) => (
-            <p key={code}>{code}: official event calendars are not yet connected for this currency, so its catalysts are DATA NOT AVAILABLE.</p>
+            <p key={code}>We don’t track {code} events yet, so they aren’t listed here.</p>
           ))}
           {unretrieved.map((s) => (
-            <p key={s}>{s} could not be retrieved on this run.</p>
+            <p key={s}>Some {s.split(':')[0]} events may be missing: that calendar didn’t load this time.</p>
           ))}
         </div>
       ) : null}

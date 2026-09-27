@@ -8,6 +8,7 @@ import RichText from '../components/RichText';
 import Attachments from '../components/Attachments';
 import SafetyWarning from '../components/SafetyWarning';
 import Menu from '../components/Menu';
+import { confirmDialog, promptDialog, toast } from '../../../lib/dialogs';
 
 function Receipt({ message, receipt }) {
   // Only for your own messages in DMs and groups.
@@ -34,26 +35,26 @@ function MessageItem({ m, meId, variant, grouped, canModerate, receipt, focused,
     try {
       await api.post(`/community/messages/${m.id}/reactions`, { emoji });
     } catch (err) {
-      window.alert(err.message);
+      toast(err.message, { tone: 'error' });
     }
   };
   const remove = async () => {
-    if (!window.confirm(own ? 'Delete this message for everyone?' : 'Remove this message as a moderator?')) return;
+    if (!(await confirmDialog(own ? { title: 'Delete this message?', message: 'It will be removed for everyone in the conversation.', confirmLabel: 'Delete', danger: true } : { title: 'Remove this message?', message: 'You’re removing it as a moderator. It’s recorded in the moderation log.', confirmLabel: 'Remove', danger: true }))) return;
     try {
       await api.delete(`/community/messages/${m.id}`, {});
     } catch (err) {
-      window.alert(err.message);
+      toast(err.message, { tone: 'error' });
     }
   };
   const pin = async () => {
     try {
       await api.post(`/community/messages/${m.id}/pin`, { pinned: !m.pinnedAt });
     } catch (err) {
-      window.alert(err.message);
+      toast(err.message, { tone: 'error' });
     }
   };
   const relation = async (kind) => {
-    if (!window.confirm(`${kind === 'block' ? 'Block' : 'Mute'} ${m.author.name}?`)) return;
+    if (!(await confirmDialog({ title: `${kind === 'block' ? 'Block' : 'Mute'} ${m.author.name}?`, message: kind === 'block' ? 'You won’t see each other’s posts or messages, and they can’t message you. You can undo this in Settings.' : 'Their posts and messages will be hidden from you. They won’t be told.', confirmLabel: kind === 'block' ? 'Block' : 'Mute', danger: kind === 'block' }))) return;
     await api.post(`/community/users/${m.author.id}/${kind}`, {});
     window.location.reload();
   };
@@ -105,7 +106,7 @@ function MessageItem({ m, meId, variant, grouped, canModerate, receipt, focused,
         items={[
           own && m.body ? { label: 'Edit', icon: Pencil, onClick: () => onEdit(m) } : null,
           { label: 'Copy text', icon: Copy, onClick: () => navigator.clipboard?.writeText(m.body ?? '') },
-          { label: 'Save', icon: Bookmark, onClick: () => api.post('/community/saved', { itemType: 'message', itemId: m.id }).then(() => window.alert('Saved.')) },
+          { label: 'Save', icon: Bookmark, onClick: () => api.post('/community/saved', { itemType: 'message', itemId: m.id }).then(() => toast('Saved. Find it under Saved in Community.')).catch((err) => toast(err.message, { tone: 'error' })) },
           canModerate || variant === 'dm' ? { label: m.pinnedAt ? 'Unpin' : 'Pin', icon: m.pinnedAt ? PinOff : Pin, onClick: pin } : null,
           m.body && m.body.length > 20 ? { label: 'Fact check with Kotka', icon: HelpCircle, onClick: () => onAi('factcheck', '/community/ai/fact-check', { targetType: 'message', targetId: m.id }) } : null,
           image ? { label: 'Analyze chart', icon: Sparkles, onClick: () => onAi('chart', '/community/ai/analyze-chart', { mediaId: image.mediaId, messageId: m.id }) } : null,

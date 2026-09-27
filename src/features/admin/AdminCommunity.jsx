@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import clsx from 'clsx';
-import { AlertTriangle, Check, ExternalLink, Plus, Star } from 'lucide-react';
+import { AlertTriangle, Check, ExternalLink, Plus, ShieldCheck, Star } from 'lucide-react';
 import PageHeader from '../../components/ui/PageHeader';
 import Card, { CardHeader, CardBody } from '../../components/ui/Card';
 import Button from '../../components/ui/Button';
@@ -9,6 +9,8 @@ import Badge from '../../components/ui/Badge';
 import Modal from '../../components/ui/Modal';
 import { api } from '../../lib/api';
 import { useAuth } from '../../context/AuthContext';
+import { confirmDialog, promptDialog, toast } from '../../lib/dialogs';
+import EmptyState from '../../components/ui/EmptyState';
 
 const TABS = [
   ['overview', 'Overview'],
@@ -70,7 +72,7 @@ function Moderation() {
       setReason('');
       load();
     } catch (err) {
-      window.alert(err.message);
+      toast(err.message, { tone: 'error' });
     }
   };
   return (
@@ -84,7 +86,7 @@ function Moderation() {
         <Card key={r.id} className="p-5">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="flex flex-wrap items-center gap-2 text-xs">
-              <Badge tone={r.category === 'scam' || r.category === 'fraud' ? 'loss' : 'warning'}>{r.category}</Badge>
+              <Badge tone={r.category === 'scam' || r.category === 'fraud' ? 'loss' : 'warning'}>{{ spam: 'Spam', scam: 'Scam', harassment: 'Harassment', hate: 'Hate', impersonation: 'Impersonation', fraud: 'Fraud', manipulation: 'Market manipulation', illegal: 'Illegal', other: 'Other' }[r.category] ?? r.category}</Badge>
               <span className="font-medium capitalize text-ink-700 dark:text-ink-200">{r.targetType}</span>
               <span className="text-ink-400">{r.auto ? 'Flagged automatically' : `Reported by ${r.reporter?.name ?? 'a trader'}`} · {ago(r.createdAt)}</span>
             </div>
@@ -102,7 +104,7 @@ function Moderation() {
               {r.targetUser.mutedUntil && new Date(r.targetUser.mutedUntil) > new Date() ? ` · posting paused until ${new Date(r.targetUser.mutedUntil).toLocaleString()}` : ''}
             </p>
           ) : null}
-          {r.status !== 'open' ? <p className="mt-2 text-xs text-ink-400">{r.status} by {r.resolvedBy?.name ?? 'a moderator'} · {r.resolution}</p> : (
+          {r.status !== 'open' ? <p className="mt-2 text-xs text-ink-400">{{ resolved: 'Resolved', dismissed: 'Dismissed', actioned: 'Action taken' }[r.status] ?? r.status} by {r.resolvedBy?.name ?? 'a moderator'} · {r.resolution}</p> : (
             <div className="mt-4 flex flex-wrap gap-2">
               {r.target && !r.target.removed && r.targetType !== 'user' ? <Button size="sm" variant="danger" onClick={() => setActing({ r, action: 'remove' })}>Remove</Button> : null}
               {r.targetUser ? <Button size="sm" variant="secondary" onClick={() => setActing({ r, action: 'mute' })}>Pause posting</Button> : null}
@@ -141,7 +143,7 @@ function Log() {
             {rows?.map((a) => <tr key={a.id}><td className="whitespace-nowrap px-5 py-2.5 font-mono text-xs text-ink-500">{new Date(a.createdAt).toLocaleString()}</td><td className="px-5 py-2.5">{a.moderator?.name ?? 'System'}</td><td className="px-5 py-2.5 font-medium capitalize">{a.action}</td><td className="px-5 py-2.5 text-xs text-ink-500">{a.targetType}{a.targetUser ? ` · ${a.targetUser.name}` : ''}</td><td className="px-5 py-2.5 text-xs text-ink-500">{a.reason ?? ''}</td></tr>)}
           </tbody>
         </table>
-        {rows && !rows.length ? <p className="p-8 text-center text-sm text-ink-400">No moderation actions yet.</p> : null}
+        {rows && !rows.length ? <EmptyState size="section" icon={ShieldCheck} title="No moderation actions yet" description="Removals, mutes and bans you or other moderators make are recorded here." /> : null}
       </div>
     </Card>
   );
@@ -158,7 +160,7 @@ function Rooms() {
       await api.patch(`/admin/community/rooms/${id}`, data);
       load();
     } catch (err) {
-      window.alert(err.message);
+      toast(err.message, { tone: 'error' });
     }
   };
   const create = async () => {
@@ -167,7 +169,7 @@ function Rooms() {
       setCreating(false);
       load();
     } catch (err) {
-      window.alert(err.message);
+      toast(err.message, { tone: 'error' });
     }
   };
   return (
@@ -229,7 +231,7 @@ function Events() {
       setEditing(null);
       load();
     } catch (err) {
-      window.alert(err.message);
+      toast(err.message, { tone: 'error' });
     }
   };
   const create = async () => {
@@ -238,7 +240,7 @@ function Events() {
       setCreating(false);
       load();
     } catch (err) {
-      window.alert(err.message);
+      toast(err.message, { tone: 'error' });
     }
   };
   const input = 'h-9 w-full rounded-lg border border-ink-200 bg-white px-2.5 text-sm dark:border-ink-700 dark:bg-ink-800 dark:text-ink-50';
@@ -388,13 +390,13 @@ function People() {
   const load = () => api.get(`/admin/community/users?q=${encodeURIComponent(q)}`).then((r) => setRows(r.users)).catch(() => setRows([]));
   useEffect(() => { const t = setTimeout(load, 250); return () => clearTimeout(t); }, [q]); // eslint-disable-line react-hooks/exhaustive-deps
   const act = async (u, action, extra = {}) => {
-    const reason = action === 'unmute' || action === 'reinstate' ? '' : window.prompt('Reason (kept in the moderation log):') ?? null;
+    const reason = action === 'unmute' || action === 'reinstate' ? '' : await promptDialog({ title: `${action.charAt(0).toUpperCase()}${action.slice(1)} ${u.name ?? 'this trader'}?`, message: 'Give a short reason. It’s kept in the moderation log and shown to the trader where relevant.', label: 'Reason', placeholder: 'e.g. Repeated spam in EUR/USD room', confirmLabel: 'Confirm', danger: ['ban', 'mute', 'remove'].includes(action) });
     if (reason === null) return;
     try {
       await api.post('/admin/community/actions', { action, userId: u.id, targetType: 'user', targetId: u.id, reason, ...extra });
       load();
     } catch (err) {
-      window.alert(err.message);
+      toast(err.message, { tone: 'error' });
     }
   };
   return (

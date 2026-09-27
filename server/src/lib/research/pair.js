@@ -149,7 +149,7 @@ export function evaluatePair(base, quote, { marketPrice = null } = {}) {
 // what price has done — reported beside, never mixed into, the fundamentals.
 export async function fetchPairPricePerformance(pair, { getMassiveKey, getDailyBars }) {
   const apiKey = await getMassiveKey();
-  if (!apiKey) return { available: false, reason: 'Massive market-data integration is not configured.' };
+  if (!apiKey) return { available: false, reason: 'Price history isn’t available right now.' };
   const { bars } = await getDailyBars(apiKey, `C:${pair}`);
   if (!bars?.length) return { available: false, reason: 'No price history returned.' };
   const last = bars[bars.length - 1];
@@ -169,6 +169,6 @@ export async function fetchPairPricePerformance(pair, { getMassiveKey, getDailyB
     lastDate: new Date(last.t).toISOString().slice(0, 10),
     change1m: change(m1),
     change3m: change(m3),
-    source: { name: 'Massive (formerly Polygon.io) market data', url: 'https://massive.com' },
+    source: { name: 'Daily closing prices', url: 'https://massive.com' },
   };
 }

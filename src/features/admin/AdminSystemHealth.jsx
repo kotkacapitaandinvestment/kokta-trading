@@ -78,30 +78,30 @@ export default function AdminSystemHealth() {
       ) : (
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
           <Card>
-            <CardHeader title="Core" subtitle={`Checked ${new Date(d.checkedAt).toLocaleTimeString()}${d.runtime.deployment ? ` · build ${d.runtime.deployment}` : ''} · ${d.runtime.region}`} />
+            <CardHeader title="Core" subtitle={`Checked at ${new Date(d.checkedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`} />
             <CardBody className="divide-y divide-ink-100 dark:divide-ink-800">
-              <Row state={d.database.ok ? 'ok' : 'down'} title="Database" detail={d.database.ok ? 'Postgres responded to a query.' : d.database.error} meta={d.database.ok ? `${d.database.latencyMs} ms` : null} />
+              <Row state={d.database.ok ? 'ok' : 'down'} title="Database" detail={d.database.ok ? 'Saving and loading data normally.' : 'Kotka can’t reach its database right now. Most pages won’t load until this recovers.'} meta={d.database.ok ? `${d.database.latencyMs} ms` : null} />
               <Row
                 state={aiState}
                 title="Kotka AI models"
                 detail={
                   d.ai.configured
                     ? `Chat: ${d.ai.active.chat ?? 'none available'} · Vision: ${d.ai.active.vision ?? 'none'} · Research: ${d.ai.active.narrative ?? 'none'}${d.ai.unhealthy.length ? `. Skipped after failing checks: ${d.ai.unhealthy.map((u) => `${u.model.split('/').pop()} (${u.status})`).join(', ')}.` : '.'}`
-                    : 'The NVIDIA integration is not configured, so Kotka AI is off.'
+                    : 'Kotka AI is off because its NVIDIA key isn’t set up. Add it in Integrations.'
                 }
                 meta={d.ai.configured ? `checked ${ago(d.ai.checkedAt)}` : null}
               />
               <Row
                 state={cronState}
-                title="Scheduled job (cron-job.org)"
+                title="Hourly update"
                 detail={
                   !cron?.managed
-                    ? 'No cron-job.org key is configured; research refreshes only when someone opens a stale report.'
+                    ? 'Not set up. Research only refreshes when someone opens an out-of-date report. Set it up in Admin → Fundamental Research.'
                     : cron.error
-                      ? cron.error
+                      ? 'Couldn’t check the schedule on cron-job.org just now. If this persists, check its key in Integrations.'
                       : cron.status
-                        ? `Job #${cron.jobId}: last run ${cron.status.lastStatus}${cron.status.nextExecution ? `, next ${new Date(cron.status.nextExecution).toLocaleTimeString()}` : ''}.`
-                        : 'Key configured but no job has been created yet. Rotate the cron token in Fundamental Research to create it.'
+                        ? `Last update ${String(cron.status.lastStatus).toLowerCase() === 'ok' || cron.status.lastStatusOk ? 'went through' : `reported: ${cron.status.lastStatus}`}${cron.status.nextExecution ? `. Next at ${new Date(cron.status.nextExecution).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}` : ''}.`
+                        : 'The key is saved but the schedule isn’t created yet. Create an update link in Admin → Fundamental Research.'
                 }
                 meta={cron?.status?.lastExecution ? ago(cron.status.lastExecution) : null}
               />
@@ -110,8 +110,8 @@ export default function AdminSystemHealth() {
                 title="Fundamental Research"
                 detail={
                   d.research.enabled
-                    ? `${d.research.runs24h} runs in 24h, ${d.research.failed24h} failed. Last run ${d.research.lastRunStatus ?? 'n/a'}; ${d.research.sourcesOk} sources reachable${d.research.sourcesFailed.length ? `, failing: ${d.research.sourcesFailed.join(', ')}` : ''}.`
-                    : 'Disabled by an administrator.'
+                    ? `${d.research.runs24h} report${d.research.runs24h === 1 ? '' : 's'} updated in the last 24 hours${d.research.failed24h ? `, ${d.research.failed24h} didn’t finish` : ''}. ${d.research.sourcesOk} data sources working${d.research.sourcesFailed.length ? `; not responding: ${d.research.sourcesFailed.join(', ')}` : ''}.`
+                    : 'Turned off in Fundamental Research settings.'
                 }
                 meta={ago(d.research.lastRunAt)}
               />
@@ -126,7 +126,7 @@ export default function AdminSystemHealth() {
                   key={i.key}
                   state={i.configured && i.enabled ? 'ok' : i.configured ? 'warn' : 'off'}
                   title={i.name}
-                  detail={`${i.role}${i.configured && !i.enabled ? '. Configured but disabled.' : ''}`}
+                  detail={`${i.role}${i.configured && !i.enabled ? '. Set up but switched off.' : ''}`}
                   meta={i.updatedAt ? `updated ${ago(i.updatedAt)}` : null}
                 />
               ))}

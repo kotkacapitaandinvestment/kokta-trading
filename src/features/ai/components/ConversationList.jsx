@@ -41,7 +41,7 @@ export default function ConversationList({ conversations, activeId, onSelect, on
             <p className="mt-0.5 truncate text-xs text-ink-400">{c.market} · {new Date(c.updatedAt).toLocaleDateString()}</p>
           </button>
         ))}
-        {filtered.length === 0 ? <p className="px-3 py-6 text-center text-xs text-ink-400">No conversations found.</p> : null}
+        {filtered.length === 0 ? <p className="px-3 py-6 text-center text-xs text-ink-400">{search ? 'No analyses match your search.' : 'No analyses yet. Start one above.'}</p> : null}
       </div>
     </div>
   );

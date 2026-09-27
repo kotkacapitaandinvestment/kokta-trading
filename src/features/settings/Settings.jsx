@@ -205,9 +205,9 @@ function PasswordSection() {
 
 const KYC_COPY = {
   none: { tone: 'neutral', label: 'Not submitted', icon: AlertCircle, text: 'You have not submitted your identity details yet.' },
-  pending: { tone: 'warning', label: 'In review', icon: Clock3, text: 'Your details are with an administrator. You have full access in the meantime.' },
+  pending: { tone: 'warning', label: 'In review', icon: Clock3, text: 'We’re reviewing your details. You have full access in the meantime.' },
   approved: { tone: 'profit', label: 'Verified', icon: BadgeCheck, text: 'Your identity is verified. To change verified details, contact support.' },
-  rejected: { tone: 'loss', label: 'Needs changes', icon: AlertCircle, text: 'An administrator asked you to correct your details.' },
+  rejected: { tone: 'loss', label: 'Needs changes', icon: AlertCircle, text: 'We need you to correct a few details.' },
 };
 
 function VerificationSection() {
@@ -487,15 +487,15 @@ export default function Settings() {
 
           {active === 'trading' && prefs ? (
             <div>
-              <SectionTitle title="Trading" description="Used by the dashboard, analytics and risk warnings." />
+              <SectionTitle title="Trading" description="Your risk rules. Kotka uses them on the dashboard, in analytics and for risk warnings." />
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                 <Select label="Base currency" value={prefs.tradingPreferences.baseCurrency} onChange={(e) => update('tradingPreferences', { baseCurrency: e.target.value })}>
                   <option>USD</option>
                   <option>EUR</option>
                   <option>GBP</option>
                 </Select>
-                <Input label="Daily loss limit (R)" type="number" min="0.5" step="0.5" value={prefs.tradingPreferences.dailyLossLimit} onChange={(e) => update('tradingPreferences', { dailyLossLimit: Number(e.target.value) })} />
-                <Input label="Default risk per trade (%)" type="number" min="0.1" step="0.1" value={prefs.tradingPreferences.defaultRisk} onChange={(e) => update('tradingPreferences', { defaultRisk: Number(e.target.value) })} />
+                <Input label="Daily loss limit (R)" hint="R is what you risk on one trade. 2 means stop after two full losses." type="number" min="0.5" step="0.5" value={prefs.tradingPreferences.dailyLossLimit} onChange={(e) => update('tradingPreferences', { dailyLossLimit: Number(e.target.value) })} />
+                <Input label="Risk per trade (% of account)" hint="What you usually risk on a single trade." type="number" min="0.1" step="0.1" value={prefs.tradingPreferences.defaultRisk} onChange={(e) => update('tradingPreferences', { defaultRisk: Number(e.target.value) })} />
               </div>
             </div>
           ) : null}

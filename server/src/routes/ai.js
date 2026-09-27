@@ -159,7 +159,7 @@ aiRouter.post('/conversations/:id/messages', asyncHandler(async (req, res) => {
   const hasImage = priorMessages.some((m) => m.image);
 
   if (!integration || !integration.enabled || !integration.secretCipher) {
-    const reply = "Kotka AI isn't connected right now — an admin needs to configure the AI integration.";
+    const reply = "Kotka AI isn't available right now. Please try again later; we've been told.";
     writeEvent(res, { type: 'meta', source: 'unavailable' });
     writeEvent(res, { type: 'delta', text: reply });
     const saved = await prisma.aIMessage.create({ data: { conversationId: conversation.id, role: 'assistant', content: reply } });
@@ -301,7 +301,7 @@ aiRouter.post('/conversations/:id/messages', asyncHandler(async (req, res) => {
   } catch (err) {
     console.error('NVIDIA streaming completion failed:', err.message);
     if (!full) {
-      const reply = 'Kotka AI ran into an error reaching the model. Try again shortly.';
+      const reply = 'Kotka AI is having a moment. Please try again in a minute.';
       writeEvent(res, { type: 'delta', text: reply });
       const saved = await prisma.aIMessage.create({ data: { conversationId: conversation.id, role: 'assistant', content: reply } });
       logUsage(req.userId, 'error', model ?? 'none', startedAt);

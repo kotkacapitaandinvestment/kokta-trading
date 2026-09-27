@@ -3,10 +3,11 @@ import clsx from 'clsx';
 import { ChevronRight } from 'lucide-react';
 import { ccy, CurrencyChip, CurrencyHeading, FactorBar, FavoursPill, KindTag, NotAvailable, reportCodes, Section, signed, toneOf, txt, useNarrow } from './primitives';
 import { EvidenceList } from './Evidence';
+import { plainCaps } from '../../../lib/plain';
 
 function FactorDetail({ f, code }) {
   if (!f) return null;
-  if (!f.available) return <NotAvailable reason={f.unavailableReason}>{f.classification?.includes('NOT AVAILABLE') ? f.classification : `${code}: DATA NOT AVAILABLE`}</NotAvailable>;
+  if (!f.available) return <NotAvailable reason={f.unavailableReason}>{f.classification?.includes('NOT AVAILABLE') ? f.classification : `No data for ${code} yet`}</NotAvailable>;
   return (
     <div className="space-y-2.5">
       <div className="flex items-start gap-2">
@@ -34,8 +35,8 @@ function ScoreCell({ score, classification }) {
   return (
     <div className="flex items-center gap-1.5 sm:gap-2.5">
       <FactorBar score={score} width={narrow ? 40 : 88} />
-      <span className="w-6 font-mono text-xs tabular-nums text-ink-800 dark:text-ink-100">{score === null || score === undefined ? 'n/a' : signed(score)}</span>
-      <span className="hidden max-w-[10rem] truncate text-[11px] text-ink-400 xl:inline" title={txt(classification)}>{classification?.includes('NOT AVAILABLE') ? 'Not available' : txt(classification)}</span>
+      <span className="w-6 font-mono text-xs tabular-nums text-ink-800 dark:text-ink-100">{score === null || score === undefined ? '–' : signed(score)}</span>
+      <span className="hidden max-w-[10rem] truncate text-[11px] text-ink-400 xl:inline" title={plainCaps(txt(classification))}>{classification?.includes('NOT AVAILABLE') ? 'No data yet' : plainCaps(txt(classification))}</span>
     </div>
   );
 }
@@ -71,7 +72,7 @@ function PairMatrix({ report }) {
                 >
                   <td className={clsx('border-l-[3px] py-2.5 pl-[13px] pr-2 md:whitespace-nowrap md:pl-[17px] md:pr-5', row.available && row.favors && row.favors !== 'NEITHER' ? ccy(toneOf(report, row.favors)).border : 'border-transparent')}>
                     <p className="text-sm text-ink-800 dark:text-ink-100">{row.label}</p>
-                    {isDiff ? <p className="text-[11px] text-ink-400">Pair-level evidence</p> : null}
+                    {isDiff ? <p className="text-[11px] text-ink-400">Compares both currencies</p> : null}
                   </td>
                   {isDiff ? (
                     <td colSpan={2} className="px-1 py-2.5 sm:px-2">
@@ -79,10 +80,10 @@ function PairMatrix({ report }) {
                         <div className="flex items-center gap-2.5">
                           <FactorBar score={row.score} width={narrow ? 40 : 88} />
                           <span className="font-mono text-xs tabular-nums text-ink-800 dark:text-ink-100">{signed(row.score)}</span>
-                          <span className="hidden text-[11px] text-ink-400 lg:inline">toward {row.favors === 'NEITHER' ? 'neither' : row.favors}</span>
+                          <span className="hidden text-[11px] text-ink-400 lg:inline">{row.favors === 'NEITHER' ? 'favours neither' : `favours ${row.favors}`}</span>
                         </div>
                       ) : (
-                        <span className="font-mono text-[11px] text-ink-400">DATA NOT AVAILABLE</span>
+                        <span className="text-[11px] text-ink-400">No data yet</span>
                       )}
                     </td>
                   ) : (
@@ -154,7 +155,7 @@ function CurrencyMatrix({ c }) {
             <button type="button" onClick={() => setOpen(isOpen ? null : f.key)} className="flex w-full items-center gap-3 px-5 py-2.5 text-left hover:bg-ink-50/60 dark:hover:bg-ink-800/40">
               <span className="w-32 shrink-0 text-sm text-ink-800 dark:text-ink-100 sm:w-44">{f.label}</span>
               <ScoreCell score={f.available ? f.score : null} classification={f.available ? f.classification : 'DATA NOT AVAILABLE'} />
-              <span className="ml-auto hidden font-mono text-[11px] text-ink-400 sm:inline">weight {Math.round(f.weight * 100)}%</span>
+              <span className="ml-auto hidden text-[11px] text-ink-400 sm:inline" title="How much this factor counts towards the score">counts {Math.round(f.weight * 100)}%</span>
               <ChevronRight className={clsx('h-4 w-4 shrink-0 text-ink-300 transition-transform', isOpen && 'rotate-90')} />
             </button>
             {isOpen ? (
@@ -174,7 +175,7 @@ export function MacroDrivers({ report }) {
   return (
     <Section
       title="Factor scores"
-      subtitle="Each factor is scored from -2 (strongly negative) to +2 (strongly positive) by fixed rules applied to official data. Select a factor for its evidence."
+      subtitle="Each factor is scored from −2 (hurting the currency) to +2 (helping it) using official data. Tap a row to see the data behind it."
     >
       {isPair ? <PairMatrix report={report} /> : <CurrencyMatrix c={report.currencies[report.subject]} />}
     </Section>
@@ -186,7 +187,7 @@ export function MainDrivers({ report }) {
   const codes = reportCodes(report);
   const notes = report.narrative?.driverNotes ?? {};
   return (
-    <Section title="Main drivers" subtitle="The factors with the largest weighted effect on each currency's score.">
+    <Section title="Main drivers" subtitle="What’s moving each currency’s score the most.">
       <div className={clsx('grid grid-cols-1 gap-6', codes.length > 1 && 'md:grid-cols-2')}>
         {codes.map((code) => {
           const c = report.currencies[code];
@@ -208,7 +209,7 @@ export function MainDrivers({ report }) {
                             d.effect === 'POSITIVE' ? 'bg-profit-50 text-profit-600 dark:bg-profit-500/10 dark:text-profit-400' : d.effect === 'NEGATIVE' ? 'bg-loss-50 text-loss-600 dark:bg-loss-500/10 dark:text-loss-400' : 'bg-ink-100 text-ink-600 dark:bg-ink-800 dark:text-ink-300',
                           )}
                         >
-                          {d.effect === 'POSITIVE' ? 'Supportive' : d.effect === 'NEGATIVE' ? 'Weighs' : 'Mixed'} {signed(d.score)}
+                          {d.effect === 'POSITIVE' ? 'Helps' : d.effect === 'NEGATIVE' ? 'Hurts' : 'Mixed'} {signed(d.score)}
                         </span>
                       </div>
                       <div className="mt-1.5">

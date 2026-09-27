@@ -16,12 +16,14 @@ const pieColors = [CHART_COLORS.accent, CHART_COLORS.profit, '#f59e0b', CHART_CO
 
 export default function Analytics() {
   const [data, setData] = useState(null);
+  const [failed, setFailed] = useState(false);
 
   useEffect(() => {
-    api.get('/me/analytics').then(setData);
+    api.get('/me/analytics').then(setData).catch(() => setFailed(true));
   }, []);
 
-  if (!data) return null;
+  if (failed) return <p role="alert" className="rounded-2xl bg-white p-6 text-sm text-loss-500 dark:bg-ink-900">We couldn’t load your analytics. Refresh the page to try again.</p>;
+  if (!data) return <div className="h-96 animate-pulse rounded-2xl bg-white dark:bg-ink-900" aria-label="Loading your analytics" />;
 
   const hasTrades = data.totalTrades > 0;
 

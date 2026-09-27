@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { prisma } from '../lib/prisma.js';
 import { requireAuth } from '../middleware/auth.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
+import { auditLater } from '../lib/audit.js';
 
 export const settingsRouter = Router();
 settingsRouter.use(requireAuth);
@@ -51,6 +52,11 @@ function clean(body, current) {
 settingsRouter.put('/', asyncHandler(async (req, res) => {
   const current = await prisma.userSettings.upsert({ where: { userId: req.userId }, update: {}, create: { userId: req.userId } });
   const { notifications, aiPreferences, tradingPreferences } = clean(req.body ?? {}, current);
+  if (tradingPreferences) {
+    const was = current.tradingPreferences ?? {};
+    const changed = Object.fromEntries(Object.keys(tradingPreferences).filter((k) => tradingPreferences[k] !== was[k]).map((k) => [k, { from: was[k] ?? null, to: tradingPreferences[k] }]));
+    if (Object.keys(changed).length) auditLater(req, 'settings.trading_changed', { targetType: 'user', targetId: req.userId, detail: changed });
+  }
   const settings = await prisma.userSettings.upsert({
     where: { userId: req.userId },
     update: {

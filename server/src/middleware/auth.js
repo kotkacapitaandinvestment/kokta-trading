@@ -40,13 +40,13 @@ async function kycBlocks(req, access) {
 
 export function requireAuth(req, res, next) {
   const token = req.cookies?.kotka_session;
-  if (!token) return res.status(401).json({ error: 'Not authenticated' });
+  if (!token) return res.status(401).json({ error: 'Please sign in to continue.' });
 
   let payload;
   try {
     payload = jwt.verify(token, process.env.JWT_SECRET);
   } catch {
-    return res.status(401).json({ error: 'Invalid or expired session' });
+    return res.status(401).json({ error: 'Your session has ended. Please sign in again.' });
   }
   req.userId = payload.sub;
   accessFor(payload.sub)
@@ -69,7 +69,7 @@ export function requireRole(...roles) {
       .findUnique({ where: { id: req.userId } })
       .then((user) => {
         if (!user || user.status !== 'active' || !roles.includes(user.role)) {
-          return res.status(403).json({ error: 'You do not have permission to perform this action.' });
+          return res.status(403).json({ error: 'You don’t have access to this.' });
         }
         req.user = user;
         next();
@@ -90,4 +90,16 @@ export function issueSessionCookie(res, userId) {
 
 export function clearSessionCookie(res) {
   res.clearCookie('kotka_session', { httpOnly: true, sameSite: 'lax', secure: process.env.NODE_ENV === 'production' });
+}
+
+// The signed-in user's id from the session cookie, or null. For routes that
+// don't require sign-in but want to know who is calling (e.g. sign-out).
+export function sessionUserId(req) {
+  const token = req.cookies?.kotka_session;
+  if (!token) return null;
+  try {
+    return jwt.verify(token, process.env.JWT_SECRET).sub ?? null;
+  } catch {
+    return null;
+  }
 }

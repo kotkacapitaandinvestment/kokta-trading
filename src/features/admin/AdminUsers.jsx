@@ -8,6 +8,7 @@ import AdminTable from './components/AdminTable';
 import { api } from '../../lib/api';
 import { useAuth } from '../../context/AuthContext';
 import { useAppConfig } from '../../context/AppConfigContext';
+import { confirmDialog, promptDialog, toast } from '../../lib/dialogs';
 
 const statusTone = { active: 'profit', suspended: 'warning', banned: 'loss' };
 const kycTone = { approved: 'profit', pending: 'warning', rejected: 'loss', none: 'neutral' };
@@ -33,7 +34,7 @@ export default function AdminUsers() {
   }, []);
 
   const updateUser = async (u, patch, confirmText) => {
-    if (confirmText && !window.confirm(confirmText)) return;
+    if (confirmText && !(await confirmDialog({ title: confirmText.split('?')[0] + '?', message: confirmText.split('?').slice(1).join('?').trim() || undefined, confirmLabel: patch.status === 'banned' ? 'Ban' : patch.status === 'suspended' ? 'Suspend' : 'Confirm', danger: ['banned', 'suspended'].includes(patch.status) }))) return;
     setBusyId(u.id);
     setError(null);
     try {
@@ -91,15 +92,17 @@ export default function AdminUsers() {
       csv: (u) => kycLabel[u.kycStatus],
       render: (u) => (RANK[u.role] > 0 ? <span className="text-xs text-ink-400">Exempt</span> : <Badge tone={kycTone[u.kycStatus]}>{kycLabel[u.kycStatus]}</Badge>),
     },
-    { key: 'status', label: 'Status', render: (u) => <Badge tone={statusTone[u.status]}>{u.status}</Badge> },
+    { key: 'status', label: 'Status', render: (u) => <Badge tone={statusTone[u.status]}>{{ active: 'Active', suspended: 'Suspended', banned: 'Banned' }[u.status] ?? u.status}</Badge> },
     { key: 'joined', label: 'Joined' },
     { key: 'lastActive', label: 'Last sign-in', render: (u) => u.lastActive ?? 'Never' },
     {
       key: 'actions',
       label: 'Actions',
-      render: (u) =>
-        canManage(u) ? (
+      render: (u) => (
           <div className="flex flex-wrap gap-1.5">
+            <Button as={Link} to={`/admin/audit-logs?user=${u.id}`} size="sm" variant="ghost">Activity</Button>
+            {canManage(u) ? (
+            <>
             {u.status !== 'active' ? (
               <Button size="sm" variant="secondary" disabled={busyId === u.id} onClick={() => updateUser(u, { status: 'active' })}>
                 Reinstate
@@ -114,8 +117,10 @@ export default function AdminUsers() {
                 Ban
               </Button>
             ) : null}
+            </>
+            ) : null}
           </div>
-        ) : null,
+        ),
     },
   ];
 

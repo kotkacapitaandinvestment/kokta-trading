@@ -108,7 +108,10 @@ export default function WeeklyPerformanceChart({ data }) {
         </div>
       ) : null}
       {empty ? (
-        <p className="absolute inset-x-0 top-1/2 -translate-y-1/2 text-center text-sm text-ink-400">No closed trades in the last 7 days.</p>
+        <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 text-center">
+          <p className="text-sm font-medium text-ink-700 dark:text-ink-200">No closed trades in the last 7 days</p>
+          <p className="mt-0.5 text-xs text-ink-400">Close a position in your journal and your daily results show here.</p>
+        </div>
       ) : null}
     </div>
   );

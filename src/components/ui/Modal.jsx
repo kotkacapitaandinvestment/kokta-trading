@@ -19,7 +19,7 @@ export default function Modal({ open, onClose, title, children, width = 'max-w-l
       <div className={`relative w-full ${width} animate-slide-up rounded-2xl border border-ink-100 bg-white shadow-pop dark:border-ink-700 dark:bg-ink-900 dark:shadow-none`}>
         <div className="flex items-center justify-between border-b border-ink-100 px-5 py-4 dark:border-ink-800">
           <h3 className="text-sm font-semibold text-ink-900 dark:text-ink-50">{title}</h3>
-          <button onClick={onClose} className="text-ink-400 hover:text-ink-700 dark:hover:text-ink-100">
+          <button onClick={onClose} className="text-ink-400 hover:text-ink-700 dark:hover:text-ink-100" aria-label="Close">
             <X className="h-4 w-4" />
           </button>
         </div>

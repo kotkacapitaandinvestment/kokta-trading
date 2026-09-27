@@ -24,7 +24,7 @@ export default function DrawdownCalculator() {
         <div className="border-t border-ink-200 pt-3 dark:border-ink-700">
           <p className="text-xs font-medium uppercase tracking-wide text-ink-400">Gain required to recover</p>
           <p className="mt-1 text-2xl font-semibold text-ink-900 dark:text-ink-50">
-            {Number.isFinite(requiredGainPct) ? `${requiredGainPct.toFixed(1)}%` : 'n/a'}
+            {Number.isFinite(requiredGainPct) ? `${requiredGainPct.toFixed(1)}%` : 'Account fully lost'}
           </p>
         </div>
       </Card>

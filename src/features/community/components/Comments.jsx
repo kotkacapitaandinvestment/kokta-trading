@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import clsx from 'clsx';
-import { CornerDownRight, Flag, HelpCircle, Pencil, ShieldCheck, Trash2 } from 'lucide-react';
+import { CornerDownRight, Flag, HelpCircle, MessageCircle, Pencil, ShieldCheck, Trash2 } from 'lucide-react';
 import { api } from '../../../lib/api';
 import Button from '../../../components/ui/Button';
 import { useRealtime } from '../realtime';
@@ -12,6 +12,8 @@ import Menu from './Menu';
 import ReportDialog from './ReportDialog';
 import { MentionTextarea } from './inputs';
 import AiPanel, { useAiAction } from './AiPanel';
+import { confirmDialog, promptDialog, toast } from '../../../lib/dialogs';
+import EmptyState from '../../../components/ui/EmptyState';
 
 const CATEGORIES = [
   ['technical', 'Technical'],
@@ -72,11 +74,11 @@ function CommentItem({ c, replies, onReply, onChanged, depth = 0 }) {
       onChanged(comment);
       setEditing(null);
     } catch (err) {
-      window.alert(err.message);
+      toast(err.message, { tone: 'error' });
     }
   };
   const remove = async () => {
-    if (!window.confirm('Delete this comment?')) return;
+    if (!(await confirmDialog({ title: 'Delete this comment?', message: 'It will be removed for everyone.', confirmLabel: 'Delete', danger: true }))) return;
     await api.delete(`/community/comments/${c.id}`);
     onChanged({ ...c, deleted: true, body: '' });
   };
@@ -162,7 +164,7 @@ export default function Comments({ targetType, targetId, canChallenge = false, s
       ) : null}
       <CommentForm key={mode} targetType={targetType} targetId={targetId} challenge={mode === 'challenge'} onPosted={upsert} autoFocus={startChallenge} />
       <div className="divide-y divide-ink-100 dark:divide-ink-800">
-        {!comments ? <p className="py-4 text-sm text-ink-400">Loading…</p> : !tree.length ? <p className="py-6 text-center text-sm text-ink-400">No discussion yet. Start the conversation.</p> : null}
+        {!comments ? <p className="py-4 text-sm text-ink-400">Loading…</p> : !tree.length ? <EmptyState size="inline" icon={MessageCircle} title="No comments yet" description="Be the first to add a thought or ask a question." /> : null}
         {tree.map(({ c, replies }) => (
           <div key={c.id}>
             <CommentItem c={c} replies={replies} onReply={setReplyTo} onChanged={upsert} />

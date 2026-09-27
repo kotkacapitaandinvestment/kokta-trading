@@ -7,6 +7,7 @@ import Modal from '../../components/ui/Modal';
 import Input, { Select } from '../../components/ui/Input';
 import AdminTable from './components/AdminTable';
 import { useAdminCrud } from '../../lib/useAdminCrud';
+import { confirmDialog, promptDialog, toast } from '../../lib/dialogs';
 
 const statusTone = { published: 'profit', draft: 'neutral' };
 const AUDIENCES = ['All users', 'Traders', 'Premium'];
@@ -52,7 +53,7 @@ export default function AdminAnnouncements() {
     },
     { key: 'audience', label: 'Audience' },
     { key: 'publishedAt', label: 'Published', render: (r) => (r.publishedAt ? new Date(r.publishedAt).toLocaleDateString() : 'Not yet') },
-    { key: 'status', label: 'Status', render: (r) => <Badge tone={statusTone[r.status]}>{r.status}</Badge> },
+    { key: 'status', label: 'Status', render: (r) => <Badge tone={statusTone[r.status]}>{{ draft: 'Draft', published: 'Published' }[r.status] ?? r.status}</Badge> },
     {
       key: 'actions',
       label: '',
@@ -63,7 +64,7 @@ export default function AdminAnnouncements() {
           ) : (
             <Button size="sm" variant="secondary" icon={Send} onClick={() => guard(() => update(r.id, { status: 'published' }))}>Publish</Button>
           )}
-          <Button size="sm" variant="ghost" icon={Trash2} onClick={() => window.confirm(`Delete "${r.title}"?`) && guard(() => remove(r.id))}>
+          <Button size="sm" variant="ghost" icon={Trash2} onClick={async () => (await confirmDialog({ title: `Delete “${r.title}”?`, message: 'Traders will no longer see it. This can’t be undone.', confirmLabel: 'Delete', danger: true })) && guard(() => remove(r.id))}>
             Delete
           </Button>
         </div>

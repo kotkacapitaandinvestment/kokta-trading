@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react';
 import { AreaChart, Area, ResponsiveContainer, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
 import { Link } from 'react-router-dom';
-import { Users, UserPlus, Cpu, TrendingUp, BadgeCheck } from 'lucide-react';
+import { Activity, BadgeCheck, Cpu, TrendingUp, UserPlus, Users } from 'lucide-react';
 import PageHeader from '../../components/ui/PageHeader';
 import Card, { CardHeader, CardBody } from '../../components/ui/Card';
 import StatTile from '../../components/ui/StatTile';
 import { api } from '../../lib/api';
 import { CHART_COLORS } from '../../lib/chartColors';
+import EmptyState from '../../components/ui/EmptyState';
 
 export default function AdminOverview() {
   const [stats, setStats] = useState(null);
@@ -64,7 +65,7 @@ export default function AdminOverview() {
           <CardHeader title="Feature Usage" subtitle="Tracked actions, last 30 days" />
           <CardBody className="space-y-3">
             {stats.featureUsage.every((f) => f.count === 0) ? (
-              <p className="text-sm text-ink-400">No tracked activity yet.</p>
+              <EmptyState size="inline" icon={Activity} title="No activity yet" description="Sign-ins, trades and AI use will show here as traders use Kotka." />
             ) : (
               (() => {
                 const max = Math.max(...stats.featureUsage.map((f) => f.count), 1);

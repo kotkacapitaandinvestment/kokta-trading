@@ -1,8 +1,10 @@
+import { NotebookPen } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import PageHeader from '../../components/ui/PageHeader';
 import StatTile from '../../components/ui/StatTile';
 import Card, { CardHeader, CardBody } from '../../components/ui/Card';
 import { api } from '../../lib/api';
+import EmptyState from '../../components/ui/EmptyState';
 
 export default function AdminJournalStats() {
   const [stats, setStats] = useState(null);
@@ -26,7 +28,7 @@ export default function AdminJournalStats() {
         <CardHeader title="Pre-Trade Emotion Breakdown" subtitle="Last 30 days, across all traders" />
         <CardBody className="space-y-3">
           {stats.emotions.length === 0 ? (
-            <p className="text-sm text-ink-400">No journal entries logged yet.</p>
+            <EmptyState size="inline" icon={NotebookPen} title="No trades logged yet" description="Journal activity across all traders will show here once people start logging trades." />
           ) : (
             stats.emotions.map((e) => (
               <div key={e.emotion}>

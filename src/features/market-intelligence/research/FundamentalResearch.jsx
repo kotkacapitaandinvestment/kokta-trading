@@ -61,7 +61,7 @@ function ProgressPanel({ steps, notice }) {
   return (
     <div className="rounded-2xl border border-ink-100 bg-white p-5 dark:border-ink-700 dark:bg-ink-900" aria-live="polite">
       <p className="text-sm font-semibold text-ink-900 dark:text-ink-50">Researching</p>
-      <p className="mt-0.5 text-xs text-ink-400">Evidence first, then comparison, then interpretation. A full run takes up to a minute or two.</p>
+      <p className="mt-0.5 text-xs text-ink-400">Gathering the latest data and writing your report. This takes a minute or two.</p>
       {notice ? <p className="mt-3 text-xs text-ink-500 dark:text-ink-400">{notice}</p> : null}
       <ol className="mt-4 space-y-2.5">
         {steps.map((s) => (
@@ -76,7 +76,7 @@ function ProgressPanel({ steps, notice }) {
         {!steps.length ? (
           <li className="flex items-center gap-2.5 text-sm text-ink-500">
             <Loader2 className="h-4 w-4 animate-spin text-accent-600 motion-reduce:animate-none" />
-            Starting research run
+            Getting started…
           </li>
         ) : null}
       </ol>
@@ -130,7 +130,7 @@ function Report({ report, history }) {
             <WhySection report={report} />
           </Chapter>
 
-          <Chapter id="ch-drivers" icon={Layers} title="Macro drivers" description="Every factor scored from official data, side by side, with the evidence and the rule behind each score.">
+          <Chapter id="ch-drivers" icon={Layers} title="Macro drivers" description="What’s pushing each currency up or down, and the data behind each score.">
             <MacroDrivers report={report} />
             {isPair ? <RelativeSection report={report} /> : null}
             <MainDrivers report={report} />
@@ -158,7 +158,7 @@ function Report({ report, history }) {
             <CatalystsSection report={report} />
           </Chapter>
 
-          <Chapter id="ch-sources" icon={Library} title="Sources" description="Every publication behind this report, and how retrieval went on this run.">
+          <Chapter id="ch-sources" icon={Library} title="Sources" description="Where every number in this report comes from.">
             <SourcesSection report={report} />
           </Chapter>
         </div>
@@ -180,10 +180,10 @@ export default function FundamentalResearch({ instrument, onInstrumentChange }) 
   const available = config ? [...config.settings.pairs, ...config.settings.currencies, ...crypto] : [];
   const subject = available.includes(instrument) ? instrument : config?.settings.pairs[0] ?? config?.settings.currencies[0];
 
-  if (configError) return <EmptyState icon={AlertTriangle} title="Fundamental Research is unavailable" description={configError} />;
+  if (configError) return <EmptyState icon={AlertTriangle} title="Research couldn’t load" description={configError} />;
   if (!config) return <ReportSkeleton />;
   if (!allowed) return <EmptyState icon={Landmark} title="Fundamental Research" description={config.access.reason} />;
-  if (!subject) return <EmptyState icon={Landmark} title="No instruments enabled" description="An administrator has not enabled any currencies or pairs for Fundamental Research yet." />;
+  if (!subject) return <EmptyState icon={Landmark} title="Research isn’t available yet" description="We’re setting up coverage. Check back soon." />;
 
   if (crypto.includes(subject)) {
     return (
@@ -210,7 +210,7 @@ function ResearchView({ config, subject, onInstrumentChange }) {
         <div className="mt-4 flex flex-col gap-3 border-t border-ink-100 pt-4 dark:border-ink-800 lg:flex-row lg:items-center lg:justify-between">
           <FreshnessStrip freshness={freshness} report={report} />
           <div className="flex shrink-0 flex-wrap items-center gap-2 sm:gap-3">
-            {config.usage?.limit !== null && config.usage?.limit !== undefined ? <span className="mr-auto whitespace-nowrap text-[11px] text-ink-400 lg:mr-0">{config.usage.refreshesToday}/{config.usage.limit} refreshes today</span> : null}
+            {config.usage?.limit !== null && config.usage?.limit !== undefined ? <span className="mr-auto whitespace-nowrap text-[11px] text-ink-400 lg:mr-0">{config.usage.refreshesToday} of {config.usage.limit} updates used today</span> : null}
             {report ? (
               <Button
                 as={Link}
@@ -228,7 +228,7 @@ function ResearchView({ config, subject, onInstrumentChange }) {
               icon={refreshing ? Loader2 : RefreshCw}
               disabled={refreshing || !canRefresh}
               onClick={() => refresh({ force: isAdmin && !freshness?.stale })}
-              title={canRefresh ? undefined : 'This report is current. It refreshes automatically when it becomes stale.'}
+              title={canRefresh ? undefined : 'This report is up to date. It updates automatically when new data is due.'}
             >
               {refreshing ? 'Researching' : isAdmin && !freshness?.stale && report ? 'Force refresh' : canRefresh ? 'Refresh' : 'Up to date'}
             </Button>
@@ -246,13 +246,13 @@ function ResearchView({ config, subject, onInstrumentChange }) {
       {refreshing ? <ProgressPanel steps={steps} notice={notice} /> : null}
 
       {status === 'loading' ? <ReportSkeleton /> : null}
-      {status === 'error' ? <EmptyState icon={AlertTriangle} title="Could not load research" description={error} /> : null}
+      {status === 'error' ? <EmptyState icon={AlertTriangle} title="Research couldn’t load" description={`${error} Refresh the page to try again.`} /> : null}
       {status === 'empty' && !refreshing ? (
         <EmptyState
           icon={Landmark}
           title={`No research for ${subject} yet`}
-          description="Kotka has not researched this instrument yet. Running research gathers IMF, central bank and official statistics data, then scores it."
-          action={<Button onClick={() => refresh()} icon={RefreshCw}>Run research</Button>}
+          description="There’s no report for this market yet. Create one now: it takes a minute or two."
+          action={<Button onClick={() => refresh()} icon={RefreshCw}>Create report</Button>}
         />
       ) : null}
       {report ? (

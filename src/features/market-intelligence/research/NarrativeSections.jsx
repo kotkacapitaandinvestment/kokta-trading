@@ -27,7 +27,7 @@ export function WhySection({ report }) {
     const { base, quote } = report.pair;
     const pick = (code, sign) => {
       const row = report.pair.factors.filter((f) => f.available && Math.sign(f.diff) === sign).sort((a, b) => Math.abs(b.weight * b.diff) - Math.abs(a.weight * a.diff))[0];
-      if (!row) return { s: { title: `Strongest factor for ${code}`, label: 'None', rationale: `No factor currently favours ${code} on Kotka's rules.`, evidence: [] }, code };
+      if (!row) return { s: { title: `Strongest factor for ${code}`, label: 'None', rationale: `Nothing in the data currently favours ${code}.`, evidence: [] }, code };
       const f = report.currencies[code].factors[row.key];
       return {
         code,
@@ -75,12 +75,12 @@ export function RelativeSection({ report }) {
   const rv = report.narrative?.relativeView ?? {};
   const d = report.pair.differentials ?? {};
   const rows = [
-    d.policyRate && { label: 'Policy rate', b: txt(report.currencies[base].policy?.display), q: txt(report.currencies[quote].policy?.display), diff: d.policyRate.now, unit: 'pts', note: d.policyRate.change !== null ? `${signedFixed(d.policyRate.change)} pts vs 6 months ago` : null },
-    d.realRate && { label: 'Real policy rate', b: `${signedFixed(d.realRate.base)} pts`, q: `${signedFixed(d.realRate.quote)} pts`, diff: d.realRate.diff, unit: 'pts' },
-    d.inflationGap && { label: 'Inflation vs target', b: `${signedFixed(d.inflationGap.base)} pp`, q: `${signedFixed(d.inflationGap.quote)} pp`, diff: d.inflationGap.diff, unit: 'pp', closer: [Math.abs(d.inflationGap.base), Math.abs(d.inflationGap.quote)] },
-    d.growth && { label: `IMF growth projection ${d.growth.year}`, b: `${d.growth.base.toFixed(2)}%`, q: `${d.growth.quote.toFixed(2)}%`, diff: d.growth.diff, unit: 'pp' },
-    d.fiscalBalance && { label: 'Fiscal balance (% GDP)', b: `${d.fiscalBalance.base.toFixed(1)}%`, q: `${d.fiscalBalance.quote.toFixed(1)}%`, diff: d.fiscalBalance.diff, unit: 'pp', dp: 1 },
-    d.currentAccount && { label: 'Current account (% GDP)', b: `${d.currentAccount.base.toFixed(1)}%`, q: `${d.currentAccount.quote.toFixed(1)}%`, diff: d.currentAccount.diff, unit: 'pp', dp: 1 },
+    d.policyRate && { label: 'Policy rate', b: txt(report.currencies[base].policy?.display), q: txt(report.currencies[quote].policy?.display), diff: d.policyRate.now, unit: '% pts', note: d.policyRate.change !== null ? `${signedFixed(d.policyRate.change)}% pts vs 6 months ago` : null },
+    d.realRate && { label: 'Interest rate after inflation', b: `${signedFixed(d.realRate.base)}%`, q: `${signedFixed(d.realRate.quote)}%`, diff: d.realRate.diff, unit: '% pts' },
+    d.inflationGap && { label: 'Inflation vs target', b: `${signedFixed(d.inflationGap.base)}% pts`, q: `${signedFixed(d.inflationGap.quote)}% pts`, diff: d.inflationGap.diff, unit: '% pts', closer: [Math.abs(d.inflationGap.base), Math.abs(d.inflationGap.quote)] },
+    d.growth && { label: `IMF growth projection ${d.growth.year}`, b: `${d.growth.base.toFixed(2)}%`, q: `${d.growth.quote.toFixed(2)}%`, diff: d.growth.diff, unit: '% pts' },
+    d.fiscalBalance && { label: 'Fiscal balance (% GDP)', b: `${d.fiscalBalance.base.toFixed(1)}%`, q: `${d.fiscalBalance.quote.toFixed(1)}%`, diff: d.fiscalBalance.diff, unit: '% pts', dp: 1 },
+    d.currentAccount && { label: 'Current account (% GDP)', b: `${d.currentAccount.base.toFixed(1)}%`, q: `${d.currentAccount.quote.toFixed(1)}%`, diff: d.currentAccount.diff, unit: '% pts', dp: 1 },
   ].filter(Boolean);
   const cb = ccy('base');
   const cq = ccy('quote');
@@ -91,7 +91,7 @@ export function RelativeSection({ report }) {
     return r.diff > 0 ? 'base' : 'quote';
   };
   return (
-    <Section title={`${base}${quote} relative analysis`} subtitle={`What favours ${base} relative to ${quote}, what favours ${quote}, and the key differentials.`}>
+    <Section title={`${base} vs ${quote}: head to head`} subtitle={`What favours ${base}, what favours ${quote}, and how the two economies compare.`}>
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         {[
           { code: base, text: rv.favorsBase, c: cb },
@@ -126,16 +126,16 @@ export function RelativeSection({ report }) {
               </li>
             );
           })}
-          <li className="px-4 pt-2 text-[11px] text-ink-400">Right-hand figure is {base} minus {quote}. The stronger side is highlighted in its currency colour (for inflation, the side closer to target).</li>
+          <li className="px-4 pt-2 text-[11px] text-ink-400">The figure on the right is the gap ({base} minus {quote}; “% pts” means percentage points). The stronger side is highlighted in its currency colour (for inflation, the side closer to target).</li>
         </ul>
         <div className="-mx-5 mt-5 hidden overflow-x-auto border-t border-ink-100 dark:border-ink-800 sm:block">
           <table className="w-full min-w-[560px] text-left text-sm">
             <thead>
               <tr className="text-[11px] text-ink-400">
-                <th className="px-5 py-2 font-medium">Differential</th>
+                <th className="px-5 py-2 font-medium">Measure</th>
                 <th className="px-2 py-2 font-medium"><CurrencyChip code={base} tone="base" /></th>
                 <th className="px-2 py-2 font-medium"><CurrencyChip code={quote} tone="quote" /></th>
-                <th className="px-5 py-2 text-right font-medium">{base} minus {quote}</th>
+                <th className="px-5 py-2 text-right font-medium">Gap</th>
               </tr>
             </thead>
             <tbody className="font-mono text-xs tabular-nums">
@@ -185,7 +185,7 @@ export function RealityVsExpectations({ report }) {
                   </div>
                   <p className="text-sm text-ink-700 dark:text-ink-200">
                     {txt(c.policy?.display ?? 'n/a')}, actual stance <span className="font-medium">{c.policy?.stance?.toLowerCase() ?? 'n/a'}</span>
-                    {c.policy?.cum6m !== null && c.policy?.cum6m !== undefined ? ` (${signed(c.policy.cum6m)}bp over 6 months)` : ''}. Fundamental score {c.score}/100.
+                    {c.policy?.cum6m !== null && c.policy?.cum6m !== undefined ? ` (${c.policy.cum6m > 0 ? 'up' : c.policy.cum6m < 0 ? 'down' : 'unchanged'}${c.policy.cum6m ? ` ${Math.abs(c.policy.cum6m / 100).toFixed(2)}%` : ''} over 6 months)` : ''}. Fundamental score {c.score}/100.
                   </p>
                 </div>
                 <div className="rounded-lg border border-dashed border-ink-200 p-3 dark:border-ink-700">
@@ -196,13 +196,13 @@ export function RealityVsExpectations({ report }) {
                   {me?.available ? (
                     <>
                       <p className="text-sm text-ink-700 dark:text-ink-200">{txt(me.summary)}</p>
-                      {me.divergent ? <p className="mt-1 text-xs font-medium text-amber-700 dark:text-amber-400">Market pricing contradicts the actual policy direction.</p> : null}
+                      {me.divergent ? <p className="mt-1 text-xs font-medium text-amber-700 dark:text-amber-400">Markets are betting against what the central bank is actually doing.</p> : null}
                       <div className="mt-1.5">
                         <EvidenceList ids={me.evidence?.slice(0, 1)} />
                       </div>
                     </>
                   ) : (
-                    <NotAvailable reason={reasonAfterPrefix(me?.summary)}>MARKET EXPECTATION DATA NOT AVAILABLE</NotAvailable>
+                    <NotAvailable reason={reasonAfterPrefix(me?.summary)}>{`Market expectations aren’t available for ${c.code} yet`}</NotAvailable>
                   )}
                 </div>
               </div>
@@ -229,10 +229,10 @@ export function RealityVsExpectations({ report }) {
               <p className="text-sm text-ink-700 dark:text-ink-200">
                 {report.subject}{' '}
                 <span className={clsx('font-mono tabular-nums', mp.change1m >= 0 ? 'text-profit-600 dark:text-profit-400' : 'text-loss-500')}>{signedFixed(mp.change1m)}%</span> over 1 month and{' '}
-                <span className={clsx('font-mono tabular-nums', mp.change3m >= 0 ? 'text-profit-600 dark:text-profit-400' : 'text-loss-500')}>{signedFixed(mp.change3m)}%</span> over 3 months, to {mp.last} ({mp.lastDate}, {mp.source?.name}).
+                <span className={clsx('font-mono tabular-nums', mp.change3m >= 0 ? 'text-profit-600 dark:text-profit-400' : 'text-loss-500')}>{signedFixed(mp.change3m)}%</span> over 3 months, to {mp.last} ({new Date(`${mp.lastDate}T12:00:00Z`).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}, daily close).
               </p>
             ) : (
-              <NotAvailable reason={mp?.reason}>PRICE DATA NOT AVAILABLE</NotAvailable>
+              <NotAvailable>Price history isn’t available right now</NotAvailable>
             )}
           </div>
         </div>
@@ -268,7 +268,7 @@ export function WhatChangedSection({ report }) {
 export function InvalidationSection({ report }) {
   const risk = report.narrative?.biggestRisk;
   return (
-    <Section title="What could change this view" subtitle="Concrete developments that would move the assessment under Kotka's scoring rules.">
+    <Section title="What could change this view" subtitle="What would need to happen for this view to change.">
       {risk ? (
         <div className="mb-5 flex gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-500/20 dark:bg-amber-500/10">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />

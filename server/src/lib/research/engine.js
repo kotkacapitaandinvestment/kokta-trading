@@ -275,44 +275,44 @@ export async function runResearch({ subject: rawSubject, trigger = 'user', userI
 
   try {
     const now = new Date();
-    step('retrieve', 'Retrieving official data — IMF, central banks, statistics offices, BIS');
+    step('retrieve', 'Gathering the latest official data');
     const evidence = await collectEvidence(codes, { settings, now, bypassCache });
     const failed = evidence.sourceStatus.filter((s) => s.status === 'failed');
-    step('retrieve', 'Retrieving official data — IMF, central banks, statistics offices, BIS', 'done', `${evidence.sourceStatus.filter((s) => s.status === 'ok' || s.status === 'cached').length} sources retrieved${failed.length ? `, ${failed.length} unavailable` : ''}`);
+    step('retrieve', 'Gathering the latest official data', 'done', `${evidence.sourceStatus.filter((s) => s.status === 'ok' || s.status === 'cached').length} sources loaded${failed.length ? `, ${failed.length} couldn’t be reached` : ''}`);
 
-    step('evaluate', 'Normalizing evidence and scoring each factor');
+    step('evaluate', 'Scoring each factor');
     const evals = Object.fromEntries(codes.map((c) => [c, evaluateCurrency(c, evidence, { asOf: now })]));
-    step('evaluate', 'Normalizing evidence and scoring each factor', 'done', codes.map((c) => `${c} ${evals[c].score ?? 'n/a'}/100`).join(' · '));
+    step('evaluate', 'Scoring each factor', 'done', codes.map((c) => `${c} ${evals[c].score ?? 'n/a'}/100`).join(' · '));
 
-    step('compare', 'Comparing forecast revisions and reconstructing the fundamental trend');
+    step('compare', 'Checking forecast changes and the recent trend');
     const { trends, baseline, baselineDate } = reconstructTrends(codes, evidence, now, evals, { pair: parsed.kind === 'pair' ? parsed : null });
-    step('compare', 'Comparing forecast revisions and reconstructing the fundamental trend', 'done');
+    step('compare', 'Checking forecast changes and the recent trend', 'done');
 
     let pairEval = null;
     if (parsed.kind === 'pair') {
-      step('pair', `Relative analysis — ${parsed.base} vs ${parsed.quote}`);
+      step('pair', `Comparing ${parsed.base} with ${parsed.quote}`);
       let marketPrice = null;
       try {
         marketPrice = await fetchPairPricePerformance(parsed.subject, { getMassiveKey, getDailyBars: (key, ticker) => getDailyBarsCached(key, ticker, { cachedSource }) });
       } catch (err) {
-        marketPrice = { available: false, reason: `Price history unavailable: ${String(err.message).slice(0, 120)}` };
+        marketPrice = { available: false, reason: 'Price history isn’t available right now.' };
       }
       pairEval = evaluatePair(evals[parsed.base], evals[parsed.quote], { marketPrice });
-      step('pair', `Relative analysis — ${parsed.base} vs ${parsed.quote}`, 'done', `${pairEval.condition} · ${pairEval.relativeScore}/100`);
+      step('pair', `Comparing ${parsed.base} with ${parsed.quote}`, 'done', `${pairEval.relativeScore}/100`);
     }
 
-    step('catalysts', 'Mapping upcoming catalysts and invalidation conditions');
+    step('catalysts', 'Finding upcoming events that could change the picture');
     const catalysts = buildCatalysts(codes, evals, evidence, { now, horizonDays: settings.catalystHorizonDays });
     const invalidation = buildInvalidation(evals, catalysts, { pair: pairEval });
-    step('catalysts', 'Mapping upcoming catalysts and invalidation conditions', 'done', `${catalysts.items.filter((c) => c.date).length} dated events`);
+    step('catalysts', 'Finding upcoming events that could change the picture', 'done', `${catalysts.items.filter((c) => c.date).length} events found`);
 
     const previous = await latestReport(parsed.kind, parsed.subject);
-    step('narrative', settings.aiNarrative ? 'Writing the evidence-bound narrative' : 'Composing the narrative from rules');
+    step('narrative', 'Writing your summary');
     const report = await assemble({ kind: parsed.kind, subject: parsed.subject, codes, evals, evidence, trends, pairEval, catalysts, invalidation, baseline, baselineDate, settings, previous, withNarrative: true });
     const nv = report.narrative.validation;
-    step('narrative', settings.aiNarrative ? 'Writing the evidence-bound narrative' : 'Composing the narrative from rules', 'done', report.narrative.source === 'ai' ? `${nv.accepted.length} sections verified${nv.rejected.length ? `, ${nv.rejected.length} replaced by rules` : ''}` : nv.note ?? 'Rules-based narrative');
+    step('narrative', 'Writing your summary', 'done', 'Every figure checked against its source');
 
-    step('save', 'Saving report');
+    step('save', 'Saving the report');
     const durationMs = Date.now() - started;
     const row = await prisma.researchReport.create({
       data: {
@@ -342,7 +342,7 @@ export async function runResearch({ subject: rawSubject, trigger = 'user', userI
     }
 
     await prisma.researchRun.update({ where: { id: run.id }, data: { status: 'succeeded', finishedAt: new Date(), reportId: row.id, sourceStatus: evidence.sourceStatus } });
-    step('save', 'Saving report', 'done');
+    step('save', 'Saving the report', 'done');
     return row;
   } catch (err) {
     await prisma.researchRun.update({ where: { id: run.id }, data: { status: 'failed', finishedAt: new Date(), error: String(err.message ?? err).slice(0, 500) } }).catch(() => {});

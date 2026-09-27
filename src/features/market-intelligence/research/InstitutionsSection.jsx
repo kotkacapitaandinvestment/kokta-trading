@@ -2,11 +2,12 @@ import { useState } from 'react';
 import clsx from 'clsx';
 import Tabs from '../../../components/ui/Tabs';
 import { CurrencyChip, CurrencyHeading, fmt, formatDate, KindTag, NotAvailable, reasonAfterPrefix, reportCodes, Section, signedFixed, SourceLink, toneOf, txt } from './primitives';
+import { stanceWord } from '../../../lib/plain';
 
 export function CentralBanksSection({ report }) {
   const codes = reportCodes(report).filter((c) => report.centralBanks?.[c]);
   return (
-    <Section title="Central banks" subtitle="Actual policy, taken from official rate data and the latest decision statement. Market expectations are shown separately above.">
+    <Section title="Central banks" subtitle="What each central bank is actually doing, from official rate decisions and its latest statement. What markets expect is shown separately below.">
       <div className={clsx('grid grid-cols-1 gap-6', codes.length > 1 && 'lg:grid-cols-2')}>
         {codes.map((code) => {
           const cb = report.centralBanks[code];
@@ -20,16 +21,16 @@ export function CentralBanksSection({ report }) {
                     'rounded-full px-2.5 py-0.5 text-xs font-semibold',
                     cb.stance === 'HAWKISH' ? 'bg-profit-50 text-profit-600 dark:bg-profit-500/10 dark:text-profit-400' : cb.stance === 'DOVISH' ? 'bg-loss-50 text-loss-600 dark:bg-loss-500/10 dark:text-loss-400' : 'bg-ink-100 text-ink-600 dark:bg-ink-800 dark:text-ink-300',
                   )}
-                  title="Actual policy stance, from official rate decisions"
+                  title="Hawkish = leaning towards higher interest rates. Dovish = leaning towards lower rates. Based on actual rate decisions."
                 >
-                  {cb.stance ?? 'n/a'}
+                  {stanceWord(cb.stance)}
                 </span>
               </div>
               <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
                 <span className="text-ink-400">
-                  Real rate <span className="font-mono tabular-nums text-ink-800 dark:text-ink-100">{cb.realRate !== null && cb.realRate !== undefined ? `${signedFixed(cb.realRate)} pts` : 'n/a'}</span>
+                  Rate after inflation <span className="font-mono tabular-nums text-ink-800 dark:text-ink-100">{cb.realRate !== null && cb.realRate !== undefined ? `${signedFixed(cb.realRate)}%` : 'not available'}</span>
                 </span>
-                <SourceLink href={cb.targetUrl} className="text-xs">Mandate: {txt(cb.targetText)}</SourceLink>
+                <SourceLink href={cb.targetUrl} className="text-xs">Inflation target: {txt(cb.targetText)}</SourceLink>
               </div>
               {cb.recentChanges?.length ? (
                 <div>
@@ -39,8 +40,8 @@ export function CentralBanksSection({ report }) {
                       <li key={ch.date} className="rounded-md border border-ink-100 px-2 py-1 text-xs dark:border-ink-800">
                         <span className="text-ink-400">{formatDate(ch.date)}</span>{' '}
                         <span className={clsx('font-mono tabular-nums', ch.bp > 0 ? 'text-profit-600 dark:text-profit-400' : 'text-loss-500')}>
-                          {ch.bp > 0 ? '+' : ''}
-                          {ch.bp}bp
+                          {ch.bp > 0 ? '+' : '−'}
+                          {Math.abs(ch.bp / 100).toFixed(2)}%
                         </span>{' '}
                         <span className="font-mono tabular-nums text-ink-700 dark:text-ink-200">{txt(ch.toDisplay ?? `${fmt(ch.to)}%`)}</span>
                       </li>
@@ -60,7 +61,7 @@ export function CentralBanksSection({ report }) {
                       {cb.statement.title}, {formatDate(cb.statement.publishedAt)}
                     </SourceLink>
                   </div>
-                  <p className="mb-2 text-[11px] text-ink-400">Verbatim excerpts, selected by keyword from the published statement.</p>
+                  <p className="mb-2 text-[11px] text-ink-400">Key quotes from the latest statement.</p>
                   <div className="space-y-2">
                     {cb.statement.keySentences.map((s) => (
                       <blockquote key={s} className="border-l-2 border-accent-500/60 pl-3 text-sm leading-relaxed text-ink-700 dark:text-ink-200">
@@ -70,7 +71,7 @@ export function CentralBanksSection({ report }) {
                   </div>
                 </div>
               ) : (
-                <NotAvailable reason={cb.statementNote}>CENTRAL BANK STATEMENT: NOT AVAILABLE</NotAvailable>
+                <NotAvailable>{`We don’t have the latest statement from the ${cb.short ?? cb.name ?? 'central bank'} yet`}</NotAvailable>
               )}
             </div>
           );
@@ -89,7 +90,7 @@ export function ImfSection({ report }) {
           const v = report.imfView[code];
           return (
             <div key={code} className="space-y-3">
-              <CurrencyHeading report={report} code={code}>{report.currencies[code].economy}{v.vintage ? ` · ${v.vintage} WEO, published ${formatDate(v.published)}` : ''}</CurrencyHeading>
+              <CurrencyHeading report={report} code={code}>{report.currencies[code].economy}{v.vintage ? ` · IMF World Economic Outlook, ${v.vintage} (published ${formatDate(v.published)})` : ''}</CurrencyHeading>
               {v.available ? (
                 <ul className="space-y-2">
                   {v.statements.map((s) => (
@@ -112,12 +113,12 @@ export function ImfSection({ report }) {
                   </div>
                   {a.classification ? <p className="text-xs font-medium text-ink-800 dark:text-ink-100">{a.classification}</p> : null}
                   <p className="text-sm text-ink-700 dark:text-ink-200">{a.text}</p>
-                  <p className="mt-1 text-[11px] text-ink-400">Recorded by a Kotka administrator from the original publication.</p>
+                  <p className="mt-1 text-[11px] text-ink-400">Added by the Kotka team from the original report.</p>
                 </div>
               ))}
               {v.formalQualitative ? <NotAvailable reason={reasonAfterPrefix(v.formalQualitative)}>FORMAL IMF ASSESSMENT: NOT AVAILABLE</NotAvailable> : null}
               {!report.currencies[code].factors.valuation.available ? (
-                <NotAvailable reason="No IMF External Sector Report valuation has been recorded for this currency. Kotka does not infer one.">IMF FORMAL VALUATION: NOT AVAILABLE</NotAvailable>
+                <NotAvailable reason="The IMF hasn’t said whether this currency is over- or undervalued, so we don’t guess.">IMF FORMAL VALUATION: NOT AVAILABLE</NotAvailable>
               ) : null}
               {v.interpretation ? (
                 <div className="flex items-start gap-2">
@@ -142,7 +143,7 @@ export function RevisionsSection({ report }) {
   return (
     <Section
       title="IMF forecast revisions"
-      subtitle={first ? `${first.previousVintage} WEO (published ${formatDate(first.previousPublished)}) compared with the ${first.currentVintage} WEO (published ${formatDate(first.currentPublished)}).` : 'Previous vs current IMF World Economic Outlook.'}
+      subtitle={first ? `How the IMF’s forecasts changed between its ${first.previousVintage} and ${first.currentVintage} World Economic Outlooks.` : 'How the IMF’s forecasts changed since its previous outlook.'}
       action={codes.length > 1 ? <Tabs tabs={codes.map((code) => ({ value: code, label: <CurrencyChip code={code} tone={toneOf(report, code)} /> }))} active={active} onChange={setActive} /> : null}
     >
       {revs.length ? (
@@ -159,7 +160,7 @@ export function RevisionsSection({ report }) {
               </div>
               <p className="mt-0.5 font-mono text-xs tabular-nums text-ink-500 dark:text-ink-400">
                 {fmt(r.previous)} <span className="font-sans">→</span> <span className="text-ink-900 dark:text-ink-50">{fmt(r.current)}</span>
-                <span className="ml-1.5 font-sans text-[11px] text-ink-400">{r.unit}{r.kind === 'OUTTURN_VS_FORECAST' ? ', outturn vs earlier forecast' : ''}</span>
+                <span className="ml-1.5 font-sans text-[11px] text-ink-400">{r.unit}{r.kind === 'OUTTURN_VS_FORECAST' ? ', actual result vs earlier forecast' : ''}</span>
               </p>
               {r.interpretation ? <p className="mt-1 text-xs leading-relaxed text-ink-500 dark:text-ink-400">{txt(r.interpretation)}</p> : null}
             </li>
@@ -182,7 +183,7 @@ export function RevisionsSection({ report }) {
                 <tr key={`${r.indicator}-${r.year}`} className="border-b border-ink-50 align-top dark:border-ink-800/60">
                   <td className="px-5 py-2.5">
                     <p className="text-sm text-ink-800 dark:text-ink-100">{r.label}</p>
-                    <p className="text-[11px] text-ink-400">{r.unit}{r.kind === 'OUTTURN_VS_FORECAST' ? ', outturn vs earlier forecast' : ''}</p>
+                    <p className="text-[11px] text-ink-400">{r.unit}{r.kind === 'OUTTURN_VS_FORECAST' ? ', actual result vs earlier forecast' : ''}</p>
                   </td>
                   <td className="px-2 py-2.5 font-mono text-xs tabular-nums text-ink-600 dark:text-ink-300">{r.year}</td>
                   <td className="px-2 py-2.5 text-right font-mono text-xs tabular-nums text-ink-500 dark:text-ink-400">{fmt(r.previous)}</td>
@@ -198,9 +199,9 @@ export function RevisionsSection({ report }) {
         </div>
         </>
       ) : (
-        <NotAvailable reason="No earlier IMF World Economic Outlook vintage is available to compare against.">FORECAST REVISIONS: NOT AVAILABLE</NotAvailable>
+        <NotAvailable>FORECAST REVISIONS: NOT AVAILABLE</NotAvailable>
       )}
-      <p className="mt-3 text-[11px] text-ink-400">Revision colour reflects whether the change is supportive for the currency (for inflation, a downward revision is treated as supportive). Source: IMF World Economic Outlook database, current and archived vintages.</p>
+      <p className="mt-3 text-[11px] text-ink-400">Green means the change helps the currency, red means it hurts (for inflation, a lower forecast counts as good). Source: IMF World Economic Outlook.</p>
     </Section>
   );
 }

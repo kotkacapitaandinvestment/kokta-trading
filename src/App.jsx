@@ -4,6 +4,7 @@ import { ThemeProvider } from './context/ThemeContext';
 import { AppConfigProvider } from './context/AppConfigContext';
 import AppRoutes from './routes/Routes';
 import ErrorBoundary from './components/ErrorBoundary';
+import { DialogHost } from './lib/dialogs';
 
 export default function App() {
   return (
@@ -13,6 +14,7 @@ export default function App() {
           <AuthProvider>
             <BrowserRouter>
               <AppRoutes />
+              <DialogHost />
             </BrowserRouter>
           </AuthProvider>
         </AppConfigProvider>

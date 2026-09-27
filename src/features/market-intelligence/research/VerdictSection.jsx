@@ -2,15 +2,15 @@ import { useState } from 'react';
 import clsx from 'clsx';
 import { ChevronDown, TrendingDown, TrendingUp, Minus, Repeat } from 'lucide-react';
 import InfoTip from '../../../components/ui/InfoTip';
-import { ccy, conditionTone, CurrencyChip, directionWord, fmt, KindTag, reportCodes, ScoreFigure, signed, toneOf, txt } from './primitives';
+import { ccy, conditionTone, conditionWord, CurrencyChip, directionWord, fmt, KindTag, reportCodes, ScoreFigure, signed, toneOf, txt } from './primitives';
 
 function NarrativeSourceNote({ narrative }) {
   if (!narrative) return null;
   return (
     <p className="text-[11px] text-ink-400">
       {narrative.source === 'ai'
-        ? 'Written by Kotka AI from the verified evidence below; every figure and direction was checked against the source data.'
-        : 'Composed by Kotka’s rules engine from the verified evidence below.'}
+        ? 'Written by Kotka from the data below. Every number was checked against its source.'
+        : 'Summarised by Kotka from the data below.'}
     </p>
   );
 }
@@ -112,7 +112,7 @@ function DirectionChip({ report, direction }) {
     <span className={clsx('inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium', cls)}>
       <Icon className="h-3.5 w-3.5" />
       {text}
-      {direction.change1m !== undefined ? <span className="font-normal opacity-75">({signed(direction.change1m)} in 1m, {signed(direction.change3m)} in 3m)</span> : null}
+      {direction.change1m !== undefined ? <span className="font-normal opacity-75">({signed(direction.change1m)} this month, {signed(direction.change3m)} over 3 months)</span> : null}
     </span>
   );
 }
@@ -130,8 +130,8 @@ function CurrencyTile({ report, c }) {
             <span className="truncate text-xs text-ink-500 dark:text-ink-400">{c.name}</span>
           </div>
           <p className={clsx('mt-2 text-sm font-semibold tracking-wide', conditionTone(c.condition))}>
-            {c.condition}
-            <span className="ml-1 text-xs font-normal text-ink-400">{c.band}</span>
+            {conditionWord(c.condition)}
+            {c.band && c.band.toLowerCase() !== conditionWord(c.condition).toLowerCase() ? <span className="ml-1 text-xs font-normal text-ink-400">{c.band}</span> : null}
           </p>
         </div>
         <ScoreFigure value={c.score} className="text-3xl text-ink-900 dark:text-ink-50" />
@@ -143,7 +143,7 @@ function CurrencyTile({ report, c }) {
         </div>
         <div>
           <dt className="text-ink-400">Confidence</dt>
-          <dd className="font-mono tabular-nums text-ink-700 dark:text-ink-200">{c.confidence}</dd>
+          <dd className="font-mono tabular-nums text-ink-700 dark:text-ink-200">{c.confidence}<span className="text-ink-400">/100</span></dd>
         </div>
         <div>
           <dt className="text-ink-400">{c.centralBank?.short ?? 'Policy'}</dt>
@@ -164,8 +164,8 @@ export default function VerdictSection({ report }) {
   const primary = report.currencies[codes[0]];
   const confidenceComponents = isPair
     ? [
-        ...codes.map((code) => ({ key: code, label: `${code} evidence confidence`, value: report.currencies[code].confidence / 100, detail: report.currencies[code].confidenceComponents.find((x) => x.key === 'coverage')?.detail ?? '' })),
-        { key: 'agreement', label: 'Agreement across factor comparisons', value: report.pair.pairAgreement, detail: 'Share of the weighted evidence pointing the same way as the net reading' },
+        ...codes.map((code) => ({ key: code, label: `How complete the ${code} data is`, value: report.currencies[code].confidence / 100, detail: report.currencies[code].confidenceComponents.find((x) => x.key === 'coverage')?.detail ?? '' })),
+        { key: 'agreement', label: 'How much the data agrees', value: report.pair.pairAgreement, detail: 'How much of the data points the same way as the overall reading' },
       ]
     : primary.confidenceComponents;
   const strongerCode = isPair && v.condition?.startsWith('STRONGER ') ? v.condition.split(' ')[1] : null;
@@ -176,7 +176,7 @@ export default function VerdictSection({ report }) {
       <div className="p-5 lg:p-6">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <p className="text-xs font-medium text-accent-700 dark:text-accent-400">Kotka Macro Verdict</p>
+            <p className="text-xs font-medium text-accent-700 dark:text-accent-400">The overall picture</p>
             <h2 className="mt-1 text-2xl font-semibold tracking-tight text-ink-900 dark:text-ink-50">
               {report.subject}
               <span className="ml-2 text-sm font-normal text-ink-400">{codes.map((code) => report.currencies[code].name).join(' vs ')}</span>
@@ -190,7 +190,7 @@ export default function VerdictSection({ report }) {
             <div className="flex flex-wrap items-end gap-x-8 gap-y-3">
               <div>
                 <p className="flex items-center gap-1 text-xs text-ink-400">
-                  {isPair ? 'Relative fundamental condition' : 'Fundamental score'}
+                  {isPair ? 'Which economy looks stronger' : 'Fundamental score'}
                   <InfoTip label={isPair ? 'Relative condition' : 'Fundamental score'}>
                     {isPair
                       ? 'Compares the two economies on official data. 50 means evenly matched; 58 or more favours the first currency, 42 or less the second. It describes fundamentals, not the next price move.'
@@ -199,7 +199,7 @@ export default function VerdictSection({ report }) {
                 </p>
                 <ScoreFigure value={v.score} className="text-5xl text-ink-900 dark:text-ink-50" />
               </div>
-              <p className={clsx('pb-2 text-xl font-semibold tracking-wide', strongerCode ? ccy(toneOf(report, strongerCode)).text : conditionTone(v.condition))}>{v.condition}</p>
+              <p className={clsx('pb-2 text-xl font-semibold tracking-wide', strongerCode ? ccy(toneOf(report, strongerCode)).text : conditionTone(v.condition))}>{conditionWord(v.condition)}</p>
               <div className="pb-1.5">
                 <p className="text-xs text-ink-400">Confidence</p>
                 <button type="button" onClick={() => setShowConfidence((s) => !s)} className="flex items-center gap-1 text-lg font-semibold text-ink-900 dark:text-ink-50" aria-expanded={showConfidence}>
@@ -240,7 +240,7 @@ export default function VerdictSection({ report }) {
           ) : null}
           {isPair && report.pair.marketPrice?.available ? (
             <span>
-              Spot {report.subject} {fmt(report.pair.marketPrice.last, 4)} on {report.pair.marketPrice.lastDate}, shown for context only; price is not part of the fundamental score.
+              {report.subject.slice(0, 3)}/{report.subject.slice(3)} closed at {fmt(report.pair.marketPrice.last, 4)} on {new Date(`${report.pair.marketPrice.lastDate}T12:00:00Z`).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}. Price isn’t part of this score.
             </span>
           ) : null}
         </div>

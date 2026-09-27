@@ -117,7 +117,7 @@ function TrendTable({ rows, series }) {
             {series.map((s) => (
               <th key={s.key} className="px-2 py-2 text-right font-medium">{s.label}</th>
             ))}
-            <th className="py-2 pl-2 pr-4 font-medium sm:px-5">Basis</th>
+            <th className="py-2 pl-2 pr-4 font-medium sm:px-5">Type</th>
           </tr>
         </thead>
         <tbody className="font-mono tabular-nums">
@@ -128,8 +128,7 @@ function TrendTable({ rows, series }) {
                 <td key={s.key} className="px-2 py-1.5 text-right text-ink-900 dark:text-ink-50">{r[s.key] ?? 'n/a'}</td>
               ))}
               <td className="py-1.5 pl-2 pr-4 font-sans text-ink-400 sm:px-5">
-                <span className="sm:hidden">{r.reconstructed ? 'Rebuilt' : 'Current'}</span>
-                <span className="hidden sm:inline">{r.reconstructed ? 'Reconstructed' : 'Current research'}</span>
+                {r.reconstructed ? 'Estimated' : 'Live report'}
               </td>
             </tr>
           ))}
@@ -162,7 +161,7 @@ export default function TrendSection({ report, history }) {
   return (
     <Section
       title="Fundamental trend"
-      subtitle={`${isPair && subjectTrend?.direction?.label === 'STRENGTHENING' ? `Shifting toward ${report.base}` : isPair && subjectTrend?.direction?.label === 'WEAKENING' ? `Shifting toward ${report.quote}` : directionWord(subjectTrend?.direction?.label)} over the last six month-ends.`}
+      subtitle={`${isPair && subjectTrend?.direction?.label === 'STRENGTHENING' ? `Shifting toward ${report.base}` : isPair && subjectTrend?.direction?.label === 'WEAKENING' ? `Shifting toward ${report.quote}` : directionWord(subjectTrend?.direction?.label)} over the last 6 months.`}
       action={<Tabs tabs={[{ value: 'chart', label: 'Chart' }, { value: 'table', label: 'Table' }]} active={view} onChange={setView} />}
     >
       {view === 'chart' ? (
@@ -187,12 +186,12 @@ export default function TrendSection({ report, history }) {
       )}
       <p className="mt-3 text-[11px] leading-relaxed text-ink-400">
         {txt(
-          `Month-end points are reconstructed by re-running the same scoring rules on the data as it would have been published at each date; later data revisions mean they can differ from a real-time reading. For comparability the trend uses only factors available at every point (${basis.join(', ')}), so the latest point can differ slightly from the headline score.`,
+          `Earlier months are estimated from the data that was published at the time. To compare like with like, the trend only uses factors we have for every month, so its latest point can differ slightly from the headline score.`,
         )}
       </p>
       {history?.length ? (
         <p className="mt-2 text-[11px] text-ink-400">
-          Kotka has recorded {history.length} research report{history.length === 1 ? '' : 's'} for {report.subject}, the first on {formatDate(history[0].createdAt)}.
+          Kotka has written {history.length} report{history.length === 1 ? '' : 's'} on {report.subject.length === 6 ? `${report.subject.slice(0, 3)}/${report.subject.slice(3)}` : report.subject} since {formatDate(history[0].createdAt)}.
         </p>
       ) : null}
     </Section>

@@ -29,13 +29,14 @@ export default class ErrorBoundary extends Component {
           <AlertTriangle className="h-5 w-5 text-loss-500" strokeWidth={1.75} />
         </div>
         <span className="text-sm font-semibold text-accent-600 dark:text-accent-400">Something went wrong</span>
-        <h1 className="mt-2 text-2xl font-semibold text-ink-900 dark:text-ink-50">This page hit an unexpected error</h1>
+        <h1 className="mt-2 text-2xl font-semibold text-ink-900 dark:text-ink-50">This page didn’t load properly</h1>
         <p className="mt-2 max-w-sm text-sm text-ink-500 dark:text-ink-400">
-          Nothing was lost. Try reloading. If this keeps happening, let us know what you were doing when it broke.
+          Nothing you saved was lost. Reload the page to try again. If it keeps happening, tell us what you were doing and we’ll fix it.
         </p>
-        <Button onClick={this.handleReload} className="mt-6">
-          Back to home
-        </Button>
+        <div className="mt-6 flex flex-wrap justify-center gap-2">
+          <Button onClick={() => window.location.reload()}>Reload page</Button>
+          <Button variant="secondary" onClick={this.handleReload}>Back to home</Button>
+        </div>
       </div>
     );
   }

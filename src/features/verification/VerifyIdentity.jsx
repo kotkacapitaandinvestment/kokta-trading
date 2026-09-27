@@ -284,7 +284,7 @@ export default function VerifyIdentity() {
                 <p className="font-semibold text-ink-800 dark:text-ink-100">What happens next</p>
                 <ol className="mt-3 space-y-2.5 text-xs leading-relaxed text-ink-500 dark:text-ink-400">
                   <li><span className="font-mono text-accent-600 dark:text-accent-400">1</span> You get full access straight away.</li>
-                  <li><span className="font-mono text-accent-600 dark:text-accent-400">2</span> An administrator reviews your details.</li>
+                  <li><span className="font-mono text-accent-600 dark:text-accent-400">2</span> Our team reviews your details.</li>
                   <li><span className="font-mono text-accent-600 dark:text-accent-400">3</span> If anything needs fixing, you will see a note here and in Settings.</li>
                 </ol>
               </div>

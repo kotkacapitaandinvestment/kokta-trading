@@ -29,6 +29,7 @@ const blank = {
 
 export default function JournalEntryForm({ onSubmit, onCancel }) {
   const [form, setForm] = useState(blank);
+  const [state, setState] = useState(null);
   const isOpen = form.positionStatus === 'open';
 
   const set = (key) => (e) => {
@@ -36,7 +37,7 @@ export default function JournalEntryForm({ onSubmit, onCancel }) {
     setForm((f) => ({ ...f, [key]: value }));
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     const parsed = {
       ...form,
@@ -47,7 +48,12 @@ export default function JournalEntryForm({ onSubmit, onCancel }) {
       pnl: parseFloat(form.pnl) || 0,
       confidence: Number(form.confidence),
     };
-    onSubmit(parsed);
+    setState({ saving: true });
+    try {
+      await onSubmit(parsed);
+    } catch (err) {
+      setState({ error: `Couldn’t save this trade. ${err.message}` });
+    }
   };
 
   return (
@@ -89,7 +95,7 @@ export default function JournalEntryForm({ onSubmit, onCancel }) {
         </Select>
       </div>
 
-      <Input name="strategy" label="Strategy" placeholder="e.g. Liquidity Sweep + FVG" value={form.strategy} onChange={set('strategy')} required />
+      <Input name="strategy" label="Strategy" placeholder="e.g. Breakout retest" value={form.strategy} onChange={set('strategy')} required />
 
       <div className="grid grid-cols-3 gap-4">
         <Input name="entry" label="Entry" type="number" step="any" value={form.entry} onChange={set('entry')} required />
@@ -97,7 +103,7 @@ export default function JournalEntryForm({ onSubmit, onCancel }) {
         <Input name="takeProfit" label="Take Profit" type="number" step="any" value={form.takeProfit} onChange={set('takeProfit')} required />
       </div>
 
-      <Input name="risk" label="Risk (%)" type="number" step="any" value={form.risk} onChange={set('risk')} />
+      <Input name="risk" label="Risk (% of account)" type="number" step="any" value={form.risk} onChange={set('risk')} />
 
       {!isOpen ? (
         <div className="grid grid-cols-2 gap-4">
@@ -149,11 +155,12 @@ export default function JournalEntryForm({ onSubmit, onCancel }) {
         Pre-trade checklist was completed for this trade
       </label>
 
+      {state?.error ? <p role="alert" className="text-sm text-loss-500">{state.error}</p> : null}
       <div className="flex justify-end gap-2 pt-2">
         <Button type="button" variant="ghost" onClick={onCancel}>
           Cancel
         </Button>
-        <Button type="submit">{isOpen ? 'Log open position' : 'Save entry'}</Button>
+        <Button type="submit" disabled={state?.saving}>{state?.saving ? 'Saving…' : isOpen ? 'Log open position' : 'Save trade'}</Button>
       </div>
     </form>
   );

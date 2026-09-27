@@ -27,7 +27,7 @@ export default function MarketIntelligence() {
       <PageHeader
         eyebrow="Intelligence"
         title="Market Intelligence"
-        description="End-of-day market context and evidence-backed macro research from the IMF, central banks and official statistics. Context for decisions, never a trade signal."
+        description="Daily prices, upcoming releases and research on what’s driving each currency. Background for your decisions, never a trade signal."
       />
 
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-12">
@@ -42,7 +42,7 @@ export default function MarketIntelligence() {
       <section id="research" aria-labelledby="research-title" className="scroll-mt-4">
         <div className="mb-4 flex flex-wrap items-baseline justify-between gap-2 border-t border-ink-200 pt-6 dark:border-ink-800">
           <h2 id="research-title" className="text-lg font-semibold tracking-tight text-ink-900 dark:text-ink-50">Fundamental research</h2>
-          <p className="text-xs text-ink-400">Scores are computed from official data; the narrative explains them.</p>
+          <p className="text-xs text-ink-400">Scores come from official economic data. The write-up explains what they mean.</p>
         </div>
         <FundamentalResearch instrument={instrument} onInstrumentChange={(s) => setInstrument(s)} />
       </section>

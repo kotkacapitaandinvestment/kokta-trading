@@ -11,7 +11,7 @@ import { overLimit } from '../../lib/community/throttle.js';
 import { notify } from '../../lib/community/notify.js';
 import { resolveMentions } from '../../lib/community/mentions.js';
 import { postViews, buildFeed, POST_INCLUDE, trendScore } from '../../lib/community/posts.js';
-import { audit } from '../../lib/audit.js';
+import { audit, auditLater } from '../../lib/audit.js';
 import { TOPICS } from './social.js';
 import { requireProfile, clampInt, str } from './context.js';
 
@@ -140,6 +140,7 @@ postsRouter.post('/posts', requireProfile, asyncHandler(async (req, res) => {
   });
   if (news) await prisma.newsItem.update({ where: { id: news.id }, data: { commentCount: { increment: 1 } } });
   const [view] = await postViews([post], req.me.id);
+  auditLater(req, kind === 'idea' ? 'community.idea_posted' : 'community.posted', { targetType: 'post', targetId: post.id, actor: req.me, detail: { kind, instrument: post.instrument ?? undefined } });
   res.status(201).json({ post: view });
 
   waitUntil(
@@ -189,7 +190,10 @@ postsRouter.delete('/posts/:id', asyncHandler(async (req, res) => {
   if (!post || post.deletedAt) return res.status(404).json({ error: 'This post is not available.' });
   const own = post.authorId === req.me.id;
   if (!own && !isStaff(req.me)) return res.status(403).json({ error: 'You can only delete your own posts.' });
-  if (own) await prisma.post.update({ where: { id: post.id }, data: { deletedAt: new Date() } });
+  if (own) {
+    await prisma.post.update({ where: { id: post.id }, data: { deletedAt: new Date() } });
+    auditLater(req, 'community.post_deleted', { targetType: 'post', targetId: post.id, actor: req.me, detail: { kind: post.kind } });
+  }
   else {
     await prisma.post.update({ where: { id: post.id }, data: { removedAt: new Date(), removedById: req.me.id } });
     await prisma.moderationAction.create({ data: { moderatorId: req.me.id, action: 'remove', targetType: 'post', targetId: post.id, targetUserId: post.authorId, reason: str(req.body?.reason, 300) || null } });

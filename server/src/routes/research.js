@@ -132,7 +132,7 @@ researchRouter.post('/:subject/refresh', asyncHandler(async (req, res) => {
     return res.json({ type: 'done', cached: true, report: existing.payload, freshness });
   }
   if (!access.isAdmin && (await refreshesToday(req.userId)) >= settings.userRefreshLimitPerDay) {
-    return res.status(429).json({ error: `Daily research refresh limit reached (${settings.userRefreshLimitPerDay}). The cached report is still available.` });
+    return res.status(429).json({ error: `You’ve used today’s ${settings.userRefreshLimitPerDay} report updates. You can still read the last saved report.` });
   }
   if (await activeRun(parsed.subject)) return res.status(409).json({ error: 'in_progress', message: 'Research for this instrument is already running.' });
 

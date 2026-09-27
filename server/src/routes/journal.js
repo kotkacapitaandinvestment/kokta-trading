@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { prisma } from '../lib/prisma.js';
 import { requireAuth } from '../middleware/auth.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
+import { auditLater } from '../lib/audit.js';
 import { nvidiaChatCompletion } from '../lib/nvidia.js';
 import { connection, withModelFallback } from '../lib/aiModels.js';
 import { logUsage, usageSnapshot, limitReached, tonePreference } from '../lib/aiUsage.js';
@@ -20,7 +21,7 @@ journalRouter.get('/', asyncHandler(async (req, res) => {
 journalRouter.post('/', asyncHandler(async (req, res) => {
   const b = req.body ?? {};
   if (!b.date || !b.market || !b.strategy) {
-    return res.status(400).json({ error: 'date, market, and strategy are required.' });
+    return res.status(400).json({ error: 'Add the date, market and strategy for this trade.' });
   }
 
   const isOpen = b.positionStatus === 'open';
@@ -49,6 +50,7 @@ journalRouter.post('/', asyncHandler(async (req, res) => {
       positionStatus: isOpen ? 'open' : 'closed',
     },
   });
+  auditLater(req, isOpen ? 'journal.position_opened' : 'journal.trade_logged', { targetType: 'journal', targetId: entry.id, detail: { market: entry.market, direction: entry.direction, ...(isOpen ? {} : { result: entry.result }) } });
   res.status(201).json({ entry });
 }));
 
@@ -75,6 +77,7 @@ journalRouter.patch('/:id/close', asyncHandler(async (req, res) => {
       closedAt: new Date(),
     },
   });
+  auditLater(req, 'journal.position_closed', { targetType: 'journal', targetId: existing.id, detail: { market: existing.market } });
   res.json({ entry });
 }));
 

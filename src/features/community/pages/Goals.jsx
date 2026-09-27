@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Award, Target, TrendingUp } from 'lucide-react';
+import { Award, Target, TrendingUp, Trophy } from 'lucide-react';
 import { api } from '../../../lib/api';
 import PostCard from '../components/PostCard';
 import { Avatar } from '../components/Identity';
+import EmptyState from '../../../components/ui/EmptyState';
 
 // Community side of Goal Room: milestones traders chose to post, and last
 // month's recognitions. Nothing here is ranked by money.
@@ -67,10 +68,13 @@ export default function CommunityGoals() {
       </div>
       {!items ? <div className="m-5 h-40 animate-pulse rounded-xl bg-ink-50 dark:bg-ink-800" /> : null}
       {items && !items.length ? (
-        <div className="px-6 py-14 text-center">
-          <p className="text-sm font-medium text-ink-800 dark:text-ink-100">No milestones posted yet</p>
-          <p className="mx-auto mt-1 max-w-sm text-xs text-ink-500 dark:text-ink-400">When traders post a goal reached, a streak or a badge from their Goal Room, it appears here.</p>
-        </div>
+        <EmptyState
+          size="section"
+          icon={Trophy}
+          title="No milestones posted yet"
+          description="When traders share a goal reached, a streak or a badge from their Goal Room, it appears here. Yours could be the first."
+          action={<Link to="/app/goals" className="rounded-lg bg-ink-900 px-3 py-2 text-xs font-medium text-white dark:bg-accent-500 dark:text-ink-950">Open your Goal Room</Link>}
+        />
       ) : null}
       {next ? <button type="button" onClick={() => load(next)} className="w-full border-t border-ink-100 py-3 text-xs font-medium text-accent-700 hover:bg-ink-50 dark:border-ink-800 dark:text-accent-300 dark:hover:bg-ink-800/50">Load more</button> : null}
     </div>

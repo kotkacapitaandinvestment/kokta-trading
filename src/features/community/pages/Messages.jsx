@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import clsx from 'clsx';
-import { Archive, ArrowLeft, BellOff, Compass, Copy, Flag, LogOut, Plus, Settings, ShieldAlert, UserPlus, Users, X } from 'lucide-react';
+import { Archive, ArrowLeft, BellOff, Compass, Copy, Flag, LogOut, MessagesSquare, Plus, Settings, ShieldAlert, UserPlus, Users, X } from 'lucide-react';
 import { api } from '../../../lib/api';
 import Modal from '../../../components/ui/Modal';
 import Button from '../../../components/ui/Button';
@@ -13,6 +13,8 @@ import ReportDialog from '../components/ReportDialog';
 import PushNudge from '../../../components/PushNudge';
 import Hint from '../../../components/ui/Hint';
 import ConversationChat from '../chat/ConversationChat';
+import { confirmDialog, promptDialog, toast } from '../../../lib/dialogs';
+import EmptyState from '../../../components/ui/EmptyState';
 
 const FILTERS = [
   ['all', 'All'],
@@ -67,7 +69,7 @@ function NewChat({ onClose }) {
       } else {
         const r = await api.post('/community/conversations', { kind: mode, ...form, memberIds: picked.map((u) => u.id) });
         navigate(`/app/community/messages/${r.conversationId}`);
-        if (r.skipped) window.alert(`${r.skipped} trader${r.skipped === 1 ? " couldn't" : "s couldn't"} be added because of their message settings.`);
+        if (r.skipped) toast(`${r.skipped} trader${r.skipped === 1 ? " couldn't" : "s couldn't"} be added because of their message settings.`, { tone: 'info' });
       }
       onClose();
     } catch (err) {
@@ -124,17 +126,17 @@ function Directory({ onClose }) {
   const join = async (c) => {
     try {
       const r = await api.post(`/community/conversations/${c.id}/join`, {});
-      if (r.status === 'pending') window.alert('Request sent. An admin will review it.');
+      if (r.status === 'pending') toast('Request sent. The community’s admins will review it.', { tone: 'info' });
       else navigate(`/app/community/messages/${c.id}`);
       onClose();
     } catch (err) {
-      window.alert(err.message);
+      toast(err.message, { tone: 'error' });
     }
   };
   return (
     <Modal open onClose={onClose} title="Communities" width="max-w-xl">
       <input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search communities" className="mb-3 h-10 w-full rounded-lg border border-ink-200 bg-white px-3 text-sm dark:border-ink-700 dark:bg-ink-800 dark:text-ink-50" />
-      {list && !list.length ? <p className="py-6 text-center text-sm text-ink-400">No communities yet. Create one from New conversation.</p> : null}
+      {list && !list.length ? <EmptyState size="inline" icon={Users} title="No communities yet" description="Create one from New conversation and invite traders who share your markets." /> : null}
       <ul className="divide-y divide-ink-100 dark:divide-ink-800">
         {list?.map((c) => (
           <li key={c.id} className="flex items-center gap-3 py-3">
@@ -166,7 +168,7 @@ function SettingsPanel({ details, reload, onClose }) {
       await fn();
       reload();
     } catch (err) {
-      window.alert(err.message);
+      toast(err.message, { tone: 'error' });
     }
   };
   const other = c.kind === 'dm' ? details.members.find((m) => m.id !== profile?.id) : null;
@@ -222,7 +224,7 @@ function SettingsPanel({ details, reload, onClose }) {
                   m.status === 'pending' ? (
                     <Button size="sm" variant="secondary" onClick={() => act(() => api.patch(`/community/conversations/${c.id}/members/${m.id}`, { approve: true }))}>Approve</Button>
                   ) : (
-                    <select value={m.role} onChange={(e) => (e.target.value === 'remove' ? window.confirm(`Remove ${m.name}?`) && act(() => api.delete(`/community/conversations/${c.id}/members/${m.id}`)) : act(() => api.patch(`/community/conversations/${c.id}/members/${m.id}`, { role: e.target.value })))} className="h-7 rounded-md border border-ink-200 bg-white px-1 text-[11px] dark:border-ink-700 dark:bg-ink-800" aria-label={`Role for ${m.name}`}>
+                    <select value={m.role} onChange={(e) => (e.target.value === 'remove' ? confirmDialog({ title: `Remove ${m.name}?`, message: 'They’ll leave this conversation and stop getting its messages.', confirmLabel: 'Remove', danger: true }).then((yes) => yes && act(() => api.delete(`/community/conversations/${c.id}/members/${m.id}`))) : act(() => api.patch(`/community/conversations/${c.id}/members/${m.id}`, { role: e.target.value })))} className="h-7 rounded-md border border-ink-200 bg-white px-1 text-[11px] dark:border-ink-700 dark:bg-ink-800" aria-label={`Role for ${m.name}`}>
                       <option value="member">Member</option>
                       <option value="moderator">Moderator</option>
                       <option value="admin">Admin</option>
@@ -239,14 +241,14 @@ function SettingsPanel({ details, reload, onClose }) {
         <button type="button" onClick={() => act(() => api.patch(`/community/conversations/${c.id}/me`, { mute: c.muted ? null : '8h' }))} className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-sm text-ink-700 hover:bg-ink-50 dark:text-ink-200 dark:hover:bg-ink-800"><BellOff className="h-4 w-4" /> {c.muted ? 'Unmute' : 'Mute for 8 hours'}</button>
         {!c.muted ? <button type="button" onClick={() => act(() => api.patch(`/community/conversations/${c.id}/me`, { mute: 'always' }))} className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-sm text-ink-700 hover:bg-ink-50 dark:text-ink-200 dark:hover:bg-ink-800"><BellOff className="h-4 w-4" /> Mute until I turn it back on</button> : null}
         <button type="button" onClick={() => act(async () => { await api.patch(`/community/conversations/${c.id}/me`, { archived: !c.archived }); navigate('/app/community/messages'); })} className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-sm text-ink-700 hover:bg-ink-50 dark:text-ink-200 dark:hover:bg-ink-800"><Archive className="h-4 w-4" /> {c.archived ? 'Unarchive' : 'Archive'}</button>
-        {other ? <button type="button" onClick={async () => { if (window.confirm(`Block ${other.name}? They won't be able to message you.`)) { await api.post(`/community/users/${other.id}/block`, {}); reload(); } }} className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-sm text-loss-600 hover:bg-loss-50 dark:text-loss-400 dark:hover:bg-loss-500/10"><ShieldAlert className="h-4 w-4" /> Block {other.name}</button> : null}
+        {other ? <button type="button" onClick={async () => { if (await confirmDialog({ title: `Block ${other.name}?`, message: 'You won’t see each other’s posts or messages, and they can’t message you. You can undo this in Settings.', confirmLabel: 'Block', danger: true })) { await api.post(`/community/users/${other.id}/block`, {}); reload(); } }} className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-sm text-loss-600 hover:bg-loss-50 dark:text-loss-400 dark:hover:bg-loss-500/10"><ShieldAlert className="h-4 w-4" /> Block {other.name}</button> : null}
         <button type="button" onClick={() => setReport(true)} className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-sm text-loss-600 hover:bg-loss-50 dark:text-loss-400 dark:hover:bg-loss-500/10"><Flag className="h-4 w-4" /> Report {other ? other.name : 'this conversation'}</button>
-        {c.kind !== 'dm' ? <button type="button" onClick={() => window.confirm('Leave this conversation?') && act(async () => { await api.delete(`/community/conversations/${c.id}/members/${profile.id}`); navigate('/app/community/messages'); })} className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-sm text-loss-600 hover:bg-loss-50 dark:text-loss-400 dark:hover:bg-loss-500/10"><LogOut className="h-4 w-4" /> Leave</button> : null}
+        {c.kind !== 'dm' ? <button type="button" onClick={async () => (await confirmDialog({ title: 'Leave this conversation?', message: 'You’ll stop getting its messages. You can rejoin if it’s open, or ask to be added back.', confirmLabel: 'Leave', danger: true })) && act(async () => { await api.delete(`/community/conversations/${c.id}/members/${profile.id}`); navigate('/app/community/messages'); })} className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-sm text-loss-600 hover:bg-loss-50 dark:text-loss-400 dark:hover:bg-loss-500/10"><LogOut className="h-4 w-4" /> Leave</button> : null}
       </div>
       {adding ? (
         <Modal open onClose={() => setAdding(false)} title="Add members">
           <PeoplePicker selected={picked} onChange={setPicked} />
-          <div className="mt-4 flex justify-end gap-2"><Button variant="ghost" onClick={() => setAdding(false)}>Cancel</Button><Button disabled={!picked.length} onClick={() => act(async () => { const r = await api.post(`/community/conversations/${c.id}/members`, { userIds: picked.map((u) => u.id) }); if (r.skipped) window.alert(`${r.skipped} couldn't be added because of their message settings.`); setAdding(false); setPicked([]); })}>Add</Button></div>
+          <div className="mt-4 flex justify-end gap-2"><Button variant="ghost" onClick={() => setAdding(false)}>Cancel</Button><Button disabled={!picked.length} onClick={() => act(async () => { const r = await api.post(`/community/conversations/${c.id}/members`, { userIds: picked.map((u) => u.id) }); if (r.skipped) toast(`${r.skipped} couldn't be added because of their message settings.`, { tone: 'info' }); setAdding(false); setPicked([]); })}>Add</Button></div>
         </Modal>
       ) : null}
       {report ? <ReportDialog target={other ? { type: 'user', id: other.id, label: other.name } : { type: 'conversation', id: c.id, label: 'conversation' }} onClose={() => setReport(false)} /> : null}
@@ -325,9 +327,12 @@ export default function Messages() {
         <ul className="flex-1 overflow-y-auto">
           {!list ? <li className="p-4 text-sm text-ink-400">Loading…</li> : null}
           {list && !list.length ? (
-            <li className="px-6 py-10 text-center text-sm text-ink-400">
-              {filter === 'archived' ? 'No archived conversations.' : 'No conversations yet.'}
-              <button type="button" onClick={() => setShowNew(true)} className="mt-3 block w-full font-medium text-accent-700 dark:text-accent-300">Start one</button>
+            <li>
+              {filter === 'archived' ? (
+                <EmptyState size="inline" icon={Archive} title="No archived conversations" description="Conversations you archive are kept here." />
+              ) : (
+                <EmptyState size="inline" icon={MessagesSquare} title="No conversations yet" description="Message a trader, start a private group or join a community." action={<button type="button" onClick={() => setShowNew(true)} className="rounded-lg bg-ink-900 px-3 py-1.5 text-xs font-medium text-white dark:bg-accent-500 dark:text-ink-950">Start a conversation</button>} />
+              )}
             </li>
           ) : null}
           {list?.map((c) => (

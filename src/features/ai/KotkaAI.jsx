@@ -23,6 +23,12 @@ const SUGGESTIONS = [
   'How am I doing against my risk rules today?',
 ];
 
+// Daily message allowance refreshes at midnight UTC; say when that is locally.
+const RESET_AT = (() => {
+  const d = new Date();
+  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() + 1)).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+})();
+
 export default function KotkaAI() {
   const [conversations, setConversations] = useState(null);
   const [activeId, setActiveId] = useState(null);
@@ -42,6 +48,7 @@ export default function KotkaAI() {
   const [thinking, setThinking] = useState(false);
   const [lastSource, setLastSource] = useState(null);
   const [usage, setUsage] = useState(null);
+  const [loadError, setLoadError] = useState(null);
   const fileInputRef = useRef(null);
 
   useEffect(() => {
@@ -61,7 +68,7 @@ export default function KotkaAI() {
       }
       setConversations(list);
       if (list.length) setActiveId(list[0].id);
-    });
+    }).catch(() => setLoadError('We couldn’t load Kotka AI. Refresh the page to try again.'));
     api.get('/ai/usage').then(setUsage);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -76,8 +83,8 @@ export default function KotkaAI() {
   const activeMessages = activeId ? messagesCache[activeId] ?? [] : [];
   const limitReached = usage && usage.usageLimit != null && usage.usageToday >= usage.usageLimit;
   const limitMessage = usage?.limitKind === 'plan'
-    ? `You've used today's ${usage.usageLimit} free messages. They reset at midnight UTC.`
-    : `You've reached today's fair-use limit of ${usage?.usageLimit} messages. It resets at midnight UTC.`;
+    ? `You've used today's ${usage.usageLimit} free messages. More at ${RESET_AT} your time.`
+    : `You've used today's ${usage?.usageLimit} messages. More at ${RESET_AT} your time.`;
 
   const handleNew = () => {
     api.post('/ai/conversations', { market }).then(({ conversation }) => {
@@ -132,7 +139,7 @@ export default function KotkaAI() {
         setUsage((prev) => ({ ...(prev ?? {}), usageToday: data.usageToday ?? prev?.usageToday, usageLimit: data.usageLimit ?? prev?.usageLimit, limitKind: data.limitKind ?? prev?.limitKind }));
         setMessagesCache((prev) => ({
           ...prev,
-          [conversationId]: [...prev[conversationId], { id: `local-limit-${Date.now()}`, role: 'assistant', content: "You've reached today's message limit. It resets at midnight UTC." }],
+          [conversationId]: [...prev[conversationId], { id: `local-limit-${Date.now()}`, role: 'assistant', content: `You've used today's messages. More at ${RESET_AT} your time.` }],
         }));
         return;
       }
@@ -208,7 +215,8 @@ export default function KotkaAI() {
     handleSend();
   }); // eslint-disable-line react-hooks/exhaustive-deps
 
-  if (!conversations) return null;
+  if (loadError) return <p role="alert" className="rounded-2xl bg-white p-6 text-sm text-loss-500 dark:bg-ink-900">{loadError}</p>;
+  if (!conversations) return <div className="h-96 animate-pulse rounded-2xl bg-white dark:bg-ink-900" aria-label="Loading your conversations" />;
 
   return (
     <div className="flex h-[calc(100dvh_-_6.5rem_-_var(--bottom-nav))] min-h-[26rem] flex-col sm:h-[calc(100dvh_-_7rem_-_var(--bottom-nav))] lg:h-[calc(100dvh-8rem)]">
@@ -268,12 +276,12 @@ export default function KotkaAI() {
               <div className="flex flex-wrap items-center justify-between gap-2 border-b border-ink-100 px-3 py-2.5 dark:border-ink-800 sm:gap-3 sm:px-4 sm:py-3">
                 <div className="flex items-center gap-2">
                   <button type="button" onClick={() => setShowHistory(true)} className="flex h-8 w-8 items-center justify-center rounded-lg border border-ink-200 text-ink-500 dark:border-ink-700 dark:text-ink-300 md:hidden" aria-label="Past analyses" title="Past analyses"><History className="h-4 w-4" /></button>
-                  <Select value={market} onChange={(e) => setMarket(e.target.value)} className="h-8 w-32 text-xs">
+                  <Select value={market} onChange={(e) => setMarket(e.target.value)} className="h-8 w-32 text-xs" aria-label="Market" title="Market you're discussing">
                     {markets.map((m) => (
                       <option key={m} value={m}>{m}</option>
                     ))}
                   </Select>
-                  <Select value={timeframe} onChange={(e) => setTimeframe(e.target.value)} className="h-8 w-24 text-xs">
+                  <Select value={timeframe} onChange={(e) => setTimeframe(e.target.value)} className="h-8 w-24 text-xs" aria-label="Chart timeframe" title="Chart timeframe you trade">
                     {timeframes.map((t) => (
                       <option key={t} value={t}>{t}</option>
                     ))}
@@ -281,14 +289,14 @@ export default function KotkaAI() {
                 </div>
                 <div className="flex items-center gap-3">
                   {lastSource && lastSource !== 'nvidia' ? (
-                    <Badge tone="warning">{lastSource === 'vision_unconfigured' ? 'Vision not configured' : 'AI unavailable'}</Badge>
+                    <Badge tone="warning">{lastSource === 'vision_unconfigured' ? 'Chart reading is off right now' : 'Kotka AI is having trouble. Try again soon.'}</Badge>
                   ) : null}
                   {usage && usage.usageLimit != null ? (
-                    <span className="text-xs tabular-nums text-ink-400" title={usage.limitKind === 'plan' ? 'Free plan daily messages' : 'Daily fair-use limit'}>
-                      {usage.usageToday}/{usage.usageLimit} today
+                    <span className="text-xs tabular-nums text-ink-400" title={`Messages refresh at ${RESET_AT} your time`}>
+                      {Math.max(0, usage.usageLimit - usage.usageToday)} message{usage.usageLimit - usage.usageToday === 1 ? '' : 's'} left today
                     </span>
                   ) : null}
-                  <button onClick={handleToggleFavorite} className="text-ink-300 hover:text-amber-400">
+                  <button onClick={handleToggleFavorite} className="text-ink-300 hover:text-amber-400" aria-label={active.favorite ? 'Remove from favourites' : 'Add to favourites'} title={active.favorite ? 'Remove from favourites' : 'Add to favourites'}>
                     <Star className={active.favorite ? 'h-4 w-4 fill-amber-400 text-amber-400' : 'h-4 w-4'} />
                   </button>
                 </div>
@@ -333,7 +341,7 @@ export default function KotkaAI() {
                 ) : null}
                 {pendingImage ? (
                   <div className="mb-2 flex items-center gap-2">
-                    <img src={pendingImage} alt="preview" className="h-12 w-12 rounded-lg object-cover" />
+                    <img src={pendingImage} alt="Chart preview" className="h-12 w-12 rounded-lg object-cover" />
                     <button onClick={() => setPendingImage(null)} className="text-xs text-loss-500 hover:underline">
                       Remove
                     </button>

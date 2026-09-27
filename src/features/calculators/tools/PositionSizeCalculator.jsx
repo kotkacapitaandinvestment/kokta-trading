@@ -27,7 +27,7 @@ export default function PositionSizeCalculator() {
           <p className="mt-1 text-2xl font-semibold text-ink-900 dark:text-ink-50">{units.toFixed(2)}</p>
         </div>
         <div className="border-t border-ink-200 pt-3 dark:border-ink-700">
-          <p className="text-xs font-medium uppercase tracking-wide text-ink-400">Notional value</p>
+          <p className="text-xs font-medium uppercase tracking-wide text-ink-400">Total position value</p>
           <p className="mt-1 text-2xl font-semibold text-ink-900 dark:text-ink-50">${notional.toFixed(2)}</p>
         </div>
       </Card>

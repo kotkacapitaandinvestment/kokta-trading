@@ -4,6 +4,7 @@ import clsx from 'clsx';
 import { ArrowDownRight, ArrowUpRight, Info, Landmark, MessagesSquare } from 'lucide-react';
 import { api } from '../../../lib/api';
 import { askKotkaLink } from '../../../lib/askKotka';
+import { conditionWord } from '../../../lib/plain';
 import PriceChart from '../../community/components/PriceChart';
 
 const usd = (v) => {
@@ -41,7 +42,7 @@ function Stat({ label, value, note, valueClass }) {
   );
 }
 
-const Unavailable = ({ what, error }) => <p className="text-sm text-ink-400">{what} is unavailable right now{error ? ` (${error})` : ''}. Nothing is estimated in its place.</p>;
+const Unavailable = ({ what }) => <p className="text-sm text-ink-400">{what} isn’t available right now. Check back soon: we never fill gaps with estimates.</p>;
 
 export default function CryptoView({ symbol, onInstrumentChange }) {
   const [data, setData] = useState(null);
@@ -49,7 +50,7 @@ export default function CryptoView({ symbol, onInstrumentChange }) {
   useEffect(() => {
     setData(null);
     setError(null);
-    api.get(`/research/crypto/${symbol}`).then(setData).catch((err) => setError(err.message));
+    api.get(`/research/crypto/${symbol}`).then(setData).catch(() => setError('Couldn’t load this page. Refresh to try again.'));
   }, [symbol]);
 
   if (error) return <p className="rounded-2xl bg-white p-6 text-sm text-loss-500 dark:bg-ink-900">{error}</p>;
@@ -72,7 +73,7 @@ export default function CryptoView({ symbol, onInstrumentChange }) {
       </div>
 
       <div className="grid gap-4 xl:grid-cols-3">
-        <Card title={`${data.display} price structure`} source="Massive, end-of-day bars" className="xl:col-span-2">
+        <Card title={`${data.display} price structure`} source="Daily closing prices" className="xl:col-span-2">
           {m?.available ? (
             <>
               <div className="flex flex-wrap items-end justify-between gap-4">
@@ -80,7 +81,7 @@ export default function CryptoView({ symbol, onInstrumentChange }) {
                   <p className="font-mono text-3xl font-semibold tabular-nums text-ink-900 dark:text-ink-50">{m.close.toLocaleString(undefined, { maximumFractionDigits: m.decimals + 1 })}</p>
                   <p className={clsx('inline-flex items-center gap-0.5 font-mono text-sm tabular-nums', tone(m.changePct))}>
                     {up ? <ArrowUpRight className="h-4 w-4" /> : m.changePct < 0 ? <ArrowDownRight className="h-4 w-4" /> : null}
-                    {pct(m.changePct)} <span className="ml-1 font-sans text-[11px] text-ink-400">daily close {m.closeDate}, not live</span>
+                    {pct(m.changePct)} <span className="ml-1 font-sans text-[11px] text-ink-400">close on {new Date(`${m.closeDate}T12:00:00Z`).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}, not live</span>
                   </p>
                 </div>
                 <dl className="grid grid-cols-3 gap-5">
@@ -91,9 +92,9 @@ export default function CryptoView({ symbol, onInstrumentChange }) {
               </div>
               <div className="mt-4"><PriceChart history={m.history} decimals={m.decimals} height={220} /></div>
               <dl className="mt-4 grid grid-cols-2 gap-4 border-t border-ink-100 pt-4 dark:border-ink-800 sm:grid-cols-3">
-                <Stat label="14-day ATR" value={pct(m.atrPct, false)} note={`${m.regime} volatility`} />
+                <Stat label="Avg daily move (14 days)" value={pct(m.atrPct, false)} note={`${m.regime} volatility`} />
                 <Stat label="20-day range" value={`${Math.round(m.range.low).toLocaleString()} - ${Math.round(m.range.high).toLocaleString()}`} note={`Close in the ${m.technical.rangeThird}`} />
-                <Stat label="Averages" value={<span className="font-sans text-sm font-medium">{m.technical.vsSma20} 20-day, {m.technical.vsSma50} 50-day</span>} note="From daily closes; not a signal" />
+                <Stat label="Vs average price" value={<span className="font-sans text-sm font-medium">{m.technical.vsSma20} 20-day, {m.technical.vsSma50} 50-day</span>} note="From daily closes; not a signal" />
               </dl>
             </>
           ) : (
@@ -107,7 +108,7 @@ export default function CryptoView({ symbol, onInstrumentChange }) {
               <p className="text-xs text-ink-500 dark:text-ink-400">{data.display} is priced in US dollars, so US policy and data move it through the dollar and risk appetite.</p>
               <button type="button" onClick={() => onInstrumentChange('USD')} className="mt-3 flex w-full items-center justify-between rounded-xl border border-ink-100 px-3 py-2.5 text-left text-ink-800 hover:border-accent-300 dark:border-ink-800 dark:text-ink-100 dark:hover:border-accent-700">
                 <span className="flex items-center gap-2 text-sm"><Landmark className="h-4 w-4 text-accent-600" /> US dollar fundamentals</span>
-                <span className="font-mono text-sm font-semibold">{data.dollar.score}/100 <span className="font-sans text-xs font-normal text-ink-500">{data.dollar.condition}</span></span>
+                <span className="font-mono text-sm font-semibold">{data.dollar.score}/100 <span className="font-sans text-xs font-normal text-ink-500">{conditionWord(data.dollar.condition)}</span></span>
               </button>
               <p className="mt-1 text-[11px] text-ink-400">Confidence {data.dollar.confidence}/100 · updated {when(data.dollar.updatedAt)}</p>
             </>
@@ -120,18 +121,18 @@ export default function CryptoView({ symbol, onInstrumentChange }) {
                 <span className="text-[11px] text-ink-400">{new Date(e.scheduledAt).toLocaleString(undefined, { weekday: 'short', day: 'numeric', month: 'short', ...(e.dateOnly ? {} : { hour: '2-digit', minute: '2-digit' }) })}</span>
               </li>
             ))}
-            {!data.events.length ? <li className="text-sm text-ink-400">None scheduled in the covered calendars.</li> : null}
+            {!data.events.length ? <li className="text-sm text-ink-400">No major US releases coming up.</li> : null}
           </ul>
         </Card>
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
-        <Card title="Market data" source={data.coin?.ok ? `CoinGecko · ${when(c.lastUpdated)}` : 'CoinGecko'}>
+        <Card title="Market data" source={data.coin?.ok ? `Updated ${when(c.lastUpdated)}` : null}>
           {c ? (
             <dl className="grid grid-cols-2 gap-5 sm:grid-cols-3">
               <Stat label="Market cap" value={usd(c.marketCapUsd)} note={c.marketCapRank ? `Rank #${c.marketCapRank}` : null} />
               <Stat label="24h volume" value={usd(c.volume24hUsd)} />
-              <Stat label="From all-time high" value={pct(c.athChangePct)} valueClass={tone(c.athChangePct)} note={c.athUsd ? `ATH ${usd(c.athUsd)}, ${new Date(c.athDate).toLocaleDateString(undefined, { month: 'short', year: 'numeric' })}` : null} />
+              <Stat label="From all-time high" value={pct(c.athChangePct)} valueClass={tone(c.athChangePct)} note={c.athUsd ? `All-time high ${usd(c.athUsd)}, ${new Date(c.athDate).toLocaleDateString(undefined, { month: 'short', year: 'numeric' })}` : null} />
               <Stat label="Circulating supply" value={count(c.circulatingSupply)} note={issued != null ? `${issued.toFixed(1)}% of the ${count(c.maxSupply)} cap` : c.maxSupply == null ? 'No fixed supply cap' : null} />
               <Stat label="1-year change" value={pct(c.change1yPct)} valueClass={tone(c.change1yPct)} />
               {g ? <Stat label={data.symbol === 'BTCUSD' ? 'Bitcoin dominance' : 'Ether dominance'} value={pct(data.symbol === 'BTCUSD' ? g.btcDominancePct : g.ethDominancePct, false)} note={`Share of a ${usd(g.totalMarketCapUsd)} crypto market`} /> : null}
@@ -141,16 +142,16 @@ export default function CryptoView({ symbol, onInstrumentChange }) {
           )}
         </Card>
 
-        <Card title="Network activity" source={n ? `blockchain.info · ${when(n.asOf)}` : null}>
+        <Card title="Network activity" source={n ? `Updated ${when(n.asOf)}` : null}>
           {data.network === null ? (
             <p className="text-sm text-ink-400">Network data for {data.asset} isn't covered yet. Kotka shows only sources it can verify.</p>
           ) : n ? (
             <dl className="grid grid-cols-2 gap-5 sm:grid-cols-3">
-              <Stat label="Hash rate" value={`${count(n.hashRateEhs)} EH/s`} note="Computing power securing the network" />
+              <Stat label="Hash rate" value={`${count(n.hashRateEhs)} EH/s`} note="Computing power securing the network (exahashes per second)" />
               <Stat label="Transactions (24h)" value={count(n.transactions24h)} />
               <Stat label="Blocks (24h)" value={count(n.blocks24h)} note="Target is 144" />
               <Stat label="Minutes per block" value={n.minutesBetweenBlocks ?? 'n/a'} note="Target is 10" />
-              <Stat label="Difficulty" value={n.difficulty ? `${(n.difficulty / 1e12).toFixed(1)}T` : 'n/a'} />
+              <Stat label="Mining difficulty" value={n.difficulty ? `${(n.difficulty / 1e12).toFixed(1)}T` : 'Not available'} note="How hard it is to mine a new block" />
             </dl>
           ) : (
             <Unavailable what="Network data" error={data.network?.error} />
@@ -159,7 +160,7 @@ export default function CryptoView({ symbol, onInstrumentChange }) {
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
-        <Card title="Crypto news" source="Wire services, tagged by Kotka">
+        <Card title="Crypto news" source="Latest headlines">
           <ul className="divide-y divide-ink-100 dark:divide-ink-800">
             {data.news.map((x) => (
               <li key={x.id} className="py-2.5 first:pt-0">

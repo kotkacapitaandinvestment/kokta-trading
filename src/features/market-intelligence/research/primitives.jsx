@@ -62,19 +62,67 @@ const KIND_STYLES = {
   'MARKET PRICE': 'bg-white text-ink-600 ring-ink-300 dark:bg-transparent dark:text-ink-300 dark:ring-ink-600',
 };
 
-const KIND_LABEL = { ACTUAL: 'FACT', 'KOTKA INTERPRETATION': 'KOTKA VIEW', 'SOURCE ASSESSMENT': 'SOURCE' };
+// What each kind of statement is, in plain words, with a one-line explanation.
+const KIND_INFO = {
+  FACT: ['Official data', 'A figure published by an official source'],
+  'SOURCE ASSESSMENT': ['Institution’s view', 'What an institution like the IMF or a central bank projected or said'],
+  'KOTKA INTERPRETATION': ['Kotka’s take', 'Kotka’s reading of the data above, not a trade signal'],
+  FORECAST: ['Forecast', 'A projection of a future figure'],
+  'MARKET EXPECTATION': ['Market pricing', 'What bond and money markets appear to expect'],
+  'MARKET PRICE': ['Price', 'What the price has done'],
+  CALENDAR: ['Schedule', 'An official release date'],
+};
+const kindKey = (kind) => {
+  const raw = String(kind ?? 'FACT').toUpperCase();
+  return raw === 'ACTUAL' ? 'FACT' : raw;
+};
+export const kindLabel = (kind) => KIND_INFO[kindKey(kind)]?.[0] ?? words(kind);
 
 export function KindTag({ kind, className }) {
-  const raw = String(kind ?? 'FACT').toUpperCase();
-  const k = raw === 'ACTUAL' ? 'FACT' : raw;
+  const k = kindKey(kind);
+  const [label, hint] = KIND_INFO[k] ?? [words(k), undefined];
   return (
-    <span
-      title={k === 'KOTKA INTERPRETATION' ? "Kotka's interpretation of the evidence" : k === 'SOURCE ASSESSMENT' ? 'What an institution projected or stated' : k === 'FACT' ? 'Verified data' : undefined}
-      className={clsx('inline-flex shrink-0 items-center rounded px-1.5 py-px font-mono text-[9.5px] font-semibold tracking-wide ring-1 ring-inset', KIND_STYLES[k] ?? KIND_STYLES.FACT, className)}
-    >
-      {KIND_LABEL[k] ?? k}
+    <span title={hint} className={clsx('inline-flex shrink-0 items-center rounded px-1.5 py-px text-[10px] font-semibold ring-1 ring-inset', KIND_STYLES[k] ?? KIND_STYLES.FACT, className)}>
+      {label}
     </span>
   );
+}
+
+// "IMF FORMAL VALUATION: NOT AVAILABLE" and similar internal codes, in words.
+const ACRONYMS = new Set(['IMF', 'ECB', 'BIS', 'GDP', 'CPI', 'FX', 'USD', 'EUR', 'GBP', 'JPY', 'AUD', 'CAD', 'CHF', 'NZD', 'OECD', 'US', 'UK']);
+function words(s) {
+  return String(s ?? '')
+    .toLowerCase()
+    .replace(/_/g, ' ')
+    .replace(/\b[a-z]+\b/g, (w) => (ACRONYMS.has(w.toUpperCase()) ? w.toUpperCase() : w))
+    .replace(/^./, (c) => c.toUpperCase());
+}
+const NA_TEXT = {
+  'DATA NOT AVAILABLE': 'No data for this yet',
+  'IMF FORMAL VALUATION: NOT AVAILABLE': 'The IMF hasn’t published a valuation for this currency',
+  'FORMAL IMF ASSESSMENT: NOT AVAILABLE': 'No recent IMF country review yet',
+  'FORECAST REVISIONS: NOT AVAILABLE': 'No earlier IMF forecast to compare with yet',
+  'NO SCHEDULED CATALYSTS': 'Nothing major scheduled in this period',
+  'PRICE DATA NOT AVAILABLE': 'Price history isn’t available right now',
+  'CENTRAL BANK STATEMENT: NOT AVAILABLE': 'We don’t have the latest statement yet',
+  'MARKET EXPECTATION DATA NOT AVAILABLE': 'Market expectations aren’t available yet',
+  'IMF WORLD ECONOMIC OUTLOOK DATA: NOT AVAILABLE': 'No IMF forecasts for this currency yet',
+  'DATE NOT AVAILABLE': 'Date to be confirmed',
+};
+export function plainNA(text) {
+  const t = txt(text).trim();
+  if (NA_TEXT[t]) return NA_TEXT[t];
+  if (t && t === t.toUpperCase() && /[A-Z]/.test(t)) return words(t.replace(/:\s*NOT AVAILABLE$/, ' not available yet'));
+  return t;
+}
+// Reasons from the data engine, without the capitalised code in front and
+// with system wording ("configured sources") put plainly.
+export function plainReason(reason) {
+  return txt(reasonAfterPrefix(reason))
+    .replace(/from (the )?configured sources/gi, 'from our sources')
+    .replace(/no [a-z ]+ source is configured( for [a-z ]+)?/gi, 'we don’t cover this yet')
+    .replace(/is (not yet )?configured/gi, (m) => (/not/i.test(m) ? 'isn’t set up yet' : 'is set up'))
+    .replace(/integration/gi, 'connection');
 }
 
 // ── Currency identity (base = gold, quote = blue) ──
@@ -176,8 +224,8 @@ export function ScoreFigure({ value, suffix = '/100', className }) {
 export function NotAvailable({ children = 'DATA NOT AVAILABLE', reason, className }) {
   return (
     <div className={clsx('rounded-lg border border-dashed border-ink-200 px-3 py-2.5 dark:border-ink-700', className)}>
-      <p className="font-mono text-[11px] font-medium tracking-wide text-ink-500 dark:text-ink-400">{txt(children)}</p>
-      {reason ? <p className="mt-1 text-xs text-ink-400">{txt(reason)}</p> : null}
+      <p className="text-xs font-medium text-ink-600 dark:text-ink-300">{plainNA(children)}</p>
+      {reason ? <p className="mt-1 text-xs text-ink-400">{plainReason(reason)}</p> : null}
     </div>
   );
 }
@@ -234,5 +282,4 @@ export const conditionTone = (c) => {
   return 'text-ink-700 dark:text-ink-200';
 };
 
-export const directionWord = (label) =>
-  ({ STRENGTHENING: 'Strengthening', STABLE: 'Stable', WEAKENING: 'Weakening', REVERSING: 'Reversing', MIXED: 'Mixed' })[label] ?? 'n/a';
+export { directionWord, conditionWord, stanceWord } from '../../../lib/plain';

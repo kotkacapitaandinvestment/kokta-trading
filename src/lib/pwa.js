@@ -89,9 +89,9 @@ export async function currentSubscription() {
 
 export async function enablePush() {
   const reg = await registration();
-  if (!reg) throw new Error('Push needs the installed or production app. Reload and try again.');
+  if (!reg) throw new Error('Notifications aren’t available here yet. Reload the page and try again.');
   const permission = await Notification.requestPermission();
-  if (permission !== 'granted') throw new Error(permission === 'denied' ? 'Notifications are blocked for Kotka in your browser settings.' : 'Permission was not given.');
+  if (permission !== 'granted') throw new Error(permission === 'denied' ? 'Notifications are blocked for Kotka in your browser settings.' : 'You didn’t allow notifications. Tap Turn on whenever you’re ready.');
   const { publicKey } = await api.get('/push/key');
   let sub = await reg.pushManager.getSubscription();
   const key = urlBase64ToUint8Array(publicKey);

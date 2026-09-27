@@ -54,6 +54,7 @@ function AiReview({ entry, onReviewed }) {
 export default function Journal() {
   const [entries, setEntries] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(null);
   const [search, setSearch] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [detail, setDetail] = useState(null);
@@ -63,6 +64,7 @@ export default function Journal() {
     api
       .get('/journal')
       .then(({ entries }) => setEntries(entries))
+      .catch(() => setLoadError('We couldn’t load your journal. Refresh the page to try again.'))
       .finally(() => setLoading(false));
   }, []);
 
@@ -124,12 +126,16 @@ export default function Journal() {
           <Skeleton className="h-12 w-full" />
           <Skeleton className="h-12 w-full" />
         </div>
+      ) : loadError ? (
+        <p role="alert" className="rounded-xl border border-loss-500/30 bg-loss-50 px-4 py-3 text-sm text-loss-600 dark:bg-loss-500/10 dark:text-loss-400">{loadError}</p>
+      ) : filtered.length === 0 && entries.length ? (
+        <EmptyState icon={NotebookPen} title={`No trades match “${search}”`} description="Try a market, strategy or session name." />
       ) : filtered.length === 0 ? (
         <EmptyState
           icon={NotebookPen}
-          title="No journal entries yet"
+          title="No trades logged yet"
           description="Log your first trade to start building your performance history."
-          action={<Button onClick={() => setShowForm(true)}>New entry</Button>}
+          action={<Button onClick={() => setShowForm(true)}>Log a trade</Button>}
         />
       ) : (
         <Card className="overflow-x-auto">
@@ -160,7 +166,7 @@ export default function Journal() {
                     {e.positionStatus === 'open' ? (
                       <Badge tone="accent">Open</Badge>
                     ) : (
-                      <Badge tone={resultTone[e.result]}>{e.result}</Badge>
+                      <Badge tone={resultTone[e.result]}>{{ win: 'Win', loss: 'Loss', breakeven: 'Breakeven' }[e.result] ?? e.result}</Badge>
                     )}
                   </td>
                   <td className="px-5 py-3">

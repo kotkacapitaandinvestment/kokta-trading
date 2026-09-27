@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import clsx from 'clsx';
-import { ArrowUp, Loader2 } from 'lucide-react';
+import { ArrowUp, Loader2, Newspaper } from 'lucide-react';
 import { api } from '../../../lib/api';
 import { useRealtime } from '../realtime';
 import { useCommunity } from '../CommunityContext';
 import PostCard from '../components/PostCard';
 import Composer from '../components/Composer';
 import { NewsLine, EventLine, MoveLine, InsightLine } from '../components/FeedCards';
+import EmptyState from '../../../components/ui/EmptyState';
 
 const MODES = [
   ['foryou', 'For you'],
@@ -93,7 +94,7 @@ export default function Feed({ fixedMode = null, showComposer = true, emptyText 
       ) : null}
       <div className="divide-y divide-ink-100 dark:divide-ink-800">
         {!items ? [0, 1, 2].map((i) => <div key={i} className="m-5 h-24 animate-pulse rounded-xl bg-ink-50 dark:bg-ink-800" />) : null}
-        {items && !items.length ? <p className="px-6 py-16 text-center text-sm text-ink-400">{emptyText ?? 'Nothing here yet. Follow markets and traders, or start the conversation.'}</p> : null}
+        {items && !items.length ? <EmptyState size="section" icon={Newspaper} title="Nothing here yet" description={emptyText ?? 'Follow a few markets and traders and their posts, ideas and news will show up here. Or share what you’re watching.'} /> : null}
         {items?.map((it) => <FeedItem key={it.key} item={it} />)}
       </div>
       <div ref={sentinel} className="py-4 text-center text-xs text-ink-400">{busy && items ? <Loader2 className="mx-auto h-4 w-4 animate-spin" /> : items?.length && !next ? 'You are all caught up.' : null}</div>

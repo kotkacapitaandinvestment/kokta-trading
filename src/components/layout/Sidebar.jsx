@@ -1,7 +1,7 @@
 import BrandMark from '../ui/BrandMark';
 import { NavLink } from 'react-router-dom';
 import clsx from 'clsx';
-import { Lock } from 'lucide-react';
+import { Lock, ShieldCheck } from 'lucide-react';
 import Badge from '../ui/Badge';
 
 export default function Sidebar({ brandTo, items, secondaryItems, secondaryLabel, footer }) {
@@ -40,11 +40,8 @@ export default function Sidebar({ brandTo, items, secondaryItems, secondaryLabel
                   <item.icon className="h-4 w-4 shrink-0" strokeWidth={1.75} />
                   <span className="flex-1 truncate">{item.label}</span>
                   {locked ? <Lock className="h-3.5 w-3.5 text-ink-300" /> : null}
-                  {item.badge && !locked ? (
-                    <Badge tone="accent" className="px-1.5 py-0 text-[10px]">
-                      {item.badge}
-                    </Badge>
-                  ) : null}
+                  {/* An icon, not a text badge, so long labels aren't cut off. */}
+                  {item.badge && !locked ? <ShieldCheck className="h-3.5 w-3.5 shrink-0 text-accent-600 dark:text-accent-400" aria-label={`${item.badge} only`} title={`${item.badge} only`} /> : null}
                 </NavLink>
               </li>
             );

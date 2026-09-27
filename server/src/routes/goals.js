@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import { Router } from 'express';
 import { prisma } from '../lib/prisma.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
+import { auditLater } from '../lib/audit.js';
 import { requireAuth } from '../middleware/auth.js';
 import { saveMedia } from '../lib/media.js';
 import { overLimit } from '../lib/community/throttle.js';
@@ -103,6 +104,7 @@ goalsRouter.post('/checkins', asyncHandler(async (req, res) => {
     note,
   };
   await prisma.goalCheckIn.upsert({ where: { userId_date: { userId: req.userId, date } }, update: data, create: { userId: req.userId, date, ...data } });
+  auditLater(req, 'goals.checked_in', { targetType: 'checkin', targetId: date, detail: { date, traded, kept: !traded || Object.values(answers).every(Boolean) } });
   res.status(201).json(await overview(req.userId, localDate(b.today ?? b.date)));
 }));
 
@@ -142,6 +144,7 @@ goalsRouter.post('/goals', asyncHandler(async (req, res) => {
   if (screen.blocked) return res.status(400).json({ error: screen.blocked });
   const g = await prisma.goal.create({ data: { userId: req.userId, ...goal } });
   await prisma.achievement.create({ data: { userId: req.userId, type: 'goal_created', key: `goal:${g.id}:created`, goalId: g.id, title: 'Goal Set', data: { goal: { id: g.id, title: g.title, metric: g.metric, target: g.target, periodDays: g.periodDays, startDate: g.startDate, endDate: g.endDate } } } });
+  auditLater(req, 'goals.goal_set', { targetType: 'goal', targetId: g.id, detail: { title: g.title, type: METRICS[g.metric].label, periodDays: g.periodDays } });
   res.status(201).json({ ...(await overview(req.userId, today)), goalId: g.id });
 }));
 
@@ -169,6 +172,7 @@ goalsRouter.post('/goals/:id/lock', asyncHandler(async (req, res) => {
     data: { userId: req.userId, type: 'goal_locked', key: `goal:${g.id}:locked`, goalId: g.id, title: 'Goal Locked', data: { goal: { id: g.id, title: g.title, metric: g.metric, target: g.target, periodDays: g.periodDays, startDate: locked.startDate, endDate: locked.endDate }, progress: goalProgress(locked, ctx, today) } },
   });
   await afterEarned(req.userId, [a], ctx.prefs);
+  auditLater(req, 'goals.goal_locked', { targetType: 'goal', targetId: g.id, detail: { title: g.title, from: locked.startDate, to: locked.endDate } });
   res.json(await overview(req.userId, today));
 }));
 
@@ -177,6 +181,7 @@ goalsRouter.post('/goals/:id/abandon', asyncHandler(async (req, res) => {
   if (!g) return res.status(404).json({ error: 'Goal not found.' });
   if (!['active', 'achieved'].includes(g.status)) return res.status(400).json({ error: 'Only a running goal can be abandoned.' });
   await prisma.goal.update({ where: { id: g.id }, data: { status: 'abandoned', closedAt: new Date() } });
+  auditLater(req, 'goals.goal_abandoned', { targetType: 'goal', targetId: g.id, detail: { title: g.title } });
   res.json(await overview(req.userId, localDate(req.body?.today)));
 }));
 
@@ -186,6 +191,7 @@ goalsRouter.delete('/goals/:id', asyncHandler(async (req, res) => {
   if (g.status !== 'draft') return res.status(400).json({ error: 'Locked goals stay on your record. You can abandon a running goal instead.' });
   await prisma.achievement.deleteMany({ where: { userId: req.userId, goalId: g.id } });
   await prisma.goal.delete({ where: { id: g.id } });
+  auditLater(req, 'goals.draft_deleted', { targetType: 'goal', targetId: g.id, detail: { title: g.title } });
   res.json(await overview(req.userId, localDate(req.query.today)));
 }));
 
@@ -208,6 +214,7 @@ goalsRouter.post('/achievements/:id/post', asyncHandler(async (req, res) => {
   }
   const r = await postAchievement(req.userId, req.params.id, { note });
   if (r.error) return res.status(r.status ?? 400).json({ error: r.error });
+  if (!r.existing) auditLater(req, 'goals.achievement_posted', { targetType: 'post', targetId: r.post.id, detail: { achievementId: req.params.id } });
   res.status(r.existing ? 200 : 201).json({ postId: r.post.id, existing: !!r.existing });
 }));
 
@@ -238,6 +245,7 @@ goalsRouter.post('/shares', asyncHandler(async (req, res) => {
   }
   const slug = crypto.randomBytes(9).toString('base64url');
   const share = await prisma.achievementShare.create({ data: { slug, userId: req.userId, source: b.source, sourceId: String(b.sourceId), fields, snapshot, imageId } });
+  auditLater(req, 'goals.public_link_created', { targetType: 'share', targetId: share.id, detail: { headline: snapshot.headline, fields, sensitive: card.fields.filter((x) => x.sensitive && fields.includes(x.key)).map((x) => x.label) } });
   res.status(201).json({ share: { id: share.id, slug, path: `/achievement/${slug}` } });
 }));
 
@@ -250,6 +258,7 @@ goalsRouter.delete('/shares/:id', asyncHandler(async (req, res) => {
   const s = await prisma.achievementShare.findFirst({ where: { id: req.params.id, userId: req.userId } });
   if (!s) return res.status(404).json({ error: 'Link not found.' });
   await prisma.achievementShare.update({ where: { id: s.id }, data: { revokedAt: new Date() } });
+  auditLater(req, 'goals.public_link_removed', { targetType: 'share', targetId: s.id, detail: { headline: s.snapshot?.headline } });
   if (s.imageId) await prisma.media.deleteMany({ where: { id: s.imageId, ownerId: req.userId } });
   res.json({ ok: true });
 }));

@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { prisma } from '../../lib/prisma.js';
 import { asyncHandler } from '../../lib/asyncHandler.js';
+import { auditLater } from '../../lib/audit.js';
 import { overLimit } from '../../lib/community/throttle.js';
 import { str } from './context.js';
 
@@ -33,5 +34,6 @@ reportsRouter.post('/reports', asyncHandler(async (req, res) => {
   const details = str(req.body?.details, 1000) || null;
   if (existing) await prisma.report.update({ where: { id: existing.id }, data: { category, details: details ?? existing.details } });
   else await prisma.report.create({ data: { reporterId: req.me.id, targetType, targetId, targetUserId: target.userId ?? null, category, details } });
+  auditLater(req, 'community.reported', { targetType, targetId, actor: req.me, detail: { category, reportedUserId: target.userId ?? undefined } });
   res.status(201).json({ ok: true, message: 'Thanks. A moderator will review it. You can also block this trader from their profile.' });
 }));

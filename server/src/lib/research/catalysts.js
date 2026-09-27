@@ -109,7 +109,7 @@ export function buildCatalysts(codes, evals, evidence, { now = new Date(), horiz
     event: 'IMF World Economic Outlook — next edition (growth, inflation, fiscal and external projections)',
     category: 'imf',
     importance: 'High',
-    dateText: 'DATA NOT AVAILABLE — the exact date is not published in machine-readable form. The IMF states the WEO is released in April and September/October each year.',
+    dateText: 'DATE NOT AVAILABLE — the IMF hasn’t announced the exact date. Its World Economic Outlook usually comes out in April and in September or October.',
     source: { name: 'International Monetary Fund — World Economic Outlook', url: 'https://www.imf.org/en/Publications/WEO', tier: 1 },
     scenarios: {
       positive: 'Upward revisions to growth, or narrower deficits than projected, would strengthen the forecast-revision and fiscal factors.',
@@ -164,7 +164,7 @@ function factorInvalidation(ev, key, catalysts) {
       return s ? `If systemic stress (CISS ${fmt(s.value, 3)}) rises above 0.05 the score drops to 0; above 0.15 it turns negative — a sharp rise within a month (≥ 0.05) also subtracts a notch.` : null;
     }
     case 'reserves':
-      return `A change of 0.5 percentage points or more in ${ev.code}'s share of global reserves (IMF COFER) over a year would move this factor.`;
+      return `A change of 0.5 percentage points or more in ${ev.code}'s share of global central-bank reserves over a year would move this factor.`;
     default:
       return null;
   }

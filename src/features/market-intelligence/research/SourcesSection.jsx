@@ -5,8 +5,8 @@ const TIER_GROUPS = [
   { tiers: ['1'], title: 'International Monetary Fund' },
   { tiers: ['2'], title: 'Central banks' },
   { tiers: ['3'], title: 'National statistics offices' },
-  { tiers: ['4'], title: 'International organisations (BIS)' },
-  { tiers: ['curated'], title: 'Curated institutional assessments' },
+  { tiers: ['4'], title: 'Bank for International Settlements' },
+  { tiers: ['curated'], title: 'Reports added by the Kotka team' },
   { tiers: ['market'], title: 'Market data' },
 ];
 
@@ -16,11 +16,11 @@ export function FreshnessStrip({ freshness, report }) {
   return (
     <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-xs sm:grid-cols-4">
       <div>
-        <p className="text-ink-400">Last researched</p>
+        <p className="text-ink-400">Last updated</p>
         <p className="text-ink-800 dark:text-ink-100">{formatDate(freshness.lastUpdated, { time: true })}</p>
       </div>
       <div>
-        <p className="text-ink-400">Next refresh</p>
+        <p className="text-ink-400">Next update</p>
         <p className="text-ink-800 dark:text-ink-100">{freshness.stale ? 'Due now' : formatDate(freshness.nextRefresh, { time: true })}</p>
       </div>
       <div>
@@ -28,8 +28,8 @@ export function FreshnessStrip({ freshness, report }) {
         <p className="text-ink-800 dark:text-ink-100">{df?.latestData ? `${df.latestData.period} (${txt(df.latestData.label)})` : 'n/a'}</p>
       </div>
       <div>
-        <p className="text-ink-400">IMF forecast vintage</p>
-        <p className="text-ink-800 dark:text-ink-100">{df?.imf ? `${df.imf.vintage} (published ${formatDate(df.imf.published)})` : 'DATA NOT AVAILABLE'}</p>
+        <p className="text-ink-400">Latest IMF forecast</p>
+        <p className="text-ink-800 dark:text-ink-100">{df?.imf ? `${df.imf.vintage} (published ${formatDate(df.imf.published)})` : 'Not available'}</p>
       </div>
     </div>
   );
@@ -74,33 +74,23 @@ export default function SourcesSection({ report }) {
       </div>
       <details className="mt-5 border-t border-ink-100 pt-3 dark:border-ink-800">
         <summary className="cursor-pointer select-none text-xs text-ink-400 hover:text-ink-600 dark:hover:text-ink-300">
-          Retrieval log for this run: {status.filter((s) => s.status === 'ok' || s.status === 'cached').length} retrieved
-          {failed.length ? `, ${failed.length} unavailable` : ''}
-          {disabled.length ? `, ${disabled.length} disabled by an administrator` : ''}
-          {report.fredMode === 'public-csv' ? '. FRED series read from the public CSV endpoint.' : ''}
+          Data check: {status.filter((s) => s.status === 'ok' || s.status === 'cached').length} of {status.length - disabled.length} sources loaded for this report
+          {failed.length ? `. ${failed.length} couldn’t be reached this time, so their figures are left out rather than guessed.` : '.'}
         </summary>
         <ul className="mt-2 grid grid-cols-1 gap-x-6 gap-y-1 text-[11px] md:grid-cols-2">
           {status.map((s) => (
             <li key={s.id} className="flex items-start justify-between gap-3">
               <span className="text-ink-500 dark:text-ink-400">{txt(s.name)}</span>
               <span className={clsx('shrink-0 font-mono', s.status === 'failed' ? 'text-loss-500' : s.status === 'disabled' ? 'text-ink-400' : 'text-ink-600 dark:text-ink-300')}>
-                {s.status === 'cached' ? 'ok (cached)' : s.status}
+                {s.status === 'ok' || s.status === 'cached' ? 'Loaded' : s.status === 'failed' ? 'Missing' : 'Off'}
               </span>
             </li>
           ))}
         </ul>
-        {failed.length ? (
-          <ul className="mt-2 space-y-0.5 text-[11px] text-loss-500">
-            {failed.map((s) => (
-              <li key={s.id}>
-                {txt(s.name)}: {s.error}
-              </li>
-            ))}
-          </ul>
-        ) : null}
+
       </details>
       <p className="mt-4 text-[11px] leading-relaxed text-ink-400">
-        Kotka Fundamental Research provides macroeconomic context. It is not a trade signal and does not recommend any position. A trade decision also needs technical structure, liquidity, risk and a trade plan.
+        This research is background on the economy, not a trade signal or a recommendation. A trade still needs your own chart analysis, risk plan and entry rules.
       </p>
     </Section>
   );

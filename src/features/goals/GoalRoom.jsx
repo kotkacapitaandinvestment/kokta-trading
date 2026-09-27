@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import clsx from 'clsx';
-import { Copy, ExternalLink, Flag, Lock, MessagesSquare, PenLine, Pin, PinOff, Plus, Route, Share2, Trash2, X } from 'lucide-react';
+import { Copy, ExternalLink, Flag, Lock, MessagesSquare, PenLine, Pin, PinOff, Plus, Route, Share2, Target, Trash2, Trophy, X } from 'lucide-react';
 import PageHeader from '../../components/ui/PageHeader';
 import Button from '../../components/ui/Button';
 import InfoTip from '../../components/ui/InfoTip';
@@ -11,6 +11,8 @@ import CheckInPanel from './CheckInPanel';
 import GoalForm from './GoalForm';
 import ShareStudio from './ShareStudio';
 import { ICONS, formatDay, localToday } from './card';
+import { confirmDialog, promptDialog, toast } from '../../lib/dialogs';
+import EmptyState from '../../components/ui/EmptyState';
 
 const TYPE_ICON = { goal_created: 'target', goal_locked: 'lock', goal_reached: 'trophy', goal_completed: 'trophy', streak: 'flame', discipline_streak: 'shield', badge: 'medal', checkins: 'calendar', learning: 'book', backtests: 'history', monthly_review: 'calendar', monthly_champion: 'award', most_improved: 'trending' };
 const STATUS = {
@@ -188,33 +190,35 @@ export default function GoalRoom() {
   const goalAction = async (kind, goal) => {
     try {
       if (kind === 'edit') return setForm({ ...goal, start: goal.startDate });
-      if (kind === 'lock' && !window.confirm(`Lock "${goal.title}"? The target and period can't be changed once locked.`)) return;
-      if (kind === 'abandon' && !window.confirm(`Abandon "${goal.title}"? It stays on your record as abandoned.`)) return;
-      if (kind === 'delete' && !window.confirm('Delete this draft?')) return;
+      if (kind === 'lock' && !(await confirmDialog({ title: `Lock “${goal.title}”?`, message: 'Once it’s locked, the target and period can’t be changed. That’s what makes it count.', confirmLabel: 'Lock goal' }))) return;
+      if (kind === 'abandon' && !(await confirmDialog({ title: `Abandon “${goal.title}”?`, message: 'It stays on your record as abandoned. You can set a new goal any time.', confirmLabel: 'Abandon goal', danger: true }))) return;
+      if (kind === 'delete' && !(await confirmDialog({ title: 'Delete this draft?', message: 'It hasn’t been locked, so nothing is lost from your record.', confirmLabel: 'Delete draft', danger: true }))) return;
       if (kind === 'lock') apply(await api.post(`/goals/goals/${goal.id}/lock`, { today }));
       if (kind === 'abandon') apply(await api.post(`/goals/goals/${goal.id}/abandon`, { today }));
       if (kind === 'delete') apply(await api.delete(`/goals/goals/${goal.id}?today=${today}`));
     } catch (err) {
-      window.alert(err.message);
+      toast(err.message, { tone: 'error' });
     }
   };
   const pin = async (a) => {
     try {
       await api.patch(`/goals/achievements/${a.id}`, { pinned: !a.pinned });
       setData((d) => ({ ...d, achievements: d.achievements.map((x) => (x.id === a.id ? { ...x, pinned: !a.pinned } : x)) }));
+      toast(a.pinned ? 'Removed from your profile.' : 'Pinned to your profile.');
     } catch (err) {
-      window.alert(err.message);
+      toast(err.message, { tone: 'error' });
     }
   };
   const post = async (a) => {
-    const note = window.prompt(`Post "${a.title}" to Community. Only public details are shown (never profit, trades or risk). Add a note if you like:`, '');
+    const note = await promptDialog({ title: `Post “${a.title}” to Community`, message: 'Only public details are shown: never profit, trades or risk.', label: 'Add a note', placeholder: 'e.g. Two weeks of showing up every day', optional: true, multiline: true, confirmLabel: 'Post' });
     if (note === null) return;
     setPosting(a.id);
     try {
       const r = await api.post(`/goals/achievements/${a.id}/post`, { note });
       setData((d) => ({ ...d, achievements: d.achievements.map((x) => (x.id === a.id ? { ...x, postId: r.postId } : x)) }));
+      toast('Posted to Community.');
     } catch (err) {
-      window.alert(err.message);
+      toast(err.message, { tone: 'error' });
     } finally {
       setPosting(null);
     }
@@ -224,7 +228,7 @@ export default function GoalRoom() {
     await api.put('/goals/preferences', { [k]: v }).catch(() => {});
   };
   const revoke = async (id) => {
-    if (!window.confirm('Remove this public link? Anyone who opens it will see that it is no longer available.')) return;
+    if (!(await confirmDialog({ title: 'Remove this public link?', message: 'Anyone who opens it will see that it’s no longer available.', confirmLabel: 'Remove link', danger: true }))) return;
     await api.delete(`/goals/shares/${id}`).catch(() => {});
     loadLinks();
   };
@@ -256,7 +260,7 @@ export default function GoalRoom() {
       <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
         <Tile label="Level" value={s.level.n} sub={s.level.name} info={s.level.next ? `Next: Level ${s.level.next.n}, ${s.level.next.name}. Needs ${s.level.next.needs.charAt(0).toLowerCase()}${s.level.next.needs.slice(1)}` : 'The highest level.'} />
         <Tile label="Current streak" value={s.currentStreak} sub={`Longest ${s.longestStreak} days`} info="Consecutive trading days with a check-in. Weekends never break it; a weekend check-in adds to it." />
-        <Tile label="Discipline" value={s.adherence30 == null ? 'n/a' : `${s.adherence30}%`} sub="Last 30 days" info="Share of check-ins where you either stayed out, or traded and followed your plan, respected risk and avoided revenge trading." />
+        <Tile label="Discipline" value={s.adherence30 == null ? '–' : `${s.adherence30}%`} sub={s.adherence30 == null ? 'Check in to start' : 'Last 30 days'} info="Share of check-ins where you either stayed out, or traded and followed your plan, respected risk and avoided revenge trading." />
         <Tile label="Check-ins" value={s.totalCheckins} sub={`${s.learning} learning · ${s.backtests} backtests`} />
         <Tile label="Goals achieved" value={s.goalsCompleted} sub={`${s.badges.length} badge${s.badges.length === 1 ? '' : 's'}`} />
       </div>
@@ -273,11 +277,12 @@ export default function GoalRoom() {
             {running.length ? (
               <div className="grid gap-4 md:grid-cols-2">{running.map((g) => <GoalCard key={g.id} goal={g} currency={data.currency} achievements={data.achievements} onAction={goalAction} onShare={openShare} />)}</div>
             ) : (
-              <div className="rounded-2xl border border-dashed border-ink-200 p-8 text-center dark:border-ink-700">
-                <p className="text-sm font-medium text-ink-800 dark:text-ink-100">No goal yet</p>
-                <p className="mx-auto mt-1 max-w-sm text-xs text-ink-500 dark:text-ink-400">Start with a process goal: check in on 20 trading days, or keep to your plan for 15. It’s the record that compounds.</p>
-                <Button className="mt-4" icon={Plus} onClick={() => setForm({})}>Set a goal</Button>
-              </div>
+              <EmptyState
+                icon={Target}
+                title="Set your first goal"
+                description="Start with a process goal, like checking in on 20 trading days or keeping to your plan for 15. It’s the record that compounds."
+                action={<Button icon={Plus} onClick={() => setForm({})}>Set a goal</Button>}
+              />
             )}
             {past.length ? (
               <details className="mt-4 rounded-2xl border border-ink-100 bg-white p-4 dark:border-ink-800 dark:bg-ink-900">
@@ -292,7 +297,7 @@ export default function GoalRoom() {
               <h2 className="text-sm font-semibold text-ink-900 dark:text-ink-50">Achievements</h2>
               <SelfReported />
             </div>
-            {!visibleAchievements.length ? <p className="px-4 pb-6 pt-2 text-sm text-ink-400">Your first check-in starts the record. Streaks, badges and milestones appear here as you earn them.</p> : null}
+            {!visibleAchievements.length ? <EmptyState size="inline" icon={Trophy} title="No achievements yet" description="Check in today to start your record. Streaks, badges and milestones appear here as you earn them." /> : null}
             <ul className="divide-y divide-ink-100 dark:divide-ink-800">
               {(showAll ? visibleAchievements : visibleAchievements.slice(0, 8)).map((a) => <AchievementRow key={a.id} a={a} onShare={openShare} onPin={pin} onPost={post} posting={posting === a.id} />)}
             </ul>
@@ -317,7 +322,7 @@ export default function GoalRoom() {
                     ['Goals completed', review.goalsCompleted],
                     ['Longest streak', `${review.longestStreak} days`],
                     ['Check-ins', review.checkins],
-                    ['Discipline', review.adherence == null ? 'n/a' : `${review.adherence}%`],
+                    ['Discipline', review.adherence == null ? '–' : `${review.adherence}%`],
                     ['Learning', review.learning],
                     ['Badges earned', review.badgesEarned.length],
                   ].map(([l, v]) => (

@@ -1,3 +1,4 @@
+import { Bookmark } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import clsx from 'clsx';
@@ -5,6 +6,7 @@ import { api } from '../../../lib/api';
 import PostCard from '../components/PostCard';
 import { NewsLine, EventLine } from '../components/FeedCards';
 import { UserName } from '../components/Identity';
+import EmptyState from '../../../components/ui/EmptyState';
 
 const TYPES = [
   [null, 'All'],
@@ -28,7 +30,7 @@ export default function Saved() {
         <h1 className="text-lg font-semibold text-ink-900 dark:text-ink-50">Saved</h1>
         <div className="mt-3 flex flex-wrap gap-1">{TYPES.map(([v, l]) => <button key={l} type="button" aria-pressed={type === v} onClick={() => setType(v)} className={clsx('rounded-full px-2.5 py-1 text-xs font-medium', type === v ? 'bg-ink-900 text-white dark:bg-accent-500 dark:text-ink-950' : 'text-ink-500 hover:bg-ink-100 dark:hover:bg-ink-800')}>{l}</button>)}</div>
       </div>
-      {items && !items.length ? <p className="px-6 py-16 text-center text-sm text-ink-400">Nothing saved yet. Use Save on posts, ideas, news, messages and events.</p> : null}
+      {items && !items.length ? <EmptyState size="section" icon={Bookmark} title="Nothing saved yet" description="Tap Save on a post, trade idea, news story, message or event to keep it here for later." /> : null}
       <div className="divide-y divide-ink-100 dark:divide-ink-800">
         {items?.map((s) => {
           if (s.type === 'post' || s.type === 'idea') return <PostCard key={`${s.type}${s.item.id}`} post={s.item} />;

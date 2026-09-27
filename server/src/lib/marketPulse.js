@@ -112,7 +112,7 @@ export async function getMarketPulse() {
   }
   return {
     configured: true,
-    source: { name: 'Massive (formerly Polygon.io), end-of-day bars', url: 'https://massive.com' },
+    source: { name: 'Daily closing prices', url: 'https://massive.com' },
     instruments,
   };
 }

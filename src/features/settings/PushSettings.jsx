@@ -92,7 +92,7 @@ export default function PushSettings() {
   const sendTest = () =>
     run(async () => {
       const r = await api.post('/push/test', {});
-      setTest({ message: r.sent ? `Sent to ${r.sent} device${r.sent === 1 ? '' : 's'}. It should arrive in a few seconds.` : 'The push service did not accept it. Try turning push off and on again.' });
+      setTest({ message: r.sent ? `Sent to ${r.sent} device${r.sent === 1 ? '' : 's'}. It should arrive in a few seconds.` : 'The test didn’t go through. Turn notifications off and on again for this device.' });
     });
   const removeDevice = async (id) => {
     await api.post('/push/unsubscribe', { id }).catch(() => {});

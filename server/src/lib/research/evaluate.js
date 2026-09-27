@@ -237,7 +237,7 @@ export function evaluateCurrency(code, evidence, { asOf = new Date(), marketPric
 
   let stance = null;
   if (!policy || policy.current === null) {
-    setFactor('monetary_policy', { available: false, unavailableReason: 'Policy rate data not available from configured sources.' });
+    setFactor('monetary_policy', { available: false, unavailableReason: 'We don’t have policy rate data for this currency right now.' });
   } else {
     const recentDays = policy.lastChange ? Math.round((asOf.getTime() - new Date(`${policy.lastChange.date}T00:00:00Z`).getTime()) / DAY) : null;
     let score = 0;
@@ -302,10 +302,10 @@ export function evaluateCurrency(code, evidence, { asOf = new Date(), marketPric
           : pricing === 'EASING'
             ? `The 2-year yield (${pct(oY2.value)}) sits ${fmt(Math.abs(spread))} pts below the policy rate, consistent with markets expecting easing.`
             : `The 2-year yield (${pct(oY2.value)}) is within 0.25 pts of the policy rate, consistent with markets expecting broadly steady policy.`,
-      caveat: 'Derived from the 2-year government yield versus the policy rate. Yields also carry term premium, so this is a proxy for market expectations, not an OIS-implied rate path.',
+      caveat: 'Based on 2-year government bond yields compared with the policy rate: a rough guide to where markets expect rates to go, not an exact forecast.',
     };
   } else {
-    marketExpectations = { available: false, summary: 'MARKET EXPECTATION DATA NOT AVAILABLE — no free official source for market-implied policy expectations is configured for this currency.' };
+    marketExpectations = { available: false, summary: 'MARKET EXPECTATION DATA NOT AVAILABLE — we don’t have an official source for what markets expect from this central bank yet.' };
   }
 
   // ── Growth ───────────────────────────────────────────────────────────────
@@ -586,7 +586,7 @@ export function evaluateCurrency(code, evidence, { asOf = new Date(), marketPric
   } else {
     setFactor('reserves', {
       available: false,
-      unavailableReason: cfg.cofer ? 'IMF COFER data not available.' : `${code} is not separately identified in IMF COFER and no official reserve-adequacy source is configured.`,
+      unavailableReason: cfg.cofer ? 'The IMF’s reserve data isn’t available right now.' : `The IMF doesn’t report ${code} reserves separately, and we don’t have another official source for it yet.`,
     });
   }
 
@@ -649,7 +649,7 @@ export function evaluateCurrency(code, evidence, { asOf = new Date(), marketPric
   const oIT = cfg.series.longRateIT ? addSeriesObs('longRateIT') : null;
   const oDE = cfg.series.longRateDE ? addSeriesObs('longRateDE') : null;
   if (!oStress) {
-    setFactor('financial_stability', { available: false, unavailableReason: 'No official systemic-stress indicator is configured for this economy.' });
+    setFactor('financial_stability', { available: false, unavailableReason: 'We don’t track a financial-stress measure for this economy yet.' });
   } else {
     const v = oStress.value;
     let score = v < 0.05 ? 1 : v < 0.15 ? 0 : v < 0.3 ? -1 : -2;

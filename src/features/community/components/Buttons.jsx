@@ -2,6 +2,7 @@ import { useState } from 'react';
 import clsx from 'clsx';
 import { Bookmark, BookmarkCheck, Check, Plus } from 'lucide-react';
 import { api } from '../../../lib/api';
+import { confirmDialog, promptDialog, toast } from '../../../lib/dialogs';
 
 export function FollowButton({ targetType, targetId, following: initial, onChange, size = 'sm', className, labels = ['Follow', 'Following'] }) {
   const [following, setFollowing] = useState(!!initial);
@@ -14,7 +15,7 @@ export function FollowButton({ targetType, targetId, following: initial, onChang
       setFollowing(!following);
       onChange?.(!following);
     } catch (err) {
-      window.alert(err.message);
+      toast(err.message, { tone: 'error' });
     } finally {
       setBusy(false);
     }
@@ -46,7 +47,7 @@ export function SaveButton({ itemType, itemId, saved: initial, className }) {
       else await api.post('/community/saved', { itemType, itemId });
       setSaved(!saved);
     } catch (err) {
-      window.alert(err.message);
+      toast(err.message, { tone: 'error' });
     }
   };
   const Icon = saved ? BookmarkCheck : Bookmark;

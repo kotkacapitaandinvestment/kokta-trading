@@ -15,6 +15,7 @@ import Menu from './Menu';
 import { SaveButton } from './Buttons';
 import ReportDialog from './ReportDialog';
 import AiPanel, { useAiAction } from './AiPanel';
+import { confirmDialog, promptDialog, toast } from '../../../lib/dialogs';
 
 const KIND_LABEL = { idea: 'Trade idea', question: 'Question', poll: 'Poll', market: 'Market post', news: 'News discussion', achievement: 'Achievement' };
 // Achievements get their own reactions: support, not likes.
@@ -31,7 +32,7 @@ export function ShareDialog({ post, onClose }) {
       await api.post(`/community/conversations/${c.id}/messages`, { body: '', attachments: [{ type: 'post', postId: post.id }] });
       setSent(c.name);
     } catch (err) {
-      window.alert(err.message);
+      toast(err.message, { tone: 'error' });
     }
   };
   return (
@@ -96,16 +97,16 @@ export default function PostCard({ post: initial, reason, full = false, onChange
       setPost(next);
       onChange?.(next);
     } catch (err) {
-      window.alert(err.message);
+      toast(err.message, { tone: 'error' });
     }
   };
   const remove = async () => {
-    if (!window.confirm('Delete this post?')) return;
+    if (!(await confirmDialog({ title: 'Delete this post?', message: 'It will be removed for everyone. This can’t be undone.', confirmLabel: 'Delete', danger: true }))) return;
     try {
       await api.delete(`/community/posts/${post.id}`);
       setPost({ ...post, deleted: true });
     } catch (err) {
-      window.alert(err.message);
+      toast(err.message, { tone: 'error' });
     }
   };
   const saveEdit = async () => {
@@ -114,11 +115,11 @@ export default function PostCard({ post: initial, reason, full = false, onChange
       setPost(p);
       setEditing(null);
     } catch (err) {
-      window.alert(err.message);
+      toast(err.message, { tone: 'error' });
     }
   };
   const relation = async (kind) => {
-    if (!window.confirm(kind === 'block' ? `Block ${post.author.name}? You won't see each other's content and they can't message you.` : `Mute ${post.author.name}? Their posts will be hidden from you.`)) return;
+    if (!(await confirmDialog({ title: `${kind === 'block' ? 'Block' : 'Mute'} ${post.author.name}?`, message: kind === 'block' ? 'You won’t see each other’s posts or messages, and they can’t message you. You can undo this in Settings.' : 'Their posts and messages will be hidden from you. They won’t be told.', confirmLabel: kind === 'block' ? 'Block' : 'Mute', danger: kind === 'block' }))) return;
     await api.post(`/community/users/${post.author.id}/${kind}`, {});
     setPost({ ...post, hiddenAuthor: true });
   };

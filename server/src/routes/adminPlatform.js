@@ -27,12 +27,18 @@ adminPlatformRouter.put('/settings', asyncHandler(async (req, res) => {
 
 adminPlatformRouter.get('/audit-logs', asyncHandler(async (req, res) => {
   const take = Math.min(Math.max(parseInt(req.query.limit, 10) || 50, 1), 200);
-  const action = typeof req.query.action === 'string' && /^[a-z_.]{1,60}$/.test(req.query.action) ? req.query.action : null;
+  // One or more actions or prefixes ("auth." = every sign-in event), comma-separated.
+  const actions = typeof req.query.action === 'string' && /^[a-z_.,]{1,400}$/.test(req.query.action) ? req.query.action.split(',').filter(Boolean) : [];
   const q = typeof req.query.q === 'string' ? req.query.q.trim().slice(0, 100) : '';
+  const userId = typeof req.query.user === 'string' && /^[a-z0-9]{10,40}$/i.test(req.query.user) ? req.query.user : null;
   const cursor = typeof req.query.cursor === 'string' && req.query.cursor ? req.query.cursor : null;
   const where = {
-    ...(action ? (action.endsWith('.') ? { action: { startsWith: action } } : { action }) : {}),
-    ...(q ? { actorEmail: { contains: q, mode: 'insensitive' } } : {}),
+    AND: [
+      actions.length ? { OR: actions.map((a) => (a.endsWith('.') || a.endsWith('_') ? { action: { startsWith: a } } : { action: a })) } : {},
+      q ? { actorEmail: { contains: q, mode: 'insensitive' } } : {},
+      // One person's history: what they did, and what was done to their account.
+      userId ? { OR: [{ actorId: userId }, { targetType: 'user', targetId: userId }] } : {},
+    ],
   };
   const rows = await prisma.auditLog.findMany({
     where,
@@ -42,10 +48,13 @@ adminPlatformRouter.get('/audit-logs', asyncHandler(async (req, res) => {
   });
   const hasMore = rows.length > take;
   const logs = rows.slice(0, take);
-  const actions = await prisma.auditLog.groupBy({ by: ['action'], _count: { _all: true }, orderBy: { action: 'asc' } });
+  const people = await prisma.user.findMany({ where: { id: { in: [...new Set([...logs.map((l) => l.actorId), userId].filter(Boolean))] } }, select: { id: true, name: true, email: true, role: true } });
+  const byId = new Map(people.map((p) => [p.id, p]));
+  const counts = await prisma.auditLog.groupBy({ by: ['action'], _count: { _all: true }, orderBy: { action: 'asc' } });
   res.json({
-    logs,
+    logs: logs.map((l) => ({ ...l, actorName: byId.get(l.actorId)?.name ?? null, actorRole: byId.get(l.actorId)?.role ?? null })),
     nextCursor: hasMore ? logs[logs.length - 1].id : null,
-    actions: actions.map((a) => ({ action: a.action, count: a._count._all })),
+    actions: counts.map((a) => ({ action: a.action, count: a._count._all })),
+    user: userId ? byId.get(userId) ?? null : null,
   });
 }));

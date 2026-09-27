@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { prisma } from '../lib/prisma.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
+import { auditLater } from '../lib/audit.js';
 import { requireAuth } from '../middleware/auth.js';
 import { vapidPublicKey, sendPush } from '../lib/push.js';
 
@@ -48,13 +49,15 @@ pushRouter.post('/subscribe', asyncHandler(async (req, res) => {
   });
   const extra = await prisma.pushSubscription.findMany({ where: { userId: req.userId }, orderBy: { createdAt: 'desc' }, skip: MAX_DEVICES, select: { id: true } });
   if (extra.length) await prisma.pushSubscription.deleteMany({ where: { id: { in: extra.map((e) => e.id) } } });
+  auditLater(req, 'account.push_enabled', { targetType: 'device', targetId: row.id, detail: { device: deviceName(userAgent) } });
   res.status(201).json({ device: { id: row.id, name: deviceName(userAgent) } });
 }));
 
 pushRouter.post('/unsubscribe', asyncHandler(async (req, res) => {
   const where = typeof req.body?.endpoint === 'string' ? { endpoint: req.body.endpoint, userId: req.userId } : typeof req.body?.id === 'string' ? { id: req.body.id, userId: req.userId } : null;
   if (!where) return res.status(400).json({ error: 'Say which device to remove.' });
-  await prisma.pushSubscription.deleteMany({ where });
+  const removed = await prisma.pushSubscription.deleteMany({ where });
+  if (removed.count) auditLater(req, 'account.push_disabled', { targetType: 'device' });
   res.status(204).end();
 }));
 

@@ -9,6 +9,7 @@ import Button from '../../components/ui/Button';
 import { useAuth } from '../../context/AuthContext';
 import { api } from '../../lib/api';
 import WeeklyPerformanceChart from './widgets/WeeklyPerformanceChart';
+import EmptyState from '../../components/ui/EmptyState';
 
 const CHECKLIST_TOTAL = 8;
 
@@ -81,7 +82,7 @@ function ReadinessPanel({ user, data, checklistDone }) {
       </div>
 
       <div className="relative mt-4 grid grid-cols-1 divide-y divide-white/10 sm:grid-cols-3 sm:divide-x sm:divide-y-0">
-        <Gauge label="Risk used today" info={<>The risk on today's losing trades, added up. Hit the limit and you're done for the day. Change it in <Link to="/app/settings?section=trading" className="underline">Settings</Link>.</>} value={risk} unit={`/ ${limit}R`} caption={overLimit ? 'Stop for today. The limit exists for days like this.' : `${Math.max(limit - risk, 0)}R left before your daily stop.`}>
+        <Gauge label="Risk used today" info={<>R is what you risk on one trade, so 2R means two full losses. This adds up the risk on today's losing trades; hit the limit and you're done for the day. Change it in <Link to="/app/settings?section=trading" className="underline">Settings</Link>.</>} value={risk} unit={`/ ${limit}R`} caption={overLimit ? 'Stop for today. The limit exists for days like this.' : `${Math.max(limit - risk, 0)}R left before your daily stop.`}>
           <Meter value={risk} max={limit} tone={overLimit ? 'loss' : 'gold'} />
         </Gauge>
         <Gauge label="Pre-trade checklist" info="Today's checklist. Work through it before each entry, then tick 'Pre-trade checklist was completed' when you journal the trade so it counts." value={checklistDone} unit={`/ ${CHECKLIST_TOTAL}`} caption={checklistDone >= CHECKLIST_TOTAL ? 'Every condition checked.' : 'Conditions still open for today.'}>
@@ -149,7 +150,7 @@ function SideNotice({ announcement, releases }) {
           ) : null}
         </>
       ) : (
-        <p className="mt-3 text-sm text-ink-400">No covered releases in the next 7 days.</p>
+        <p className="mt-3 text-sm text-ink-400">No major releases in the next 7 days.</p>
       )}
       <Link to="/app/market" className="mt-auto flex items-center gap-1 pt-4 text-xs font-medium text-accent-600 hover:underline dark:text-accent-400">
         Full calendar and research <ArrowRight className="h-3 w-3" />
@@ -165,7 +166,7 @@ function PulseList({ pulse }) {
         <h2 className="text-sm font-semibold text-ink-900 dark:text-ink-50">Market pulse</h2>
         <Link to="/app/market" className="text-xs font-medium text-accent-600 hover:underline dark:text-accent-400">Research</Link>
       </div>
-      <p className="mt-0.5 text-[11px] text-ink-400">Previous daily close · end-of-day data</p>
+      <p className="mt-0.5 text-[11px] text-ink-400">Yesterday’s closing prices, not live</p>
       <ul className="mt-4 divide-y divide-ink-100 dark:divide-ink-800">
         {!pulse
           ? [0, 1, 2, 3, 4].map((i) => <li key={i} className="my-2 h-8 animate-pulse rounded bg-ink-50 dark:bg-ink-800" />)
@@ -182,7 +183,7 @@ function PulseList({ pulse }) {
                     </span>
                   </span>
                 ) : (
-                  <span className="text-[11px] text-ink-400">{i.reason === 'rate_limited' ? 'loading' : 'unavailable'}</span>
+                  <span className="text-[11px] text-ink-400">{['rate_limited', 'not_loaded'].includes(i.reason) ? 'Loading…' : 'No price yet'}</span>
                 )}
               </li>
             ))}
@@ -221,7 +222,7 @@ function GoalRoomStrip({ summary }) {
 export default function Dashboard() {
   const { user } = useAuth();
   const today = new Date().toISOString().slice(0, 10);
-  const [data] = useGet('/me/dashboard');
+  const [data, dataFailed] = useGet('/me/dashboard');
   const [checklist] = useGet(`/checklist/${today}`);
   const [pulse] = useGet('/market/pulse');
   const [calendar] = useGet('/market/calendar?days=7');
@@ -236,6 +237,11 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6">
+      {dataFailed ? (
+        <p role="alert" className="rounded-xl border border-loss-500/30 bg-loss-50 px-4 py-3 text-sm text-loss-600 dark:bg-loss-500/10 dark:text-loss-400">
+          We couldn’t load your numbers just now, so some figures below may show zero. Refresh the page to try again.
+        </p>
+      ) : null}
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-12">
         <div className="xl:col-span-8">
           <ReadinessPanel user={user} data={data} checklistDone={checklistDone} />
@@ -276,10 +282,13 @@ export default function Dashboard() {
             {data?.openPositions?.length ? <span className="text-xs text-ink-400">{data.openPositions.length} open position{data.openPositions.length === 1 ? '' : 's'}</span> : null}
           </div>
           {!data?.recentTrades?.length ? (
-            <div className="px-6 pb-8 pt-6 text-center">
-              <p className="text-sm text-ink-500 dark:text-ink-400">Nothing journaled yet. Your first entry starts your discipline record.</p>
-              <Button as={Link} to="/app/journal" variant="secondary" size="sm" icon={NotebookPen} className="mt-4">Log a trade</Button>
-            </div>
+            <EmptyState
+              size="inline"
+              icon={NotebookPen}
+              title="No trades logged yet"
+              description="Your first journal entry starts your discipline record and fills this list."
+              action={<Button as={Link} to="/app/journal" variant="secondary" size="sm" icon={NotebookPen}>Log a trade</Button>}
+            />
           ) : (
             <div className="mt-3 overflow-x-auto">
               <table className="w-full text-sm">
@@ -298,8 +307,8 @@ export default function Dashboard() {
                       <td className="whitespace-nowrap px-6 py-3 font-mono text-xs tabular-nums text-ink-500 dark:text-ink-400">{t.date.slice(5)}</td>
                       <td className="px-3 py-3 font-medium text-ink-800 dark:text-ink-100">{t.symbol}</td>
                       <td className="px-3 py-3 text-ink-500 dark:text-ink-400">{t.direction}</td>
-                      <td className="hidden px-3 py-3 text-ink-500 dark:text-ink-400 sm:table-cell">{t.session || 'n/a'}</td>
-                      <td className={clsx('px-6 py-3 text-right font-mono tabular-nums', t.pnl > 0 ? 'text-profit-600 dark:text-profit-400' : t.pnl < 0 ? 'text-loss-500' : 'text-ink-400')}>{t.pnl == null ? 'open' : money(t.pnl)}</td>
+                      <td className="hidden px-3 py-3 text-ink-500 dark:text-ink-400 sm:table-cell">{t.session || ''}</td>
+                      <td className={clsx('px-6 py-3 text-right font-mono tabular-nums', t.pnl > 0 ? 'text-profit-600 dark:text-profit-400' : t.pnl < 0 ? 'text-loss-500' : 'text-ink-400')}>{t.pnl == null ? 'Open' : money(t.pnl)}</td>
                     </tr>
                   ))}
                 </tbody>

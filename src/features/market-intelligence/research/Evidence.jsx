@@ -1,6 +1,6 @@
 import { createContext, useContext, useMemo, useState } from 'react';
 import Modal from '../../../components/ui/Modal';
-import { KindTag, SourceLink, formatValue, formatDate, fmt, txt } from './primitives';
+import { KindTag, kindLabel, SourceLink, formatValue, formatDate, fmt, txt } from './primitives';
 
 const EvidenceContext = createContext({ open: () => {}, get: () => null });
 
@@ -17,7 +17,7 @@ export function EvidenceProvider({ report, children }) {
   return (
     <EvidenceContext.Provider value={value}>
       {children}
-      <Modal open={!!obs} onClose={() => setActiveId(null)} title="Evidence and provenance" width="max-w-xl">
+      <Modal open={!!obs} onClose={() => setActiveId(null)} title="Where this number comes from" width="max-w-xl">
         {obs ? <Provenance obs={obs} /> : null}
       </Modal>
     </EvidenceContext.Provider>
@@ -36,6 +36,7 @@ function Row({ label, children }) {
 }
 
 function Provenance({ obs }) {
+  const { get } = useEvidence();
   const tier = obs.source?.tier;
   return (
     <div>
@@ -55,17 +56,17 @@ function Provenance({ obs }) {
           </Row>
         ) : null}
         {obs.forecastPeriod ? <Row label="Forecast period">{obs.forecastPeriod}</Row> : null}
-        <Row label="Publication date">{obs.publicationDate ? formatDate(obs.publicationDate) : <span className="text-ink-400">Not provided by the source API</span>}</Row>
-        <Row label="Retrieved">{formatDate(obs.retrievedAt, { time: true })}</Row>
-        <Row label="Data type">{obs.dataType === 'ACTUAL' ? 'Actual (official data)' : txt(obs.dataType)}</Row>
+        <Row label="Publication date">{obs.publicationDate ? formatDate(obs.publicationDate) : <span className="text-ink-400">Not published by the source</span>}</Row>
+        <Row label="Last checked">{formatDate(obs.retrievedAt, { time: true })}</Row>
+        <Row label="Type">{kindLabel(obs.dataType)}</Row>
         <Row label="Source">
           <div className="space-y-0.5">
             <SourceLink href={obs.source?.url}>{txt(obs.source?.name)}</SourceLink>
             {obs.source?.via ? <p className="text-xs text-ink-400">via {txt(obs.source.via)}</p> : null}
-            <p className="text-xs text-ink-400">{tier === 'curated' ? 'Curated from the original publication by a Kotka administrator' : tier ? `Source tier ${tier}` : ''}</p>
+            <p className="text-xs text-ink-400">{tier === 'curated' ? 'Added by the Kotka team from the original report' : String(tier) === '1' ? 'Primary official source' : ''}</p>
           </div>
         </Row>
-        {obs.derivedFrom ? <Row label="Derived from">{obs.derivedFrom.join(', ')}</Row> : null}
+        {obs.derivedFrom ? <Row label="Worked out from">{obs.derivedFrom.map((id) => get?.(id)?.label ?? null).filter(Boolean).join(', ') || 'Several published figures'}</Row> : null}
       </dl>
       {obs.spark?.length > 2 ? <Sparkline values={obs.spark} /> : null}
     </div>
@@ -84,9 +85,9 @@ function Sparkline({ values }) {
   return (
     <div className="mt-4">
       <p className="mb-1 text-xs text-ink-400">
-        Last {values.length} observations, range {fmt(min)} to {fmt(max)}
+        Last {values.length} readings, between {fmt(min)} and {fmt(max)}
       </p>
-      <svg viewBox={`0 0 ${w} ${h}`} className="h-16 w-full" role="img" aria-label={`Last ${values.length} observations, from ${fmt(values[0])} to ${fmt(values[values.length - 1])}`}>
+      <svg viewBox={`0 0 ${w} ${h}`} className="h-16 w-full" role="img" aria-label={`Last ${values.length} readings, from ${fmt(values[0])} to ${fmt(values[values.length - 1])}`}>
         <polyline points={xy.map((p) => p.join(',')).join(' ')} fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" className="text-ink-400 dark:text-ink-500" />
         <circle cx={lx} cy={ly} r="4" className="fill-accent-600 stroke-white dark:stroke-ink-900" strokeWidth="2" />
       </svg>

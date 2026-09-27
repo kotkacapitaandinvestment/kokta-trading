@@ -28,7 +28,7 @@ export function useResearch(subject, { autoRefresh = true } = {}) {
   const pollUntilDone = useCallback(() => {
     stopPolling();
     setRefreshing(true);
-    setNotice('Research for this instrument is already running. This view updates when it finishes.');
+    setNotice('This report is being updated. It’ll appear here when it’s ready.');
     pollRef.current = setInterval(async () => {
       try {
         const data = await api.get(`/research/${subject}`);
@@ -59,7 +59,7 @@ export function useResearch(subject, { autoRefresh = true } = {}) {
         if (res.status === 409) return pollUntilDone();
         if (!res.ok) {
           const data = await res.json().catch(() => ({}));
-          setNotice(data.error ?? `Refresh failed (${res.status}).`);
+          setNotice(data.error ?? 'Couldn’t update the report. Try again in a few minutes.');
           setRefreshing(false);
           return;
         }
@@ -103,7 +103,7 @@ export function useResearch(subject, { autoRefresh = true } = {}) {
         }
         setRefreshing(false);
       } catch {
-        setNotice('Could not reach the research service. The last saved report is still shown.');
+        setNotice('Couldn’t update right now. You’re seeing the last saved report.');
         setRefreshing(false);
       }
     },

@@ -6,6 +6,7 @@ import { api } from '../../lib/api';
 import { useCommunity } from './CommunityContext';
 import { useRealtimeStatus } from './realtime';
 import Onboarding from './pages/Onboarding';
+import EmptyState from '../../components/ui/EmptyState';
 
 const NAV = [
   { to: '/app/community', label: 'For You', icon: Sparkles, end: true },
@@ -34,7 +35,7 @@ export function Rail() {
       <section className="rounded-2xl border border-ink-100 bg-white p-4 dark:border-ink-800 dark:bg-ink-900">
         <h2 className="flex items-center gap-2 text-sm font-semibold text-ink-900 dark:text-ink-50"><Radio className="h-4 w-4 text-loss-500" /> Live now</h2>
         {!live ? <p className="mt-3 text-xs text-ink-400">Loading…</p> : null}
-        {live && !live.rooms.length && !live.events.length ? <p className="mt-3 text-xs text-ink-400">Nothing live right now. Rooms appear here when traders are talking.</p> : null}
+        {live && !live.rooms.length && !live.events.length ? <EmptyState size="inline" icon={Radio} title="Quiet right now" description="Market rooms appear here when traders are talking, and releases when they’re about to drop." /> : null}
         <ul className="mt-2 space-y-1">
           {live?.events.map((e) => (
             <li key={e.id}><Link to={`/app/community/events/${e.id}`} className="block rounded-lg px-2 py-1.5 text-sm hover:bg-ink-50 dark:hover:bg-ink-800"><span className="mr-1.5 rounded bg-loss-500 px-1 text-[10px] font-semibold uppercase text-white">{e.phase === 'live' ? 'Live' : 'Soon'}</span>{e.title}</Link></li>

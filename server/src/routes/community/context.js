@@ -7,7 +7,7 @@ export const ME_SELECT = { id: true, name: true, email: true, username: true, he
 export async function loadMe(req, res, next) {
   try {
     req.me = await prisma.user.findUnique({ where: { id: req.userId }, select: ME_SELECT });
-    if (!req.me) return res.status(401).json({ error: 'Not authenticated' });
+    if (!req.me) return res.status(401).json({ error: 'Please sign in again.' });
     next();
   } catch (err) {
     next(err);

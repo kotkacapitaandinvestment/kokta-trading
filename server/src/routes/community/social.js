@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { prisma } from '../../lib/prisma.js';
 import { asyncHandler } from '../../lib/asyncHandler.js';
+import { auditLater } from '../../lib/audit.js';
 import { instrument } from '../../lib/instruments.js';
 import { notify } from '../../lib/community/notify.js';
 import { userCards } from '../../lib/community/users.js';
@@ -99,6 +100,7 @@ for (const kind of ['block', 'mute']) {
     if (!target) return res.status(404).json({ error: 'Trader not found.' });
     await prisma.userRelation.upsert({ where: { userId_targetId_kind: { userId: req.me.id, targetId: target.id, kind } }, update: {}, create: { userId: req.me.id, targetId: target.id, kind } });
     if (kind === 'block') await prisma.follow.deleteMany({ where: { OR: [{ followerId: req.me.id, targetType: 'user', targetId: target.id }, { followerId: target.id, targetType: 'user', targetId: req.me.id }] } });
+    auditLater(req, `community.${kind === 'block' ? 'blocked' : 'muted'}_user`, { targetType: 'user', targetId: req.params.id, actor: req.me });
     res.json({ [kind === 'block' ? 'blocked' : 'muted']: true });
   }));
   socialRouter.delete(`/users/:id/${kind}`, asyncHandler(async (req, res) => {

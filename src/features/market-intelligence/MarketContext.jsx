@@ -4,6 +4,7 @@ import { ArrowDownRight, ArrowUpRight, CalendarDays, ExternalLink } from 'lucide
 import { api } from '../../lib/api';
 import { txt } from './research/primitives';
 import InfoTip from '../../components/ui/InfoTip';
+import EmptyState from '../../components/ui/EmptyState';
 
 const REGIME_TONE = {
   Normal: 'bg-ink-100 text-ink-600 dark:bg-ink-800 dark:text-ink-300',
@@ -12,10 +13,12 @@ const REGIME_TONE = {
 };
 
 const UNAVAILABLE = {
-  not_configured: 'Price data is not connected',
+  not_configured: 'Prices aren’t available right now',
   rate_limited: 'Loading, check back in a minute',
-  fetch_failed: 'Provider did not respond',
-  insufficient_history: 'Not enough history',
+  fetch_failed: 'Couldn’t load today’s price. Check back soon.',
+  insufficient_history: 'Not enough price history yet',
+  not_in_plan: 'Price not available for this market yet',
+  not_loaded: 'Loading…',
 };
 
 const fmtPrice = (v, decimals) => (v == null ? '' : Number(v).toLocaleString(undefined, { minimumFractionDigits: decimals, maximumFractionDigits: decimals + 1 }));
@@ -74,7 +77,7 @@ function PulseTile({ item, onSelect }) {
             <Sparkline closes={item.closes} label={`${item.symbol}: last 30 daily closes, ${fmtPrice(item.closes[0], item.decimals)} to ${fmtPrice(item.close, item.decimals)}`} />
           </div>
           <div className="mt-2 flex items-center justify-between gap-2 text-[11px] text-ink-500 dark:text-ink-400">
-            <span className="tabular-nums">ATR 14d {item.atrPct}%</span>
+            <span className="tabular-nums" title="How much this market typically moves in a day (last 14 days)">Avg daily move {item.atrPct}%</span>
             <span className={clsx('rounded-full px-1.5 py-0.5 text-[10px] font-medium', REGIME_TONE[item.regime])}>{item.regime}</span>
           </div>
         </>
@@ -90,7 +93,7 @@ export function MarketPulse({ onSelect }) {
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    api.get('/market/pulse').then(setPulse).catch((err) => setError(err.message));
+    api.get('/market/pulse').then(setPulse).catch(() => setError('Couldn’t load market prices. Refresh the page to try again.'));
   }, []);
 
   const closeDate = pulse?.instruments?.find((i) => i.available)?.closeDate;
@@ -101,13 +104,13 @@ export function MarketPulse({ onSelect }) {
         <h2 id="pulse-title" className="flex items-center gap-1.5 text-sm font-semibold text-ink-900 dark:text-ink-50">
           Market pulse
           <InfoTip label="Reading a tile">
-            ATR 14d is the average daily range over the last 14 sessions, as a share of price. The tag bands it: Normal up to 0.7%, Elevated up to 1.5%, High above. Tap a tile for the research.
+            “Avg daily move” is how much the market typically moves in a day, based on the last 14 days. The tag shows how busy that is: Normal is under 0.7%, Elevated up to 1.5%, High above that. Tap a tile to open its research.
           </InfoTip>
         </h2>
         <p className="text-[11px] text-ink-400">
           {closeDate
-            ? `Daily closes as of ${new Date(`${closeDate}T00:00:00Z`).toLocaleDateString(undefined, { day: 'numeric', month: 'short', timeZone: 'UTC' })} · end-of-day data from Massive, not live quotes`
-            : 'End-of-day data from Massive, not live quotes'}
+            ? `Prices as of the ${new Date(`${closeDate}T00:00:00Z`).toLocaleDateString(undefined, { day: 'numeric', month: 'short', timeZone: 'UTC' })} daily close, not live`
+            : 'Prices as of the last daily close, not live'}
         </p>
       </div>
       {error ? <p className="text-sm text-loss-500">{error}</p> : null}
@@ -129,7 +132,7 @@ export function ReleaseCalendar({ days = 14 }) {
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    api.get(`/market/calendar?days=${days}`).then(setCal).catch((err) => setError(err.message));
+    api.get(`/market/calendar?days=${days}`).then(setCal).catch(() => setError('Couldn’t load the calendar. Refresh the page to try again.'));
   }, [days]);
 
   const groups = [];
@@ -157,7 +160,7 @@ export function ReleaseCalendar({ days = 14 }) {
             {[0, 1, 2, 3].map((i) => <div key={i} className="h-10 animate-pulse rounded-lg bg-ink-50 dark:bg-ink-800" />)}
           </div>
         ) : null}
-        {cal && !cal.events.length ? <p className="py-8 text-center text-sm text-ink-400">No scheduled releases from the covered calendars in this window.</p> : null}
+        {cal && !cal.events.length ? <EmptyState size="inline" icon={CalendarDays} title="A quiet stretch" description="No major releases are scheduled in this period." /> : null}
         {groups.map((g) => (
           <div key={g.key} className="border-b border-ink-100 py-3 last:border-0 dark:border-ink-800">
             <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-ink-400">{g.key}</p>
@@ -187,8 +190,8 @@ export function ReleaseCalendar({ days = 14 }) {
       </div>
 
       <p className="border-t border-ink-100 px-4 py-2.5 text-[11px] leading-relaxed text-ink-400 dark:border-ink-800">
-        From the publishers' own calendars: Federal Reserve, BLS and BEA for USD; ECB and Eurostat for EUR. Other currencies are not covered yet. A gold dot marks a high-importance release.
-        {failed.length ? ` Unavailable right now: ${failed.map((s) => s.key.toUpperCase()).join(', ')}.` : ''}
+        Official US and euro-area releases, taken from the Federal Reserve, the US Labor and Commerce Departments, the ECB and Eurostat. More currencies are coming. A gold dot marks a high-impact release.
+        {failed.length ? ' Some releases may be missing right now.' : ''}
       </p>
     </section>
   );

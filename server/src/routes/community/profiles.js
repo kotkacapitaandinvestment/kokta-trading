@@ -5,6 +5,7 @@ import { validateUsername, impersonationError, suggestUsername, isStaff, loadPre
 import { unreadCount } from '../../lib/community/notify.js';
 import { str } from './context.js';
 import { setAvatar } from '../../lib/media.js';
+import { auditLater } from '../../lib/audit.js';
 import { showcase } from '../../lib/goals/cards.js';
 
 export const profilesRouter = Router();
@@ -66,6 +67,7 @@ profilesRouter.put('/me/profile', asyncHandler(async (req, res) => {
     }
   }
   const user = await prisma.user.update({ where: { id: req.me.id }, data, select: { ...USER_CARD_SELECT, bio: true } });
+  if (data.username && data.username !== req.me.username) auditLater(req, req.me.username ? 'community.username_changed' : 'community.joined', { targetType: 'user', targetId: req.me.id, actor: req.me, detail: { from: req.me.username ?? undefined, to: data.username } });
   res.json({ profile: { ...userCard(user), bio: user.bio } });
 }));
 

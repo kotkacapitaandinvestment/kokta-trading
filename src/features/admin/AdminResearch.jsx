@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import clsx from 'clsx';
-import { CheckCircle2, Copy, KeyRound, Loader2, Plus, RefreshCw, Trash2, XCircle } from 'lucide-react';
+import { CheckCircle2, Copy, KeyRound, Landmark, Loader2, Plus, RefreshCw, Trash2, XCircle } from 'lucide-react';
 import PageHeader from '../../components/ui/PageHeader';
 import Card, { CardHeader, CardBody } from '../../components/ui/Card';
 import Input, { Select } from '../../components/ui/Input';
@@ -9,6 +9,9 @@ import Badge from '../../components/ui/Badge';
 import Modal from '../../components/ui/Modal';
 import { api } from '../../lib/api';
 import { useAuth } from '../../context/AuthContext';
+import { conditionWord } from '../../lib/plain';
+import { confirmDialog, promptDialog, toast } from '../../lib/dialogs';
+import EmptyState from '../../components/ui/EmptyState';
 
 const when = (iso) => (iso ? new Date(iso).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'UTC' }) + ' UTC' : 'Never');
 
@@ -89,7 +92,7 @@ function StatusCard({ status, onRefreshed }) {
               <tr key={`${r.kind}-${r.subject}`} className="border-b border-ink-50 dark:border-ink-800/60">
                 <td className="px-5 py-2 font-mono text-xs text-ink-800 dark:text-ink-100">{r.subject}</td>
                 <td className="px-2 py-2 font-mono text-xs tabular-nums text-ink-800 dark:text-ink-100">{r.score ?? 'n/a'}{r.confidence !== null ? <span className="text-ink-400"> · conf {r.confidence}</span> : null}</td>
-                <td className="px-2 py-2 text-xs text-ink-600 dark:text-ink-300">{r.condition ?? 'Not researched'}</td>
+                <td className="px-2 py-2 text-xs text-ink-600 dark:text-ink-300">{r.condition ? conditionWord(r.condition) : 'Not researched'}</td>
                 <td className="px-2 py-2 text-xs text-ink-500">{r.narrativeSource === 'ai' ? 'AI (verified)' : r.narrativeSource === 'rules' ? 'Rules' : 'n/a'}</td>
                 <td className="px-2 py-2 text-xs">
                   {r.freshness ? (
@@ -248,7 +251,7 @@ function SettingsCard({ data, canEdit, onSaved }) {
               <Toggle key={key} label={label} checked={form.sources[key] !== false} onChange={(v) => set('sources', { ...form.sources, [key]: v })} disabled={!canEdit} />
             ))}
           </div>
-          <p className="mt-1.5 text-xs text-ink-400">A disabled source is reported as DATA NOT AVAILABLE in every report and lowers confidence. API keys (NVIDIA, FRED, Massive) are managed in Integrations.</p>
+          <p className="mt-1.5 text-xs text-ink-400">Turning a source off leaves its figures out of every report (shown as “not available”) and lowers confidence. Access keys for NVIDIA, FRED and Massive are in Integrations.</p>
         </div>
 
         {canEdit ? (
@@ -273,9 +276,9 @@ function CronCard({ settings, cronJob, lastCronRunAt, canEdit, onRotated }) {
 
   const rotate = async () => {
     const warning = managed
-      ? 'Generate a new token? Kotka will update the cron-job.org job automatically.'
-      : 'Generate a new token? The current cron-job.org URL will stop working until you paste the new one.';
-    if (settings.cron.configured && !window.confirm(warning)) return;
+      ? 'Kotka will update the scheduled job for you automatically.'
+      : 'The current scheduled-job link will stop working until you paste the new one into cron-job.org.';
+    if (settings.cron.configured && !(await confirmDialog({ title: 'Create a new access key?', message: warning, confirmLabel: 'Create new key' }))) return;
     setBusy(true);
     setError(null);
     setResult(null);
@@ -297,17 +300,17 @@ function CronCard({ settings, cronJob, lastCronRunAt, canEdit, onRotated }) {
   };
 
   const badge = managed && job ? (job.enabled ? (job.lastStatusOk || job.lastStatus === 'Not executed yet' ? 'profit' : 'warning') : 'loss') : settings.cron.configured ? 'profit' : 'warning';
-  const badgeText = managed && job ? (job.enabled ? 'Scheduled' : 'Disabled on cron-job.org') : settings.cron.configured ? 'Token active' : 'Not configured';
+  const badgeText = managed && job ? (job.enabled ? 'Running hourly' : 'Paused on cron-job.org') : settings.cron.configured ? 'Link active' : 'Not set up';
 
   return (
     <Card>
       <CardHeader
-        title="Scheduled refresh (cron-job.org)"
-        subtitle={managed ? `Managed automatically${cronJob.jobId ? ` · job #${cronJob.jobId}` : ''}. Last run seen by Kotka: ${when(lastCronRunAt)}.` : `Last scheduled run: ${when(lastCronRunAt)}.`}
+        title="Hourly update"
+        subtitle={managed ? `Kotka keeps this set up for you. Last update: ${when(lastCronRunAt)}.` : `Last update: ${when(lastCronRunAt)}.`}
         action={<Badge tone={badge}>{badgeText}</Badge>}
       />
       <CardBody className="space-y-3 text-sm text-ink-600 dark:text-ink-300">
-        <p>Each hourly call refreshes up to {settings.cron.batchSize} of the stalest pairs and re-tests the AI models, answering immediately so it fits cron-job.org's request timeout.</p>
+        <p>Every hour, Kotka refreshes up to {settings.cron.batchSize} of the oldest research reports, pulls in news and events, sends reminders and checks the AI models still work. The schedule itself runs on cron-job.org.</p>
 
         {managed && job ? (
           <dl className="grid grid-cols-1 gap-2 text-xs sm:grid-cols-3">
@@ -325,26 +328,26 @@ function CronCard({ settings, cronJob, lastCronRunAt, canEdit, onRotated }) {
             </div>
           </dl>
         ) : null}
-        {managed && cronJob.error ? <p className="text-xs text-loss-500">Could not read the job from cron-job.org: {cronJob.error}</p> : null}
+        {managed && cronJob.error ? <p className="text-xs text-loss-500">Kotka couldn’t check the schedule on cron-job.org just now. It will try again; if this persists, check the key in Integrations.</p> : null}
         {!managed ? (
           <>
             <ol className="list-decimal space-y-1 pl-5 text-xs text-ink-500 dark:text-ink-400">
-              <li>Generate a token below and copy the URL (it is shown only once).</li>
-              <li>In cron-job.org, create a job with that URL, method GET, every 60 minutes.</li>
+              <li>Create an update link below and copy it (it’s shown only once).</li>
+              <li>In cron-job.org, add a job that opens that link every 60 minutes.</li>
             </ol>
-            <p className="text-xs text-ink-400">Add a cron-job.org API key in Integrations to have Kotka keep the job in sync automatically.</p>
+            <p className="text-xs text-ink-400">Or add your cron-job.org key in Integrations and Kotka will set this up and keep it in sync for you.</p>
           </>
         ) : null}
 
         {result ? (
           <p className="rounded-lg bg-profit-50 p-3 text-xs text-profit-700 dark:bg-profit-500/10 dark:text-profit-400">
-            Token rotated and cron-job.org job #{result.jobId} {result.created ? 'created' : 'updated'}. The next scheduled run will use the new token.
+            Done. The schedule on cron-job.org was {result.created ? 'created' : 'updated'} with the new link, so the next hourly update will use it.
           </p>
         ) : null}
         {error ? <p className="rounded-lg bg-loss-50 p-3 text-xs text-loss-600 dark:bg-loss-500/10 dark:text-loss-400">{error}</p> : null}
         {issued ? (
           <div className="rounded-lg border border-accent-500/40 bg-accent-50 p-3 dark:bg-accent-900/20">
-            <p className="mb-1 text-xs font-medium text-ink-800 dark:text-ink-100">Cron URL (copy it now; it will not be shown again)</p>
+            <p className="mb-1 text-xs font-medium text-ink-800 dark:text-ink-100">Your update link (copy it now: it won’t be shown again)</p>
             <div className="flex items-center gap-2">
               <code className="min-w-0 flex-1 break-all font-mono text-[11px] text-ink-800 dark:text-ink-100">{issued.url}</code>
               <Button size="sm" variant="secondary" icon={copied ? CheckCircle2 : Copy} onClick={copy}>{copied ? 'Copied' : 'Copy'}</Button>
@@ -353,10 +356,10 @@ function CronCard({ settings, cronJob, lastCronRunAt, canEdit, onRotated }) {
         ) : null}
         {canEdit ? (
           <Button variant="secondary" size="sm" icon={busy ? Loader2 : KeyRound} disabled={busy} onClick={rotate}>
-            {busy ? 'Rotating' : settings.cron.configured ? 'Generate new token' : 'Generate token'}
+            {busy ? 'Creating…' : settings.cron.configured ? 'Create a new link' : 'Create update link'}
           </Button>
         ) : (
-          <p className="text-xs text-ink-400">Only a Super Admin can rotate the cron token.</p>
+          <p className="text-xs text-ink-400">Only a Super Admin can change the update link.</p>
         )}
       </CardBody>
     </Card>
@@ -392,7 +395,7 @@ function AssessmentsCard({ catalog }) {
     }
   };
   const remove = async (id) => {
-    if (!window.confirm('Delete this assessment? Reports will stop citing it on their next run.')) return;
+    if (!(await confirmDialog({ title: 'Delete this assessment?', message: 'Reports will stop citing it the next time they update.', confirmLabel: 'Delete', danger: true }))) return;
     await api.delete(`/admin/research/assessments/${id}`);
     load();
   };
@@ -503,10 +506,10 @@ function RunsCard() {
                 <tr key={r.id} className="border-b border-ink-50 align-top dark:border-ink-800/60">
                   <td className="px-5 py-2 text-ink-600 dark:text-ink-300">{when(r.startedAt)}</td>
                   <td className="px-2 py-2 font-mono text-ink-800 dark:text-ink-100">{r.subject}</td>
-                  <td className="px-2 py-2 text-ink-600 dark:text-ink-300">{r.trigger}{r.user ? ` (${r.user.name})` : ''}</td>
+                  <td className="px-2 py-2 text-ink-600 dark:text-ink-300">{{ cron: 'Hourly update', user: 'Trader request', admin: 'Admin request' }[r.trigger] ?? r.trigger}{r.user ? ` (${r.user.name})` : ''}</td>
                   <td className={clsx('px-2 py-2 font-medium', r.status === 'failed' ? 'text-loss-500' : r.status === 'running' ? 'text-amber-700 dark:text-amber-400' : 'text-profit-600 dark:text-profit-400')}>
-                    {r.status}
-                    {r.error ? <p className="font-normal text-loss-500">{r.error}</p> : null}
+                    {{ done: 'Finished', failed: 'Didn’t finish', running: 'In progress' }[r.status] ?? r.status}
+                    {r.error ? <p className="font-normal text-loss-500" title={r.error}>Something went wrong while writing this report. It will be retried on the next hourly update.</p> : null}
                   </td>
                   <td className="px-2 py-2 font-mono tabular-nums text-ink-600 dark:text-ink-300">{r.durationMs ? `${(r.durationMs / 1000).toFixed(1)}s` : 'n/a'}</td>
                   <td className="px-5 py-2 text-ink-500">{r.failedSources.length ? r.failedSources.map((s) => s.name).join('; ') : 'None'}</td>
@@ -515,7 +518,7 @@ function RunsCard() {
             </tbody>
           </table>
         ) : (
-          <p className="px-5 text-sm text-ink-400">No research runs yet.</p>
+          <EmptyState size="inline" icon={Landmark} title="No reports written yet" description="Reports appear here each time Kotka researches a currency or pair, on schedule or when a trader asks." />
         )}
       </CardBody>
     </Card>

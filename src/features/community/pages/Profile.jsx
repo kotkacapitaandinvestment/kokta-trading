@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import clsx from 'clsx';
-import { Ban, Camera, Flag, MessageSquare, VolumeX } from 'lucide-react';
+import { Ban, Camera, FileText, Flag, MessageSquare, VolumeX } from 'lucide-react';
 import { api } from '../../../lib/api';
 import Button from '../../../components/ui/Button';
 import Modal from '../../../components/ui/Modal';
@@ -16,6 +16,8 @@ import ReportDialog from '../components/ReportDialog';
 import Menu from '../components/Menu';
 import { display } from '../components/inputs';
 import AchievementPost from '../../goals/AchievementPost';
+import { confirmDialog, promptDialog, toast } from '../../../lib/dialogs';
+import EmptyState from '../../../components/ui/EmptyState';
 
 // Goal Room record on a profile: discipline and consistency, never money.
 function AchievementShowcase({ data, self }) {
@@ -118,12 +120,12 @@ export default function Profile() {
       const { conversationId } = await api.post('/community/conversations/dm', { userId: p.id });
       navigate(`/app/community/messages/${conversationId}`);
     } catch (err) {
-      window.alert(err.message);
+      toast(err.message, { tone: 'error' });
     }
   };
   const relation = async (kind, on) => {
     if (on) await api.delete(`/community/users/${p.id}/${kind}`);
-    else if (window.confirm(kind === 'block' ? `Block ${p.name}? You won't see each other's content and they can't message you.` : `Mute ${p.name}? Their content will be hidden from you.`)) await api.post(`/community/users/${p.id}/${kind}`, {});
+    else if (await confirmDialog({ title: `${kind === 'block' ? 'Block' : 'Mute'} ${p.name}?`, message: kind === 'block' ? 'You won’t see each other’s posts or messages, and they can’t message you. You can undo this in Settings.' : 'Their posts and messages will be hidden from you. They won’t be told.', confirmLabel: kind === 'block' ? 'Block' : 'Mute', danger: kind === 'block' })) await api.post(`/community/users/${p.id}/${kind}`, {});
     load();
   };
   return (
@@ -162,7 +164,7 @@ export default function Profile() {
       <AchievementShowcase data={data.achievements} self={v.self} />
       <section className="overflow-hidden rounded-2xl border border-ink-100 bg-white dark:border-ink-800 dark:bg-ink-900">
         {!items ? <div className="m-5 h-24 animate-pulse rounded-xl bg-ink-50 dark:bg-ink-800" /> : null}
-        {items && !items.length ? <p className="px-6 py-12 text-center text-sm text-ink-400">Nothing here yet.</p> : null}
+        {items && !items.length ? <EmptyState size="section" icon={FileText} title={tab === 'followers' ? 'No followers yet' : tab === 'following' ? 'Not following anyone yet' : tab === 'ideas' ? 'No trade ideas yet' : 'No posts yet'} description={v.self ? (tab === 'posts' ? 'Share what you’re watching in Community and it will appear here.' : tab === 'ideas' ? 'Publish a trade idea from the Ideas tab in Community.' : 'Follow traders from their profiles to see their posts in Following.') : 'Nothing to show here yet.'} /> : null}
         <div className="divide-y divide-ink-100 dark:divide-ink-800">
           {tab === 'posts' || tab === 'ideas'
             ? items?.map((post) => <PostCard key={post.id} post={post} />)

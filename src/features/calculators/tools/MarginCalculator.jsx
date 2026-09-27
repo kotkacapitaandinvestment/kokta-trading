@@ -19,7 +19,7 @@ export default function MarginCalculator() {
       </div>
       <Card className="flex flex-col justify-center gap-3 bg-ink-50 p-6 text-center dark:bg-ink-800">
         <div>
-          <p className="text-xs font-medium uppercase tracking-wide text-ink-400">Notional value</p>
+          <p className="text-xs font-medium uppercase tracking-wide text-ink-400">Total position value</p>
           <p className="mt-1 text-2xl font-semibold text-ink-900 dark:text-ink-50">${notional.toLocaleString()}</p>
         </div>
         <div className="border-t border-ink-200 pt-3 dark:border-ink-700">

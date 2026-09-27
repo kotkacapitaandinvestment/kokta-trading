@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 import clsx from 'clsx';
 import { ArrowDownRight, ArrowUpRight, CalendarClock, Landmark, Newspaper, Radio } from 'lucide-react';
 import { price, signedPct, timeAgo } from '../util';
+import { conditionWord } from '../../../lib/plain';
 
 export function EventLine({ event, compact = false }) {
   const when = new Date(event.scheduledAt);
@@ -76,7 +77,7 @@ export function InsightLine({ insight, reason }) {
       <span className="min-w-0 flex-1">
         <span className="mb-0.5 block text-[11px] text-ink-400">{reason ?? 'Kotka research update'}</span>
         <span className="block text-sm text-ink-900 dark:text-ink-50">
-          Kotka's fundamental score for <span className="font-mono font-semibold">{insight.display}</span> moved from <span className="font-mono">{insight.from}</span> to <span className="font-mono font-semibold">{insight.to}</span> ({insight.condition})
+          Kotka's fundamental score for <span className="font-mono font-semibold">{insight.display}</span> moved from <span className="font-mono">{insight.from}</span> to <span className="font-mono font-semibold">{insight.to}</span> ({conditionWord(insight.condition).toLowerCase()})
         </span>
         <span className="text-[11px] text-ink-400">Fundamental Research · {timeAgo(insight.at)} · open the full report</span>
       </span>

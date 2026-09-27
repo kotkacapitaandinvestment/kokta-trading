@@ -1,9 +1,11 @@
+import { CalendarDays } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import clsx from 'clsx';
 import { api } from '../../../lib/api';
 import { dayLabel } from '../util';
 import { EventLine } from '../components/FeedCards';
 import PushNudge from '../../../components/PushNudge';
+import EmptyState from '../../../components/ui/EmptyState';
 
 export default function Events() {
   const [range, setRange] = useState('upcoming');
@@ -40,7 +42,7 @@ export default function Events() {
         {chip(high, () => setHigh((v) => !v), 'High importance')}
       </div>
       {!data ? <div className="m-5 h-40 animate-pulse rounded-xl bg-ink-50 dark:bg-ink-800" /> : null}
-      {data && !data.events.length ? <p className="px-6 py-16 text-center text-sm text-ink-400">No events match.</p> : null}
+      {data && !data.events.length ? <EmptyState size="section" icon={CalendarDays} title="No events match these filters" description="Try a wider range or another currency. Major US and euro-area releases appear here as they’re scheduled." /> : null}
       {groups.map((g) => (
         <section key={g.k}>
           <h2 className="sticky top-0 z-[1] border-b border-ink-100 bg-ink-50/95 px-5 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-ink-500 backdrop-blur dark:border-ink-800 dark:bg-ink-900/95">{g.label}</h2>

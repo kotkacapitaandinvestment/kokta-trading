@@ -4,7 +4,7 @@ import { prisma } from '../lib/prisma.js';
 import { requireAuth, clearSessionCookie, forgetUserAccess } from '../middleware/auth.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 import { toPublicUser, PUBLIC_USER_INCLUDE } from '../lib/serialize.js';
-import { audit } from '../lib/audit.js';
+import { audit, auditLater } from '../lib/audit.js';
 import { initialsFor } from './auth.js';
 import { setAvatar } from '../lib/media.js';
 
@@ -22,7 +22,9 @@ accountRouter.patch('/profile', asyncHandler(async (req, res) => {
   const name = typeof req.body?.name === 'string' ? req.body.name.trim().replace(/\s+/g, ' ') : '';
   if (!name) return res.status(400).json({ error: 'Enter your name.' });
   if (name.length > 80) return res.status(400).json({ error: 'Keep your name under 80 characters.' });
+  const before = await prisma.user.findUnique({ where: { id: req.userId }, select: { name: true } });
   const user = await prisma.user.update({ where: { id: req.userId }, data: { name, initials: initialsFor(name) }, include: PUBLIC_USER_INCLUDE });
+  if (before?.name !== name) auditLater(req, 'account.name_changed', { targetType: 'user', targetId: user.id, actor: user, detail: { from: before?.name, to: name } });
   res.json({ user: toPublicUser(user) });
 }));
 
@@ -33,6 +35,7 @@ accountRouter.put('/avatar', asyncHandler(async (req, res) => {
   const { error } = await setAvatar(req.userId, mediaId);
   if (error) return res.status(400).json({ error });
   const user = await prisma.user.findUnique({ where: { id: req.userId }, include: PUBLIC_USER_INCLUDE });
+  auditLater(req, mediaId === null ? 'account.photo_removed' : 'account.photo_changed', { targetType: 'user', targetId: user.id, actor: user });
   res.json({ user: toPublicUser(user) });
 }));
 
@@ -41,7 +44,7 @@ accountRouter.post('/password', asyncHandler(async (req, res) => {
   if (typeof newPassword !== 'string' || newPassword.length < 8) return res.status(400).json({ error: 'Use at least 8 characters for the new password.' });
   if (newPassword.length > 200) return res.status(400).json({ error: 'Password is too long.' });
   const { user, ok } = await checkPassword(req.userId, currentPassword);
-  if (!user) return res.status(401).json({ error: 'Not authenticated' });
+  if (!user) return res.status(401).json({ error: 'Please sign in again.' });
   if (!ok) return res.status(400).json({ error: 'Your current password is incorrect.' });
   if (await bcrypt.compare(newPassword, user.passwordHash)) return res.status(400).json({ error: 'Choose a password you have not used here before.' });
   await prisma.user.update({ where: { id: user.id }, data: { passwordHash: await bcrypt.hash(newPassword, 10) } });
@@ -52,7 +55,7 @@ accountRouter.post('/password', asyncHandler(async (req, res) => {
 // Permanent: cascades to the journal, AI history, settings and verification.
 accountRouter.delete('/', asyncHandler(async (req, res) => {
   const { user, ok } = await checkPassword(req.userId, req.body?.password);
-  if (!user) return res.status(401).json({ error: 'Not authenticated' });
+  if (!user) return res.status(401).json({ error: 'Please sign in again.' });
   if (!ok) return res.status(400).json({ error: 'Your password is incorrect.' });
   if (user.role === 'super_admin') {
     const others = await prisma.user.count({ where: { role: 'super_admin', status: 'active', id: { not: user.id } } });

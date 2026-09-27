@@ -16,13 +16,19 @@ export default function ClosePositionForm({ entry, onSubmit, onCancel }) {
 
   const set = (key) => (e) => setForm((f) => ({ ...f, [key]: e.target.value }));
 
-  const handleSubmit = (e) => {
+  const [state, setState] = useState(null);
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    onSubmit({
-      ...form,
-      pnl: parseFloat(form.pnl) || 0,
-      reward: parseFloat(form.reward) || 0,
-    });
+    setState({ saving: true });
+    try {
+      await onSubmit({
+        ...form,
+        pnl: parseFloat(form.pnl) || 0,
+        reward: parseFloat(form.reward) || 0,
+      });
+    } catch (err) {
+      setState({ error: `Couldn’t close this position. ${err.message}` });
+    }
   };
 
   return (
@@ -40,7 +46,7 @@ export default function ClosePositionForm({ entry, onSubmit, onCancel }) {
         <Input name="pnl" label="P&L ($)" type="number" step="any" value={form.pnl} onChange={set('pnl')} required />
       </div>
 
-      <Input name="reward" label="Reward (R multiple)" type="number" step="any" placeholder="e.g. 2.5" value={form.reward} onChange={set('reward')} />
+      <Input name="reward" label="Result in R" type="number" step="any" placeholder="e.g. 2.5 = made 2.5× what you risked" value={form.reward} onChange={set('reward')} />
 
       <Select name="emotionAfter" label="Emotion after trade" value={form.emotionAfter} onChange={set('emotionAfter')}>
         {emotions.map((e) => <option key={e}>{e}</option>)}
@@ -49,11 +55,12 @@ export default function ClosePositionForm({ entry, onSubmit, onCancel }) {
       <Input name="mistakes" label="Mistakes" placeholder="What did you do wrong, if anything?" value={form.mistakes} onChange={set('mistakes')} />
       <Input name="lessons" label="Lessons" placeholder="What will you do differently next time?" value={form.lessons} onChange={set('lessons')} />
 
+      {state?.error ? <p role="alert" className="text-sm text-loss-500">{state.error}</p> : null}
       <div className="flex justify-end gap-2 pt-2">
         <Button type="button" variant="ghost" onClick={onCancel}>
           Cancel
         </Button>
-        <Button type="submit">Close position</Button>
+        <Button type="submit" disabled={state?.saving}>{state?.saving ? 'Saving…' : 'Close position'}</Button>
       </div>
     </form>
   );
