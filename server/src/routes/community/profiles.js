@@ -5,6 +5,7 @@ import { validateUsername, impersonationError, suggestUsername, isStaff, loadPre
 import { unreadCount } from '../../lib/community/notify.js';
 import { str } from './context.js';
 import { setAvatar } from '../../lib/media.js';
+import { showcase } from '../../lib/goals/cards.js';
 
 export const profilesRouter = Router();
 
@@ -103,6 +104,7 @@ profilesRouter.get('/users/:username', asyncHandler(async (req, res) => {
   res.json({
     profile: { ...userCard(u, { showOnline: prefs.privacy.showOnline }), bio: u.bio, memberSince: u.createdAt, marketsFollowed: markets.map((m) => m.targetId) },
     counts: { followers, following, posts, ideas },
+    achievements: await showcase(u.id, { self: u.id === req.me.id }).catch(() => ({ visible: false })),
     viewer: {
       self,
       following: !!iFollow,

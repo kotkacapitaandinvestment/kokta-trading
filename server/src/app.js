@@ -25,6 +25,8 @@ import { realtimeRouter } from './routes/realtime.js';
 import { mediaRouter } from './routes/media.js';
 import { adminCommunityRouter } from './routes/adminCommunity.js';
 import { pushRouter } from './routes/push.js';
+import { goalsRouter } from './routes/goals.js';
+import { publicAchievementsRouter, achievementPage } from './routes/publicAchievements.js';
 import { requireAuth, requireRole } from './middleware/auth.js';
 
 export const app = express();
@@ -44,6 +46,10 @@ app.use('/api/community', communityRouter);
 app.use('/api/realtime', realtimeRouter);
 app.use('/api/media', mediaRouter);
 app.use('/api/push', pushRouter);
+app.use('/api/goals', goalsRouter);
+app.use('/api/public', publicAchievementsRouter);
+// Public achievement pages with link-preview tags (see vercel.json rewrite).
+app.get('/achievement/:slug', achievementPage);
 app.use('/api/journal', journalRouter);
 app.use('/api/checklist', checklistRouter);
 app.use('/api/settings', settingsRouter);

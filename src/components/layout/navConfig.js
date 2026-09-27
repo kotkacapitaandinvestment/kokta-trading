@@ -21,6 +21,7 @@ import {
   BadgeCheck,
   MessagesSquare,
   UsersRound,
+  Target,
 } from 'lucide-react';
 
 export const traderNav = [
@@ -28,6 +29,7 @@ export const traderNav = [
   { to: '/app/ai', label: 'Kotka AI', icon: Sparkles },
   { to: '/app/journal', label: 'Journal', icon: NotebookPen },
   { to: '/app/checklist', label: 'Checklist', icon: ListChecks },
+  { to: '/app/goals', label: 'Goal Room', icon: Target },
   { to: '/app/analytics', label: 'Analytics', icon: BarChart3 },
   { to: '/app/calculators', label: 'Calculators', icon: Calculator },
   { to: '/app/market', label: 'Market Intelligence', icon: Globe2 },

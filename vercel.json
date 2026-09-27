@@ -21,6 +21,7 @@
   ],
   "rewrites": [
     { "source": "/api/(.*)", "destination": "/api" },
+    { "source": "/achievement/:slug", "destination": "/api" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }

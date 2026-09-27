@@ -23,6 +23,7 @@ const PREF = {
   news: 'news',
   moderation: null, // always delivered
   group: 'messages',
+  achievement: 'achievements',
 };
 
 const URGENT = new Set(['message', 'group', 'mention', 'moderation']);

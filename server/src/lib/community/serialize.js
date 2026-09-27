@@ -6,7 +6,7 @@ import { instrument, instrumentView } from '../instruments.js';
 import { instrumentMarketData } from '../marketPulse.js';
 import { FLAG_LABELS } from './safety.js';
 
-export const REACTIONS = ['👍', '❤️', '🔥', '😂', '🤔', '📈', '📉'];
+export const REACTIONS = ['👍', '❤️', '🔥', '😂', '🤔', '📈', '📉', '👏', '💪'];
 const MAX_ATTACHMENTS = 6;
 const MAX_IMAGES = 4;
 

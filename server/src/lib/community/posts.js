@@ -104,6 +104,7 @@ const TYPE_FILTER = {
   all: null,
   posts: ['post', 'question', 'poll', 'market', 'news'],
   ideas: ['idea'],
+  goals: ['achievement'],
 };
 
 async function followsOf(userId) {
@@ -148,7 +149,7 @@ export async function buildFeed(me, { mode = 'foryou', type = 'all', before = nu
   const rel = await relationsFor(me.id);
   const hidden = [...rel.hidden];
   const kinds = TYPE_FILTER[type] ?? null;
-  const wantPosts = ['all', 'posts', 'ideas', 'markets'].includes(type);
+  const wantPosts = ['all', 'posts', 'ideas', 'markets', 'goals'].includes(type);
   const wantNews = ['all', 'news', 'markets'].includes(type) && mode !== 'following';
   const wantEvents = ['all', 'events', 'markets'].includes(type) && mode !== 'following';
   const wantMoves = ['all', 'markets'].includes(type) && mode !== 'following';

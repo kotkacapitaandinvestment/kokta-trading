@@ -22,6 +22,7 @@ const TIMEFRAMES = ['1m', '5m', '15m', '30m', '1H', '4H', 'Daily', 'Weekly', 'Mo
 const CHALLENGES = ['technical', 'fundamental', 'risk', 'timing', 'liquidity', 'invalidation'];
 const IDEA_STATUSES = ['open', 'updated', 'closed', 'invalidated'];
 const postLink = (p) => `/app/community/${p.kind === 'idea' ? 'ideas' : 'posts'}/${p.id}`;
+const KIND_NOUN = { idea: 'trade idea', achievement: 'achievement' };
 
 function validateIdea(input, symbol) {
   const i = input && typeof input === 'object' ? input : {};
@@ -44,7 +45,7 @@ function validateIdea(input, symbol) {
 
 postsRouter.get('/feed', asyncHandler(async (req, res) => {
   const mode = ['foryou', 'latest', 'trending', 'following'].includes(req.query.mode) ? req.query.mode : 'foryou';
-  const type = ['all', 'posts', 'ideas', 'news', 'events', 'markets'].includes(req.query.type) ? req.query.type : 'all';
+  const type = ['all', 'posts', 'ideas', 'news', 'events', 'markets', 'goals'].includes(req.query.type) ? req.query.type : 'all';
   const feed = await buildFeed(req.me, {
     mode,
     type,
@@ -210,7 +211,7 @@ postsRouter.post('/posts/:id/reactions', requireProfile, asyncHandler(async (req
   } else {
     await prisma.postReaction.create({ data: { postId: post.id, userId: req.me.id, emoji } });
     await prisma.post.update({ where: { id: post.id }, data: { reactionCount: { increment: 1 } } });
-    await notify([{ userId: post.authorId, type: 'reaction', actorId: req.me.id, title: `${req.me.name} reacted to your ${post.kind === 'idea' ? 'trade idea' : 'post'}`, body: excerpt(post.body, 80), link: postLink(post), groupKey: `react:post:${post.id}` }]);
+    await notify([{ userId: post.authorId, type: 'reaction', actorId: req.me.id, title: `${req.me.name} ${post.kind === 'achievement' ? (emoji === '👏' ? 'celebrated' : emoji === '💪' ? 'encouraged you on' : 'reacted to') : 'reacted to'} your ${KIND_NOUN[post.kind] ?? 'post'}`, body: excerpt(post.body, 80), link: postLink(post), groupKey: `react:post:${post.id}` }]);
   }
   const reactions = await prisma.postReaction.findMany({ where: { postId: post.id }, select: { emoji: true, userId: true } });
   res.json({ reactions: reactionSummary(reactions, req.me.id), reactionCount: reactions.length });

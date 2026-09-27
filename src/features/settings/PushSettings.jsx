@@ -13,6 +13,7 @@ const PUSH_KINDS = [
   ['events', 'Event reminders'],
   ['markets', 'Unusual moves in your markets'],
   ['announcements', 'Announcements from Kotka'],
+  ['achievements', 'Goal Room achievements'],
   ['follows', 'New followers'],
   ['activity', 'Reactions, comments and poll votes'],
   ['news', 'Central-bank releases'],

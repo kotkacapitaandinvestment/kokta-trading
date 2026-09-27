@@ -51,6 +51,9 @@ import Saved from '../features/community/pages/Saved';
 import NewsDetail from '../features/community/pages/NewsDetail';
 import Guidelines from '../features/community/pages/Guidelines';
 import Invite from '../features/community/pages/Invite';
+import CommunityGoals from '../features/community/pages/Goals';
+import GoalRoom from '../features/goals/GoalRoom';
+import PublicAchievement from '../features/goals/PublicAchievement';
 
 export default function AppRoutes() {
   return (
@@ -60,6 +63,7 @@ export default function AppRoutes() {
       <Route path="/signup" element={<Signup />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route path="/verify" element={<VerifyIdentity />} />
+      <Route path="/achievement/:slug" element={<PublicAchievement />} />
 
       <Route
         path="/app"
@@ -74,6 +78,7 @@ export default function AppRoutes() {
         <Route path="ai" element={<KotkaAI />} />
         <Route path="journal" element={<Journal />} />
         <Route path="checklist" element={<Checklist />} />
+        <Route path="goals" element={<GoalRoom />} />
         <Route path="analytics" element={<Analytics />} />
         <Route path="calculators" element={<Calculators />} />
         <Route path="market" element={<MarketIntelligence />} />
@@ -84,6 +89,7 @@ export default function AppRoutes() {
           <Route path="markets" element={<Markets />} />
           <Route path="markets/:symbol" element={<MarketRoom />} />
           <Route path="ideas" element={<Ideas />} />
+          <Route path="goals" element={<CommunityGoals />} />
           <Route path="ideas/:id" element={<PostPage />} />
           <Route path="posts/:id" element={<PostPage />} />
           <Route path="events" element={<CommunityEvents />} />

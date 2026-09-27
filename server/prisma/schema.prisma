@@ -62,6 +62,10 @@ model User {
   savedItems          SavedItem[]
   notifications       Notification[]
   pushSubscriptions   PushSubscription[]
+  goals               Goal[]
+  goalCheckIns        GoalCheckIn[]
+  achievements        Achievement[]
+  achievementShares   AchievementShare[]
   reports             Report[]
   relations           UserRelation[] @relation("relationOwner")
   relatedBy           UserRelation[] @relation("relationTarget")
@@ -122,6 +126,8 @@ model UserSettings {
   // Community notification switches and privacy (online status, read
   // receipts, who may message you). Missing keys use the defaults in code.
   communityPreferences Json @default("{}")
+  // Goal Room: { autoPost, showOnProfile }. Missing keys use code defaults.
+  goalRoomPreferences  Json @default("{}")
 }
 
 model Integration {
@@ -778,6 +784,89 @@ model PushSubscription {
   lastUsedAt DateTime?
 
   @@index([userId])
+}
+
+// ── Goal Room ─────────────────────────────────────────────────────────────
+// Goals a trader sets and locks, daily check-ins, earned achievements and the
+// public share links made from them. Everything is self-reported until a
+// broker integration can verify it (verification stays 'self_reported').
+
+model Goal {
+  id           String    @id @default(cuid())
+  userId       String
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  metric       String // checkins | disciplined_days | streak | learning | backtests | journal_trades | net_profit
+  title        String
+  why          String?
+  target       Float
+  periodDays   Int
+  startDate    String // YYYY-MM-DD, trader's local calendar
+  endDate      String // inclusive
+  status       String    @default("draft") // draft | active | achieved | completed | missed | abandoned
+  lockedAt     DateTime?
+  achievedAt   DateTime?
+  closedAt     DateTime?
+  verification String    @default("self_reported")
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([userId, status])
+}
+
+model GoalCheckIn {
+  id               String   @id @default(cuid())
+  userId           String
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  date             String // trader's local date, YYYY-MM-DD
+  traded           Boolean
+  planFollowed     Boolean?
+  riskRespected    Boolean?
+  noRevengeTrading Boolean?
+  learning         Int      @default(0)
+  backtests        Int      @default(0)
+  note             String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@unique([userId, date])
+}
+
+model Achievement {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type         String // goal_created | goal_locked | goal_reached | goal_completed | streak | discipline_streak | badge | checkins | learning | backtests | monthly_review | monthly_champion | most_improved
+  key          String // de-duplicates: one achievement per key per trader
+  goalId       String?
+  title        String
+  data         Json     @default("{}") // facts as they were when earned
+  earnedAt     DateTime @default(now())
+  verification String   @default("self_reported")
+  pinned       Boolean  @default(false)
+  postId       String?
+
+  @@unique([userId, key])
+  @@index([userId, earnedAt])
+  @@index([type, earnedAt])
+}
+
+// A public link to a share card. snapshot holds exactly what the public page
+// may show (the fields the trader chose), nothing more.
+model AchievementShare {
+  id        String    @id @default(cuid())
+  slug      String    @unique
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  source    String // achievement | checkin | monthly | journey
+  sourceId  String
+  fields    String[]
+  snapshot  Json
+  imageId   String?
+  views     Int       @default(0)
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId, createdAt])
 }
 
 model Report {

@@ -6,6 +6,7 @@ import { api } from '../../../lib/api';
 import { price, signedPct, timeAgo } from '../util';
 import { UserName } from './Identity';
 import IdeaBlock from './IdeaBlock';
+import AchievementPost from '../../goals/AchievementPost';
 
 export function MarketSnapshot({ snapshot, compact = false }) {
   if (!snapshot) return null;
@@ -110,6 +111,7 @@ export default function Attachments({ items, compact = false, onAnalyze }) {
         if (a.type === 'audio') return <audio key={a.mediaId} controls preload="none" src={a.url} className="h-10 w-full max-w-sm" />;
         if (a.type === 'market') return <MarketSnapshot key={`m${i}`} snapshot={a.snapshot} compact={compact} />;
         if (a.type === 'poll') return a.unavailable ? null : <PollView key={a.poll.id} poll={a.poll} />;
+        if (a.type === 'achievement') return <AchievementPost key={a.achievementId} snap={a.snapshot} />;
         if (a.unavailable) return <p key={i} className="rounded-xl border border-dashed border-ink-200 px-3 py-2 text-xs text-ink-400 dark:border-ink-700">This {a.type} is no longer available.</p>;
         if (a.type === 'post')
           return (

@@ -16,7 +16,9 @@ import { SaveButton } from './Buttons';
 import ReportDialog from './ReportDialog';
 import AiPanel, { useAiAction } from './AiPanel';
 
-const KIND_LABEL = { idea: 'Trade idea', question: 'Question', poll: 'Poll', market: 'Market post', news: 'News discussion' };
+const KIND_LABEL = { idea: 'Trade idea', question: 'Question', poll: 'Poll', market: 'Market post', news: 'News discussion', achievement: 'Achievement' };
+// Achievements get their own reactions: support, not likes.
+const CHEERS = [['👏', 'Celebrate'], ['🔥', 'React'], ['💪', 'Encourage']];
 
 export function ShareDialog({ post, onClose }) {
   const [convs, setConvs] = useState(null);
@@ -183,6 +185,17 @@ export default function PostCard({ post: initial, reason, full = false, onChange
           <Attachments items={post.attachments} onAnalyze={(mediaId) => ai.run('chart', '/community/ai/analyze-chart', { mediaId, postId: post.id })} />
 
           <div className="relative mt-3 flex flex-wrap items-center gap-1 text-ink-500 dark:text-ink-400">
+            {post.kind === 'achievement' ? (
+              CHEERS.map(([emoji, label]) => {
+                const r = post.reactions.find((x) => x.emoji === emoji);
+                return (
+                  <button key={emoji} type="button" onClick={() => react(emoji)} aria-pressed={!!r?.mine} className={clsx('inline-flex h-8 items-center gap-1.5 rounded-lg px-2 text-xs font-medium hover:bg-ink-100 dark:hover:bg-ink-800', r?.mine && 'bg-accent-500/10 text-accent-800 dark:text-accent-300')}>
+                    <span className="text-sm">{emoji}</span> <span className="hidden sm:inline">{label}</span> {r?.count ? <span className="tabular-nums">{r.count}</span> : null}
+                  </button>
+                );
+              })
+            ) : (
+            <>
             <button type="button" onClick={() => react(mine?.emoji ?? 'like')} onContextMenu={(e) => { e.preventDefault(); setShowPicker(true); }} aria-pressed={!!mine} className={clsx('inline-flex h-8 items-center gap-1.5 rounded-lg px-2 text-xs font-medium hover:bg-ink-100 dark:hover:bg-ink-800', mine && 'text-accent-700 dark:text-accent-300')}>
               {mine && mine.emoji !== 'like' ? <span className="text-sm">{mine.emoji}</span> : <ThumbsUp className="h-4 w-4" />}
               {post.reactionCount || ''}
@@ -193,6 +206,8 @@ export default function PostCard({ post: initial, reason, full = false, onChange
                 {REACTIONS.map((e) => <button key={e} type="button" onClick={() => react(e)} className="rounded-lg px-1.5 py-1 text-base hover:bg-ink-100 dark:hover:bg-ink-700" aria-label={`React ${e}`}>{e}</button>)}
               </div>
             ) : null}
+            </>
+            )}
             <Link to={link} className="inline-flex h-8 items-center gap-1.5 rounded-lg px-2 text-xs font-medium hover:bg-ink-100 dark:hover:bg-ink-800">
               <MessageCircle className="h-4 w-4" /> {post.commentCount || ''} <span className="hidden sm:inline">{post.kind === 'idea' ? 'Discuss' : post.kind === 'question' ? 'Answer' : 'Comment'}</span>
             </Link>

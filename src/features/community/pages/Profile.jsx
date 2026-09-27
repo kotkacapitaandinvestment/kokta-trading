@@ -15,6 +15,43 @@ import PostCard from '../components/PostCard';
 import ReportDialog from '../components/ReportDialog';
 import Menu from '../components/Menu';
 import { display } from '../components/inputs';
+import AchievementPost from '../../goals/AchievementPost';
+
+// Goal Room record on a profile: discipline and consistency, never money.
+function AchievementShowcase({ data, self }) {
+  if (!data?.visible) return null;
+  const s = data.stats;
+  const empty = !s.checkins && !data.pinned.length;
+  if (empty && !self) return null;
+  return (
+    <section className="rounded-2xl border border-ink-100 bg-white p-5 dark:border-ink-800 dark:bg-ink-900">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h2 className="text-sm font-semibold text-ink-900 dark:text-ink-50">Achievements</h2>
+        <span className="text-[11px] text-ink-400">Level {s.level.n} · {s.level.name} · self-reported</span>
+      </div>
+      {self && data.hiddenFromOthers ? <p className="mt-1 text-xs text-ink-400">Only you can see this. Turn on “Show achievements on my profile” in <Link to="/app/goals" className="underline">Goal Room</Link> to show it.</p> : null}
+      {empty ? (
+        <p className="mt-3 text-sm text-ink-500 dark:text-ink-400">No check-ins yet. <Link to="/app/goals" className="font-medium text-accent-700 underline-offset-2 hover:underline dark:text-accent-300">Start your Goal Room</Link> to build a record here.</p>
+      ) : (
+        <>
+          <dl className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-5">
+            {[
+              ['Goals completed', s.goalsCompleted],
+              ['Current streak', `${s.currentStreak} days`],
+              ['Longest streak', `${s.longestStreak} days`],
+              ['Badges', s.badges.length],
+              ['Monthly recognitions', s.monthlyAchievements],
+            ].map(([l, v]) => (
+              <div key={l}><dt className="text-[11px] uppercase tracking-wide text-ink-400">{l}</dt><dd className="font-mono text-lg font-semibold tabular-nums text-ink-900 dark:text-ink-50">{v}</dd></div>
+            ))}
+          </dl>
+          {s.badges.length ? <p className="mt-3 flex flex-wrap gap-1.5">{s.badges.map((b) => <span key={b} className="rounded-full border border-accent-500/40 bg-accent-500/10 px-2 py-0.5 text-[11px] font-medium text-accent-800 dark:text-accent-300">{b}</span>)}</p> : null}
+          {data.pinned.length ? <div className="mt-4 grid gap-3 md:grid-cols-3">{data.pinned.map((p) => <AchievementPost key={p.id} snap={p} />)}</div> : self ? <p className="mt-3 text-xs text-ink-400">Pin up to three achievements from your Goal Room to show them here.</p> : null}
+        </>
+      )}
+    </section>
+  );
+}
 
 function EditProfile({ profile, onClose, onSaved }) {
   const { setUser } = useAuth();
@@ -122,6 +159,7 @@ export default function Profile() {
           ))}
         </div>
       </section>
+      <AchievementShowcase data={data.achievements} self={v.self} />
       <section className="overflow-hidden rounded-2xl border border-ink-100 bg-white dark:border-ink-800 dark:bg-ink-900">
         {!items ? <div className="m-5 h-24 animate-pulse rounded-xl bg-ink-50 dark:bg-ink-800" /> : null}
         {items && !items.length ? <p className="px-6 py-12 text-center text-sm text-ink-400">Nothing here yet.</p> : null}
@@ -136,7 +174,7 @@ export default function Profile() {
               ))}
         </div>
       </section>
-      <p className="text-[11px] text-ink-400">Follower counts show audience size, not trading skill. Kotka does not rate or verify traders' results.</p>
+      <p className="text-[11px] text-ink-400">Follower counts show audience size, not trading skill. Achievements are self-reported; Kotka does not rate or verify traders' results.</p>
       {editing ? <EditProfile profile={{ ...p }} onClose={() => setEditing(false)} onSaved={(u) => { setEditing(false); refresh(); navigate(`/app/community/u/${u}`); load(); }} /> : null}
       {report ? <ReportDialog target={{ type: 'user', id: p.id, label: p.name }} onClose={() => setReport(false)} /> : null}
     </div>

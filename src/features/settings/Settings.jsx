@@ -310,6 +310,7 @@ function DeleteAccountSection() {
 
 const COMMUNITY_NOTIFY = [
   ['messages', 'Direct and group messages'],
+  ['achievements', 'Goal Room achievements and monthly reviews'],
   ['mentions', 'Mentions'],
   ['replies', 'Replies to you'],
   ['follows', 'New followers'],

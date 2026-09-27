@@ -57,4 +57,4 @@ export const blobToDataUrl = (blob) =>
 
 export const supportsVoice = () => typeof window !== 'undefined' && !!window.MediaRecorder && !!navigator.mediaDevices?.getUserMedia;
 
-export const REACTIONS = ['👍', '❤️', '🔥', '😂', '🤔', '📈', '📉'];
+export const REACTIONS = ['👍', '❤️', '🔥', '😂', '🤔', '📈', '📉', '👏', '💪'];

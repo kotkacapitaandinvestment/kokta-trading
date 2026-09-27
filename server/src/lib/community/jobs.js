@@ -84,6 +84,7 @@ export async function runCommunityJobs() {
   await step('eventReminders', eventReminders);
   await step('marketMoves', marketMoveAlerts);
   await step('officialNews', officialNewsAlerts);
+  await step('goals', async () => (await import('../goals/social.js')).runGoalJobs());
   await step('prune', async () => (await prisma.realtimeEvent.deleteMany({ where: { createdAt: { lt: new Date(Date.now() - 6 * HOUR) } } })).count);
   return out;
 }

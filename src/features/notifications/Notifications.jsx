@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import clsx from 'clsx';
-import { AtSign, Bell, CalendarClock, CheckCheck, CornerDownRight, Heart, Landmark, LineChart, ListChecks, Megaphone, MessageSquare, NotebookPen, ShieldAlert, ShieldCheck, Sparkles, TrendingUp, UserPlus, Users } from 'lucide-react';
+import { AtSign, Bell, CalendarClock, CheckCheck, CornerDownRight, Heart, Landmark, LineChart, ListChecks, Megaphone, MessageSquare, NotebookPen, ShieldAlert, ShieldCheck, Sparkles, TrendingUp, Trophy, UserPlus, Users } from 'lucide-react';
 import PageHeader from '../../components/ui/PageHeader';
 import PushNudge from '../../components/PushNudge';
 import Card from '../../components/ui/Card';
@@ -16,7 +16,7 @@ import { Avatar } from '../community/components/Identity';
 const ICON = {
   checklist: ListChecks, journal: NotebookPen, risk: ShieldAlert, announcement: Megaphone,
   message: MessageSquare, mention: AtSign, reply: CornerDownRight, follow: UserPlus, reaction: Heart, comment: MessageSquare,
-  challenge: ShieldCheck, idea: TrendingUp, event: CalendarClock, market: LineChart, news: Landmark, moderation: ShieldAlert, group: Users,
+  challenge: ShieldCheck, idea: TrendingUp, event: CalendarClock, market: LineChart, news: Landmark, moderation: ShieldAlert, group: Users, achievement: Trophy,
 };
 const GROUPS = [
   ['all', 'All'],
@@ -26,7 +26,7 @@ const GROUPS = [
   ['markets', 'Markets'],
   ['reminders', 'Reminders'],
 ];
-const GROUP_OF = { message: 'messages', group: 'messages', mention: 'community', reply: 'community', follow: 'community', reaction: 'community', comment: 'community', challenge: 'community', idea: 'community', moderation: 'community', event: 'markets', market: 'markets', news: 'markets', checklist: 'reminders', journal: 'reminders', risk: 'reminders', announcement: 'reminders' };
+const GROUP_OF = { message: 'messages', group: 'messages', mention: 'community', reply: 'community', follow: 'community', reaction: 'community', comment: 'community', challenge: 'community', idea: 'community', moderation: 'community', event: 'markets', market: 'markets', news: 'markets', checklist: 'reminders', journal: 'reminders', risk: 'reminders', announcement: 'reminders', achievement: 'community' };
 
 function ago(at) {
   if (!/^\d{4}-\d{2}-\d{2}T/.test(at ?? '')) return at;

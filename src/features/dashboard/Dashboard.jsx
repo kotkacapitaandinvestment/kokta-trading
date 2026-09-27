@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import clsx from 'clsx';
 import InfoTip from '../../components/ui/InfoTip';
-import { ArrowDownRight, ArrowRight, ArrowUpRight, Brain, CalendarDays, ListChecks, Megaphone, NotebookPen, Sparkles } from 'lucide-react';
+import { ArrowDownRight, ArrowRight, ArrowUpRight, Brain, CalendarDays, CheckCircle2, Flame, ListChecks, Megaphone, NotebookPen, Sparkles, Target } from 'lucide-react';
+import { localToday } from '../goals/card';
 import Card from '../../components/ui/Card';
 import Button from '../../components/ui/Button';
 import { useAuth } from '../../context/AuthContext';
@@ -190,6 +191,33 @@ function PulseList({ pulse }) {
   );
 }
 
+// Goal Room at a glance: today's check-in and running goals.
+function GoalRoomStrip({ summary }) {
+  if (!summary) return null;
+  return (
+    <Card className="flex flex-wrap items-center gap-x-6 gap-y-3 px-5 py-4">
+      <div className="flex items-center gap-3">
+        <span className="flex h-10 w-10 items-center justify-center rounded-full bg-accent-500/15 text-accent-700 dark:text-accent-300"><Flame className="h-5 w-5" /></span>
+        <div>
+          <p className="text-sm font-semibold text-ink-900 dark:text-ink-50">{summary.currentStreak ? `${summary.currentStreak}-day streak` : 'Start your streak'}</p>
+          <p className="text-xs text-ink-400">Goal Room · Level {summary.level.n} {summary.level.name}{summary.adherence30 != null ? ` · ${summary.adherence30}% discipline` : ''}</p>
+        </div>
+      </div>
+      <ul className="flex min-w-0 flex-1 flex-wrap gap-x-5 gap-y-2">
+        {summary.goals.map((g) => (
+          <li key={g.id} className="min-w-[10rem] flex-1">
+            <p className="flex justify-between gap-2 text-xs"><span className="truncate text-ink-600 dark:text-ink-300">{g.title}</span><span className="font-mono tabular-nums text-ink-400">{g.pct}%</span></p>
+            <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-ink-100 dark:bg-ink-800"><div className={clsx('h-full rounded-full', g.pct >= 100 ? 'bg-accent-500' : 'bg-ink-900 dark:bg-accent-600')} style={{ width: `${g.pct}%` }} /></div>
+          </li>
+        ))}
+      </ul>
+      <Button as={Link} to="/app/goals" size="sm" variant={summary.checkedInToday ? 'secondary' : 'primary'} icon={summary.checkedInToday ? Target : CheckCircle2}>
+        {summary.checkedInToday ? 'Goal Room' : 'Check in today'}
+      </Button>
+    </Card>
+  );
+}
+
 export default function Dashboard() {
   const { user } = useAuth();
   const today = new Date().toISOString().slice(0, 10);
@@ -198,6 +226,7 @@ export default function Dashboard() {
   const [pulse] = useGet('/market/pulse');
   const [calendar] = useGet('/market/calendar?days=7');
   const [ann] = useGet('/me/announcements');
+  const [goalSummary] = useGet(`/goals/summary?today=${localToday()}`);
 
   const checklistDone = Object.values(checklist?.items ?? {}).filter(Boolean).length;
   const weekNet = data?.weeklyPerformance?.reduce((s, d) => s + d.pnl, 0) ?? 0;
@@ -215,6 +244,8 @@ export default function Dashboard() {
           <SideNotice announcement={announcement} releases={releases} />
         </div>
       </div>
+
+      <GoalRoomStrip summary={goalSummary} />
 
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-12">
         <Card className="p-6 xl:col-span-8">

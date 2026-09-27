@@ -9,6 +9,7 @@ const LIMITS = {
   media: { windowMs: 60 * 60 * 1000, max: 60, count: (userId, since) => prisma.media.count({ where: { ownerId: userId, createdAt: { gte: since } } }) },
   report: { windowMs: 24 * 60 * 60 * 1000, max: 30, count: (userId, since) => prisma.report.count({ where: { reporterId: userId, createdAt: { gte: since } } }) },
   conversation: { windowMs: 60 * 60 * 1000, max: 30, count: (userId, since) => prisma.conversation.count({ where: { createdById: userId, createdAt: { gte: since } } }) },
+  share: { windowMs: 24 * 60 * 60 * 1000, max: 40, count: (userId, since) => prisma.achievementShare.count({ where: { userId, createdAt: { gte: since } } }) },
 };
 
 // Returns an error message when over the limit, else null.

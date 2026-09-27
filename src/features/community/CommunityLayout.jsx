@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import clsx from 'clsx';
-import { Bookmark, BookOpen, Flame, Globe2, Lightbulb, CalendarDays, MessagesSquare, Radio, Search, Sparkles, Users } from 'lucide-react';
+import { Bookmark, BookOpen, Flame, Globe2, Lightbulb, CalendarDays, MessagesSquare, Radio, Search, Sparkles, Trophy, Users } from 'lucide-react';
 import { api } from '../../lib/api';
 import { useCommunity } from './CommunityContext';
 import { useRealtimeStatus } from './realtime';
@@ -11,6 +11,7 @@ const NAV = [
   { to: '/app/community', label: 'For You', icon: Sparkles, end: true },
   { to: '/app/community/markets', label: 'Markets', icon: Globe2 },
   { to: '/app/community/ideas', label: 'Ideas', icon: Lightbulb },
+  { to: '/app/community/goals', label: 'Goals', icon: Trophy },
   { to: '/app/community/events', label: 'Events', icon: CalendarDays },
   { to: '/app/community/following', label: 'Following', icon: Users },
   { to: '/app/community/messages', label: 'Messages', icon: MessagesSquare, badge: 'messages' },
