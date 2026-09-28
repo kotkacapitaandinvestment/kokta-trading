@@ -94,7 +94,7 @@ Posts, comments, messages, reports and uploads have their own content-based limi
 ## Browser protections
 
 - **Content Security Policy** (`vercel.json`, applied to the whole site):
-  - scripts only from Kotka's own origin;
+  - scripts only from Kotka's own origin, plus Cloudflare's Web Analytics beacon (Cloudflare sits in front of the site and injects it);
   - no inline scripts, plugins, frames or embedding (`frame-ancestors 'none'`, plus `X-Frame-Options: DENY`);
   - form posts and base URLs only to Kotka.
 
