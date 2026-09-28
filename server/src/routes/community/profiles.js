@@ -7,6 +7,7 @@ import { str } from './context.js';
 import { setAvatar } from '../../lib/media.js';
 import { auditLater } from '../../lib/audit.js';
 import { showcase } from '../../lib/goals/cards.js';
+import { limit } from '../../lib/rateLimit.js';
 
 export const profilesRouter = Router();
 
@@ -32,7 +33,7 @@ profilesRouter.get('/me', asyncHandler(async (req, res) => {
   });
 }));
 
-profilesRouter.put('/me/profile', asyncHandler(async (req, res) => {
+profilesRouter.put('/me/profile', limit('profile'), asyncHandler(async (req, res) => {
   const staff = isStaff(req.me);
   const data = {};
   if (req.body?.username !== undefined) {
@@ -71,7 +72,7 @@ profilesRouter.put('/me/profile', asyncHandler(async (req, res) => {
   res.json({ profile: { ...userCard(user), bio: user.bio } });
 }));
 
-profilesRouter.put('/me/preferences', asyncHandler(async (req, res) => {
+profilesRouter.put('/me/preferences', limit('profile'), asyncHandler(async (req, res) => {
   const current = await loadPrefs(req.me.id);
   const notify = { ...current.notify };
   for (const k of Object.keys(current.notify)) if (typeof req.body?.notify?.[k] === 'boolean') notify[k] = req.body.notify[k];

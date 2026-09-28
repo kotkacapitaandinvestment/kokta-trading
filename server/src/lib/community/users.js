@@ -6,6 +6,15 @@ import { mediaUrl, avatarUrl } from '../media.js';
 export const STAFF_ROLES = ['moderator', 'admin', 'super_admin'];
 export const isStaff = (u) => !!u && STAFF_ROLES.includes(u.role);
 
+// Staff may moderate only people ranked below them; super admins anyone.
+const RANK = { trader: 0, premium: 0, moderator: 1, admin: 2, super_admin: 3 };
+export async function staffOutranks(actor, userId) {
+  if (!isStaff(actor)) return false;
+  if (actor.role === 'super_admin' || !userId) return true;
+  const t = await prisma.user.findUnique({ where: { id: userId }, select: { role: true } });
+  return !t || (RANK[t.role] ?? 0) < (RANK[actor.role] ?? 0);
+}
+
 // Fields every public user card needs.
 export const USER_CARD_SELECT = { id: true, name: true, username: true, headline: true, initials: true, role: true, avatarId: true, lastSeenAt: true, status: true };
 

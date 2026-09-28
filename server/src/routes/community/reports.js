@@ -4,18 +4,27 @@ import { asyncHandler } from '../../lib/asyncHandler.js';
 import { auditLater } from '../../lib/audit.js';
 import { overLimit } from '../../lib/community/throttle.js';
 import { str } from './context.js';
+import { conversationAccess } from '../../lib/community/access.js';
 
 export const reportsRouter = Router();
 
 export const REPORT_CATEGORIES = ['spam', 'scam', 'harassment', 'hate', 'impersonation', 'fraud', 'manipulation', 'illegal', 'other'];
 
-async function resolveTarget(type, id) {
+// Only things the reporter can actually see can be reported.
+async function resolveTarget(type, id, me) {
   switch (type) {
     case 'post': return prisma.post.findUnique({ where: { id }, select: { id: true, authorId: true } }).then((r) => r && { userId: r.authorId });
     case 'comment': return prisma.comment.findUnique({ where: { id }, select: { authorId: true } }).then((r) => r && { userId: r.authorId });
-    case 'message': return prisma.message.findUnique({ where: { id }, select: { authorId: true } }).then((r) => r && { userId: r.authorId });
+    case 'message': {
+      const m = await prisma.message.findUnique({ where: { id }, select: { authorId: true, conversation: true } });
+      return m && (await conversationAccess(m.conversation, me)).canRead ? { userId: m.authorId } : null;
+    }
     case 'user': return prisma.user.findUnique({ where: { id }, select: { id: true } }).then((r) => r && { userId: r.id });
-    case 'conversation': return prisma.conversation.findUnique({ where: { id }, select: { createdById: true } }).then((r) => r && { userId: r.createdById });
+    case 'conversation': {
+      const c = await prisma.conversation.findUnique({ where: { id } });
+      const listed = c?.kind === 'community' && ['public', 'private'].includes(c.visibility);
+      return c && (listed || (await conversationAccess(c, me)).canRead) ? { userId: c.createdById } : null;
+    }
     default: return null;
   }
 }
@@ -25,7 +34,7 @@ reportsRouter.post('/reports', asyncHandler(async (req, res) => {
   const targetId = String(req.body?.targetId ?? '');
   const category = String(req.body?.category ?? '');
   if (!REPORT_CATEGORIES.includes(category)) return res.status(400).json({ error: 'Choose what’s wrong with it.' });
-  const target = await resolveTarget(targetType, targetId);
+  const target = await resolveTarget(targetType, targetId, req.me);
   if (!target) return res.status(404).json({ error: 'We couldn’t find that. It may already have been removed.' });
   if (target.userId === req.me.id) return res.status(400).json({ error: "You can't report yourself." });
   const limited = await overLimit('report', req.me.id);

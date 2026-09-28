@@ -23,11 +23,11 @@ adminStatsRouter.get('/ai-usage', asyncHandler(async (req, res) => {
 
   const totalRequests = logs30d.length;
   const avgLatencyMs = totalRequests ? Math.round(logs30d.reduce((s, l) => s + l.latencyMs, 0) / totalRequests) : 0;
-  const liveCount = logs30d.filter((l) => l.source === 'nvidia').length;
+  const liveCount = logs30d.filter((l) => l.source === 'nvidia' || l.source === 'cached').length;
 
   const byModel = {};
   for (const l of logs30d) {
-    const key = `${l.source === 'nvidia' ? l.model : 'Not answered (Kotka AI was unavailable)'}`;
+    const key = l.source === 'nvidia' ? l.model : l.source === 'cached' ? 'Answered from a recent result' : l.source === 'pending' ? 'In progress' : 'Not answered (Kotka AI was unavailable)';
     if (!byModel[key]) byModel[key] = { model: key, requests: 0, totalLatency: 0 };
     byModel[key].requests += 1;
     byModel[key].totalLatency += l.latencyMs;

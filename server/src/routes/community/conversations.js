@@ -14,6 +14,7 @@ import { resolveMentions } from '../../lib/community/mentions.js';
 import { mediaUrl } from '../../lib/media.js';
 import { instrument } from '../../lib/instruments.js';
 import { audit } from '../../lib/audit.js';
+import { limit } from '../../lib/rateLimit.js';
 import { requireProfile, clampInt, str } from './context.js';
 
 export const conversationsRouter = Router();
@@ -141,7 +142,7 @@ conversationsRouter.get('/conversations', asyncHandler(async (req, res) => {
 
 // ── create ─────────────────────────────────────────────────────────────────
 
-conversationsRouter.post('/conversations/dm', requireProfile, asyncHandler(async (req, res) => {
+conversationsRouter.post('/conversations/dm', requireProfile, limit('conversationWrite'), asyncHandler(async (req, res) => {
   const targetId = String(req.body?.userId ?? '');
   const { target, error } = await canDirectMessage(req.me, targetId);
   if (error) return res.status(403).json({ error });
@@ -271,13 +272,16 @@ conversationsRouter.get('/conversations/:id', asyncHandler(async (req, res) => {
 }));
 
 conversationsRouter.get('/conversations/:id/image', asyncHandler(async (req, res) => {
-  const c = await prisma.conversation.findUnique({ where: { id: req.params.id }, select: { imageId: true } });
-  const m = c?.imageId ? await prisma.media.findUnique({ where: { id: c.imageId }, select: { id: true, token: true } }) : null;
+  const c = await prisma.conversation.findUnique({ where: { id: req.params.id } });
+  // Listed communities show their picture in the directory; other chats only to people who can read them.
+  const listed = c?.kind === 'community' && ['public', 'private'].includes(c.visibility);
+  if (!c || (!listed && !(await conversationAccess(c, req.me)).canRead)) return res.status(404).end();
+  const m = c.imageId ? await prisma.media.findUnique({ where: { id: c.imageId }, select: { id: true, token: true } }) : null;
   if (!m) return res.status(404).end();
   res.redirect(302, mediaUrl(m));
 }));
 
-conversationsRouter.patch('/conversations/:id', asyncHandler(async (req, res) => {
+conversationsRouter.patch('/conversations/:id', limit('conversationWrite'), asyncHandler(async (req, res) => {
   const a = await conversationAccess(req.params.id, req.me);
   if (!a.conv || !a.canManage || a.conv.kind === 'dm') return res.status(403).json({ error: 'Only admins can change these settings.' });
   const data = {};
@@ -316,7 +320,7 @@ conversationsRouter.patch('/conversations/:id/me', asyncHandler(async (req, res)
 
 // ── membership ─────────────────────────────────────────────────────────────
 
-conversationsRouter.post('/conversations/:id/join', requireProfile, asyncHandler(async (req, res) => {
+conversationsRouter.post('/conversations/:id/join', requireProfile, limit('join'), asyncHandler(async (req, res) => {
   const c = await prisma.conversation.findUnique({ where: { id: req.params.id } });
   if (!c || c.archivedAt) return res.status(404).json({ error: 'We couldn’t find that. It may have been removed.' });
   if (c.kind === 'dm' || c.kind === 'group' || (c.kind === 'community' && c.visibility === 'invite_only')) return res.status(403).json({ error: 'You need an invite to join this one.' });
@@ -342,7 +346,7 @@ conversationsRouter.get('/invite/:code', asyncHandler(async (req, res) => {
   res.json({ conversation: { id: c.id, kind: c.kind, name: c.name, description: c.description, memberCount: count, joinPolicy: c.joinPolicy } });
 }));
 
-conversationsRouter.post('/invite/:code/join', requireProfile, asyncHandler(async (req, res) => {
+conversationsRouter.post('/invite/:code/join', requireProfile, limit('join'), asyncHandler(async (req, res) => {
   const c = await prisma.conversation.findUnique({ where: { inviteCode: String(req.params.code) } });
   if (!c || c.archivedAt) return res.status(404).json({ error: 'This invite link has expired. Ask an admin of the group for a new one.' });
   const existing = await prisma.conversationMember.findUnique({ where: { conversationId_userId: { conversationId: c.id, userId: req.me.id } } });
@@ -362,14 +366,14 @@ conversationsRouter.post('/invite/:code/join', requireProfile, asyncHandler(asyn
   res.json({ conversationId: c.id, status });
 }));
 
-conversationsRouter.post('/conversations/:id/invite', asyncHandler(async (req, res) => {
+conversationsRouter.post('/conversations/:id/invite', limit('conversationWrite'), asyncHandler(async (req, res) => {
   const a = await conversationAccess(req.params.id, req.me);
   if (!a.conv || !a.canManage || a.conv.kind === 'dm') return res.status(403).json({ error: 'Only admins can manage invite links.' });
   const conv = await prisma.conversation.update({ where: { id: a.conv.id }, data: { inviteCode: crypto.randomBytes(9).toString('base64url') } });
   res.json({ inviteCode: conv.inviteCode });
 }));
 
-conversationsRouter.post('/conversations/:id/members', requireProfile, asyncHandler(async (req, res) => {
+conversationsRouter.post('/conversations/:id/members', requireProfile, limit('conversationWrite'), asyncHandler(async (req, res) => {
   const a = await conversationAccess(req.params.id, req.me);
   if (!a.conv || !a.canManage || !['group', 'community'].includes(a.conv.kind)) return res.status(403).json({ error: 'Only admins can add members.' });
   const ids = [...new Set((Array.isArray(req.body?.userIds) ? req.body.userIds : []).map(String))].slice(0, 50);
@@ -595,18 +599,16 @@ conversationsRouter.delete('/messages/:id', asyncHandler(async (req, res) => {
   res.json({ message: live });
 }));
 
-conversationsRouter.post('/messages/:id/reactions', requireProfile, asyncHandler(async (req, res) => {
+conversationsRouter.post('/messages/:id/reactions', requireProfile, limit('reaction'), asyncHandler(async (req, res) => {
   const emoji = String(req.body?.emoji ?? '');
   if (!REACTIONS.includes(emoji)) return res.status(400).json({ error: 'That reaction isn’t available.' });
   const m = await ownMessage(req, res);
   if (!m) return;
   const a = await conversationAccess(m.conversation, req.me);
   if (!a.canRead || m.deletedAt || m.removedById) return res.status(403).json({ error: 'Join this chat to react to messages.' });
-  const key = { messageId_userId_emoji: { messageId: m.id, userId: req.me.id, emoji } };
-  const existing = await prisma.messageReaction.findUnique({ where: key });
-  if (existing) await prisma.messageReaction.delete({ where: key });
-  else {
-    await prisma.messageReaction.create({ data: { messageId: m.id, userId: req.me.id, emoji } });
+  const removed = await prisma.messageReaction.deleteMany({ where: { messageId: m.id, userId: req.me.id, emoji } });
+  if (!removed.count) {
+    await prisma.messageReaction.createMany({ data: [{ messageId: m.id, userId: req.me.id, emoji }], skipDuplicates: true });
     if (m.authorId && m.authorId !== req.me.id && ['dm', 'group'].includes(m.conversation.kind)) {
       await notify([{ userId: m.authorId, type: 'reaction', actorId: req.me.id, title: `${req.me.name} reacted ${emoji} to your message`, body: excerpt(m.body, 80), link: `/app/community/messages/${m.conversationId}?m=${m.id}`, groupKey: `react:msg:${m.id}` }]);
     }
@@ -633,7 +635,7 @@ conversationsRouter.post('/messages/:id/pin', asyncHandler(async (req, res) => {
 
 conversationsRouter.post('/conversations/:id/read', asyncHandler(async (req, res) => {
   const member = await prisma.conversationMember.findUnique({ where: { conversationId_userId: { conversationId: req.params.id, userId: req.me.id } }, include: { conversation: true } });
-  if (!member) return res.json({ ok: true });
+  if (!member || member.status !== 'active') return res.json({ ok: true });
   const at = new Date();
   await prisma.conversationMember.update({ where: { id: member.id }, data: { lastReadAt: at, lastDeliveredAt: at } });
   await prisma.notification.updateMany({ where: { userId: req.me.id, groupKey: `msg:${member.conversationId}`, readAt: null }, data: { readAt: at } });
@@ -645,7 +647,7 @@ conversationsRouter.post('/conversations/:id/read', asyncHandler(async (req, res
 
 conversationsRouter.post('/conversations/:id/delivered', asyncHandler(async (req, res) => {
   const member = await prisma.conversationMember.findUnique({ where: { conversationId_userId: { conversationId: req.params.id, userId: req.me.id } }, include: { conversation: true } });
-  if (!member || !['dm', 'group'].includes(member.conversation.kind)) return res.json({ ok: true });
+  if (!member || member.status !== 'active' || !['dm', 'group'].includes(member.conversation.kind)) return res.json({ ok: true });
   const at = new Date();
   await prisma.conversationMember.update({ where: { id: member.id }, data: { lastDeliveredAt: at } });
   await publish((await conversationChannels(member.conversation)).map((channel) => ({ channel, type: 'delivered', payload: { conversationId: member.conversationId, userId: req.me.id, at } })));
@@ -656,7 +658,8 @@ conversationsRouter.post('/conversations/:id/typing', asyncHandler(async (req, r
   const a = await conversationAccess(req.params.id, req.me);
   if (!a.conv || !a.canSend || !req.me.username) return res.json({ ok: false });
   const channels = (await conversationChannels(a.conv)).filter((c) => c !== `user:${req.me.id}`);
-  await publish(channels.map((channel) => ({ channel, type: 'typing', payload: { conversationId: a.conv.id, threadRootId: req.body?.threadRootId ?? null, user: { id: req.me.id, name: req.me.name, username: req.me.username } } })));
+  const threadRootId = typeof req.body?.threadRootId === 'string' ? req.body.threadRootId.slice(0, 40) : null;
+  await publish(channels.map((channel) => ({ channel, type: 'typing', payload: { conversationId: a.conv.id, threadRootId, user: { id: req.me.id, name: req.me.name, username: req.me.username } } })));
   res.json({ ok: true });
 }));
 

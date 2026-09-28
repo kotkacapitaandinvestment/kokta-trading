@@ -9,6 +9,7 @@ import { eventView } from '../lib/community/posts.js';
 import { notify } from '../lib/community/notify.js';
 import { publish } from '../lib/realtime.js';
 import { conversationChannels } from '../lib/community/access.js';
+import { revokeUserSessions } from '../lib/sessions.js';
 
 // Moderators, admins and super admins. Suspending or banning an account is
 // admin-only; moderators can remove content and pause posting.
@@ -17,6 +18,13 @@ adminCommunityRouter.use(requireAuth, requireRole('moderator', 'admin', 'super_a
 
 const DAY = 86400e3;
 const isAdmin = (u) => ['admin', 'super_admin'].includes(u.role);
+// Staff can only act on people ranked below them (super admins on anyone).
+const RANK = { trader: 0, premium: 0, moderator: 1, admin: 2, super_admin: 3 };
+async function outranks(actor, targetUserId) {
+  if (!targetUserId || actor.role === 'super_admin') return true;
+  const t = await prisma.user.findUnique({ where: { id: targetUserId }, select: { role: true } });
+  return !t || (RANK[t.role] ?? 0) < (RANK[actor.role] ?? 0);
+}
 const str = (v, n) => (typeof v === 'string' ? v.trim().slice(0, n) : '');
 
 // ── overview & analytics ───────────────────────────────────────────────────
@@ -111,6 +119,17 @@ adminCommunityRouter.get('/reports', asyncHandler(async (req, res) => {
   });
 }));
 
+// Who wrote a piece of content (for rank checks).
+async function contentOwner(type, id) {
+  if (!id) return null;
+  if (type === 'post') return (await prisma.post.findUnique({ where: { id }, select: { authorId: true } }))?.authorId ?? null;
+  if (type === 'comment') return (await prisma.comment.findUnique({ where: { id }, select: { authorId: true } }))?.authorId ?? null;
+  if (type === 'message') return (await prisma.message.findUnique({ where: { id }, select: { authorId: true } }))?.authorId ?? null;
+  if (type === 'conversation') return (await prisma.conversation.findUnique({ where: { id }, select: { createdById: true } }))?.createdById ?? null;
+  if (type === 'user') return id;
+  return null;
+}
+
 async function removeContent(req, type, id) {
   if (type === 'post') {
     const p = await prisma.post.update({ where: { id }, data: { removedAt: new Date(), removedById: req.user.id } });
@@ -153,6 +172,12 @@ adminCommunityRouter.post('/actions', asyncHandler(async (req, res) => {
   const targetId = String(req.body?.targetId ?? report?.targetId ?? '');
   let targetUserId = req.body?.userId ? String(req.body.userId) : report?.targetUserId ?? null;
 
+  // Moderators can't pause, remove or restore content of fellow staff.
+  if (['remove', 'restore', 'mute', 'unmute'].includes(action)) {
+    const owner = targetUserId ?? (await contentOwner(targetType, targetId));
+    if (!(await outranks(req.user, owner))) return res.status(403).json({ error: 'You can’t moderate an account with the same or a higher role.' });
+  }
+
   switch (action) {
     case 'remove':
       targetUserId = (await removeContent(req, targetType, targetId)) ?? targetUserId;
@@ -177,6 +202,7 @@ adminCommunityRouter.post('/actions', asyncHandler(async (req, res) => {
       const target = await prisma.user.findUnique({ where: { id: targetUserId }, select: { role: true } });
       if (['admin', 'super_admin'].includes(target?.role) && req.user.role !== 'super_admin') return res.status(403).json({ error: 'Only a super admin can act on other admin accounts.' });
       await prisma.user.update({ where: { id: targetUserId }, data: { status: action === 'reinstate' ? 'active' : action === 'ban' ? 'banned' : 'suspended' } });
+      if (action !== 'reinstate') await revokeUserSessions(targetUserId);
       forgetUserAccess(targetUserId);
       break;
     }

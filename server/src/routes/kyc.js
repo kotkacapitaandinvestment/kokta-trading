@@ -5,6 +5,7 @@ import { asyncHandler } from '../lib/asyncHandler.js';
 import { loadAppSettings } from '../lib/appSettings.js';
 import { validateKycDetails, sealDetails, kycView } from '../lib/kyc.js';
 import { audit } from '../lib/audit.js';
+import { limit } from '../lib/rateLimit.js';
 
 export const kycRouter = Router();
 kycRouter.use(requireAuth);
@@ -19,7 +20,7 @@ kycRouter.get('/', asyncHandler(async (req, res) => {
 
 // Submit or correct details. Approved profiles are locked; changing verified
 // details goes through support so a reviewed identity can't be swapped.
-kycRouter.post('/', asyncHandler(async (req, res) => {
+kycRouter.post('/', limit('kyc'), asyncHandler(async (req, res) => {
   const existing = await prisma.kycProfile.findUnique({ where: { userId: req.userId } });
   if (existing?.status === 'approved') {
     return res.status(409).json({ error: 'Your identity is already verified. Contact support to change verified details.' });

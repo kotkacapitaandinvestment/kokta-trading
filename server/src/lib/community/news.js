@@ -86,10 +86,19 @@ export function cleanSummary(summary, headline) {
   return text.slice(0, 1200);
 }
 
+const isWebUrl = (u) => {
+  try {
+    return ['http:', 'https:'].includes(new URL(String(u)).protocol);
+  } catch {
+    return false;
+  }
+};
+
 async function fetchFinnhub(key) {
   const out = [];
   for (const category of ['forex', 'general', 'crypto']) {
-    const list = await fetchJson(`https://finnhub.io/api/v1/news?category=${category}&token=${key}`, { timeoutMs: 15000 }).catch(() => []);
+    // Key in a header, not the URL, so it never lands in request logs.
+    const list = await fetchJson(`https://finnhub.io/api/v1/news?category=${category}`, { timeoutMs: 15000, headers: { 'X-Finnhub-Token': key } }).catch(() => []);
     for (const n of Array.isArray(list) ? list : []) {
       if (!n.headline || !n.url || !n.datetime) continue;
       out.push({ source: 'finnhub', provider: n.source || 'News wire', externalId: `finnhub:${n.id}`, headline: n.headline.slice(0, 300), summary: cleanSummary(n.summary, n.headline), url: n.url, imageUrl: n.image && /^https:\/\//.test(n.image) ? n.image : null, publishedAt: new Date(n.datetime * 1000), official: false, category });
@@ -126,6 +135,9 @@ export async function ingestNews() {
   const rows = [];
   let crypto = 0;
   for (const it of items.sort((a, b) => b.publishedAt - a.publishedAt)) {
+    // Links from outside feeds are shown to traders: web links only (never javascript: or data:).
+    if (!isWebUrl(it.url)) continue;
+    if (it.imageUrl && !/^https:\/\//i.test(it.imageUrl)) it.imageUrl = null;
     const tags = tagNews(`${it.headline} ${it.summary ?? ''}`, { defaultCurrencies: it.defaultCurrencies ?? [] });
     const headlineAssets = Object.entries(ASSET_RX).filter(([, r]) => r.test(it.headline)).map(([s]) => s);
     if (!it.official) {

@@ -8,7 +8,9 @@
     "start": "node src/index.js",
     "prisma:migrate": "prisma migrate dev",
     "prisma:generate": "prisma generate",
-    "prisma:studio": "prisma studio"
+    "prisma:studio": "prisma studio",
+    "test:security": "node --test --test-concurrency=1 \"test/security/*.test.js\"",
+    "test:unit": "node --test test/security/unit.test.js"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",

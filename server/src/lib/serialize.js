@@ -13,6 +13,7 @@ export function toPublicUser(user) {
     avatarUrl: avatarUrl(user),
     memberSince: user.createdAt.toISOString().slice(0, 10),
     kycStatus: user.kyc?.status ?? 'none',
+    mfaEnabled: !!user.mfaEnabledAt,
   };
 }
 

@@ -76,7 +76,8 @@ export default function Notifications() {
     const next = items.map( ( x ) => ( x.id === n.id ? { ...x, read: true } : x ) );
     setItems( next );
     syncUnread( next );
-    if ( n.link ) navigate( n.link );
+    // Only links inside Kotka ("/app/..."), never another site.
+    if ( typeof n.link === 'string' && /^\/(?![\/\\])/.test( n.link ) ) navigate( n.link );
   };
 
   const filtered = ( items ?? [] ).filter( ( n ) => filter === 'all' || ( filter === 'unread' ? !n.read : GROUP_OF[n.type] === filter ) );

@@ -94,7 +94,8 @@ export async function pollViews(pollIds, viewerId) {
   if (!pollIds.length) return new Map();
   const [polls, votes] = await Promise.all([
     prisma.poll.findMany({ where: { id: { in: pollIds } }, include: { options: { orderBy: { position: 'asc' } } } }),
-    prisma.pollVote.findMany({ where: { pollId: { in: pollIds }, userId: viewerId }, select: { pollId: true, optionId: true } }),
+    // Live updates are viewer-neutral (no viewer): no "my vote" to look up.
+    viewerId ? prisma.pollVote.findMany({ where: { pollId: { in: pollIds }, userId: viewerId }, select: { pollId: true, optionId: true } }) : [],
   ]);
   const mine = new Map(votes.map((v) => [v.pollId, v.optionId]));
   return new Map(

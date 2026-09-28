@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { ArrowLeft, ExternalLink, Landmark, Sparkles } from 'lucide-react';
 import { api } from '../../../lib/api';
+import { safeHref } from '../../../lib/safeHref';
 import Button from '../../../components/ui/Button';
 import { ago } from '../util';
 import { SaveButton } from '../components/Buttons';
@@ -30,7 +31,7 @@ export default function NewsDetail() {
         <h1 className="mt-2 text-2xl font-semibold leading-snug tracking-tight text-ink-900 dark:text-ink-50">{n.headline}</h1>
         {n.summary ? <p className="mt-3 text-[15px] leading-relaxed text-ink-700 dark:text-ink-200">{n.summary}</p> : null}
         <div className="mt-4 flex flex-wrap items-center gap-2">
-          <a href={n.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 rounded-lg border border-ink-200 px-3 py-1.5 text-xs font-medium hover:bg-ink-50 dark:border-ink-700 dark:hover:bg-ink-800">Read the full story <ExternalLink className="h-3 w-3" /></a>
+          <a href={safeHref(n.url)} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 rounded-lg border border-ink-200 px-3 py-1.5 text-xs font-medium hover:bg-ink-50 dark:border-ink-700 dark:hover:bg-ink-800">Read the full story <ExternalLink className="h-3 w-3" /></a>
           <SaveButton itemType="news" itemId={n.id} saved={data.saved} />
           {!n.explanation && !ai.state ? <Button size="sm" variant="secondary" icon={Sparkles} onClick={() => ai.run('explain', '/community/ai/explain-news', { newsId: n.id })}>Why it matters</Button> : null}
         </div>

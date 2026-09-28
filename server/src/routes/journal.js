@@ -5,10 +5,55 @@ import { asyncHandler } from '../lib/asyncHandler.js';
 import { auditLater } from '../lib/audit.js';
 import { nvidiaChatCompletion } from '../lib/nvidia.js';
 import { connection, withModelFallback } from '../lib/aiModels.js';
-import { logUsage, usageSnapshot, limitReached, tonePreference } from '../lib/aiUsage.js';
+import { reserveAiUse, settleAiUse, tonePreference } from '../lib/aiUsage.js';
+import { limit } from '../lib/rateLimit.js';
 
 export const journalRouter = Router();
 journalRouter.use(requireAuth);
+
+// Journal input rules. Every field is typed and bounded; unknown fields are
+// ignored, so a request can't set the owner, dates or AI fields directly.
+const RESULTS = ['win', 'loss', 'breakeven'];
+const DIRECTIONS = ['Long', 'Short'];
+const text = (v, max) => (typeof v === 'string' ? v.trim().slice(0, max) : '');
+const price = (v) => {
+  const n = typeof v === 'number' ? v : Number(v);
+  return Number.isFinite(n) && Math.abs(n) <= 1e9 ? n : 0;
+};
+const isDate = (v) => typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v) && !Number.isNaN(Date.parse(v));
+
+function cleanEntry(b) {
+  if (!isDate(b.date)) return { error: 'Choose the date of the trade.' };
+  const market = text(b.market, 40);
+  const strategy = text(b.strategy, 80);
+  if (!market || !strategy) return { error: 'Add the date, market and strategy for this trade.' };
+  const isOpen = b.positionStatus === 'open';
+  if (!isOpen && b.result !== undefined && !RESULTS.includes(b.result)) return { error: 'Choose win, loss or breakeven.' };
+  return {
+    isOpen,
+    data: {
+      date: b.date,
+      market,
+      session: text(b.session, 40),
+      strategy,
+      direction: DIRECTIONS.includes(b.direction) ? b.direction : 'Long',
+      entry: price(b.entry),
+      stopLoss: price(b.stopLoss),
+      takeProfit: price(b.takeProfit),
+      risk: price(b.risk),
+      reward: price(b.reward),
+      result: isOpen ? null : (b.result ?? 'win'),
+      pnl: isOpen ? null : price(b.pnl),
+      emotionBefore: text(b.emotionBefore, 40),
+      emotionAfter: isOpen ? null : text(b.emotionAfter, 40),
+      confidence: Math.min(Math.max(Math.round(Number(b.confidence) || 0), 0), 10),
+      mistakes: text(b.mistakes, 3000),
+      lessons: text(b.lessons, 3000),
+      checklistComplete: b.checklistComplete === true,
+      positionStatus: isOpen ? 'open' : 'closed',
+    },
+  };
+}
 
 journalRouter.get('/', asyncHandler(async (req, res) => {
   const entries = await prisma.journalEntry.findMany({
@@ -18,44 +63,18 @@ journalRouter.get('/', asyncHandler(async (req, res) => {
   res.json({ entries });
 }));
 
-journalRouter.post('/', asyncHandler(async (req, res) => {
-  const b = req.body ?? {};
-  if (!b.date || !b.market || !b.strategy) {
-    return res.status(400).json({ error: 'Add the date, market and strategy for this trade.' });
-  }
+journalRouter.post('/', limit('journal'), asyncHandler(async (req, res) => {
+  const { isOpen, data, error } = cleanEntry(req.body ?? {});
+  if (error) return res.status(400).json({ error });
 
-  const isOpen = b.positionStatus === 'open';
-
-  const entry = await prisma.journalEntry.create({
-    data: {
-      userId: req.userId,
-      date: b.date,
-      market: b.market,
-      session: b.session ?? '',
-      strategy: b.strategy,
-      direction: b.direction ?? 'Long',
-      entry: Number(b.entry) || 0,
-      stopLoss: Number(b.stopLoss) || 0,
-      takeProfit: Number(b.takeProfit) || 0,
-      risk: Number(b.risk) || 0,
-      reward: Number(b.reward) || 0,
-      result: isOpen ? null : (b.result ?? 'win'),
-      pnl: isOpen ? null : (Number(b.pnl) || 0),
-      emotionBefore: b.emotionBefore ?? '',
-      emotionAfter: isOpen ? null : (b.emotionAfter ?? ''),
-      confidence: Number(b.confidence) || 0,
-      mistakes: b.mistakes ?? '',
-      lessons: b.lessons ?? '',
-      checklistComplete: !!b.checklistComplete,
-      positionStatus: isOpen ? 'open' : 'closed',
-    },
-  });
+  const entry = await prisma.journalEntry.create({ data: { userId: req.userId, ...data } });
   auditLater(req, isOpen ? 'journal.position_opened' : 'journal.trade_logged', { targetType: 'journal', targetId: entry.id, detail: { market: entry.market, direction: entry.direction, ...(isOpen ? {} : { result: entry.result }) } });
   res.status(201).json({ entry });
 }));
 
-journalRouter.patch('/:id/close', asyncHandler(async (req, res) => {
+journalRouter.patch('/:id/close', limit('journal'), asyncHandler(async (req, res) => {
   const b = req.body ?? {};
+  if (b.result !== undefined && !RESULTS.includes(b.result)) return res.status(400).json({ error: 'Choose win, loss or breakeven.' });
   const existing = await prisma.journalEntry.findUnique({ where: { id: req.params.id } });
   if (!existing || existing.userId !== req.userId) {
     return res.status(404).json({ error: 'Journal entry not found.' });
@@ -69,11 +88,11 @@ journalRouter.patch('/:id/close', asyncHandler(async (req, res) => {
     data: {
       positionStatus: 'closed',
       result: b.result ?? 'win',
-      pnl: Number(b.pnl) || 0,
-      reward: Number(b.reward) || existing.reward,
-      emotionAfter: b.emotionAfter ?? '',
-      mistakes: b.mistakes ?? existing.mistakes,
-      lessons: b.lessons ?? existing.lessons,
+      pnl: price(b.pnl),
+      reward: price(b.reward) || existing.reward,
+      emotionAfter: text(b.emotionAfter, 40),
+      mistakes: b.mistakes === undefined ? existing.mistakes : text(b.mistakes, 3000),
+      lessons: b.lessons === undefined ? existing.lessons : text(b.lessons, 3000),
       closedAt: new Date(),
     },
   });
@@ -122,15 +141,15 @@ function describeRecord(entries) {
   ].filter(Boolean).join('\n');
 }
 
-journalRouter.post('/:id/review', asyncHandler(async (req, res) => {
+journalRouter.post('/:id/review', limit('aiBurst', { message: 'You’re asking Kotka AI a lot right now. Please wait a moment.' }), asyncHandler(async (req, res) => {
   const entry = await prisma.journalEntry.findUnique({ where: { id: req.params.id } });
   if (!entry || entry.userId !== req.userId) return res.status(404).json({ error: 'Journal entry not found.' });
 
-  const usage = await usageSnapshot(req.userId);
-  if (limitReached(usage)) return res.status(429).json({ error: "You’ve used today’s Kotka AI requests. More become available overnight.", ...usage });
-
   const integration = await prisma.integration.findUnique({ where: { provider: 'nvidia' } });
-  if (!integration?.enabled || !integration.secretCipher) return res.status(503).json({ error: 'Kotka AI is not connected right now.' });
+  if (!integration?.enabled || !integration.secretCipher) return res.status(503).json({ error: 'Kotka AI isn’t available right now. Please try again later.' });
+
+  const { usage, reservation } = await reserveAiUse(req.userId);
+  if (!reservation) return res.status(429).json({ error: "You’ve used today’s Kotka AI requests. More become available overnight.", ...usage });
 
   const recent = await prisma.journalEntry.findMany({ where: { userId: req.userId, id: { not: entry.id } }, orderBy: { date: 'desc' }, take: 30 });
   const tone = await tonePreference(req.userId);
@@ -161,10 +180,11 @@ journalRouter.post('/:id/review', asyncHandler(async (req, res) => {
     }));
   } catch (err) {
     console.error('Journal review failed:', err.message);
+    settleAiUse(reservation, 'error', 'none', startedAt);
     return res.status(502).json({ error: 'Kotka AI could not review this trade right now. Try again shortly.' });
   }
 
-  logUsage(req.userId, 'nvidia', model, startedAt);
+  settleAiUse(reservation, 'nvidia', model, startedAt);
   const updated = await prisma.journalEntry.update({ where: { id: entry.id }, data: { aiReview: review, aiReviewModel: model, aiReviewAt: new Date() } });
   res.json({ entry: updated });
 }));

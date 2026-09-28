@@ -1,12 +1,14 @@
 import { Router } from 'express';
 import { prisma } from '../lib/prisma.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
+import { publicOrigin } from '../lib/origins.js';
 
 // Public achievement links (no sign-in). They only ever expose the snapshot
 // the trader chose when creating the link, and stop working when revoked.
 export const publicAchievementsRouter = Router();
 
-const live = (slug) => prisma.achievementShare.findFirst({ where: { slug: String(slug), revokedAt: null } });
+// Slugs are 12 random base64url characters; anything else is not a link.
+const live = (slug) => (/^[A-Za-z0-9_-]{8,40}$/.test(String(slug)) ? prisma.achievementShare.findFirst({ where: { slug: String(slug), revokedAt: null } }) : null);
 
 publicAchievementsRouter.get('/achievements/:slug', asyncHandler(async (req, res) => {
   const s = await live(req.params.slug);
@@ -20,7 +22,8 @@ publicAchievementsRouter.get('/achievements/:slug/image', asyncHandler(async (re
   const s = await live(req.params.slug);
   const m = s?.imageId ? await prisma.media.findUnique({ where: { id: s.imageId } }) : null;
   if (!m) return res.status(404).end();
-  res.set({ 'Content-Type': m.mime, 'Content-Length': String(m.size), 'Cache-Control': 'public, max-age=3600', 'X-Content-Type-Options': 'nosniff' });
+  // Social apps fetch this image for link previews, so it may be loaded cross-site.
+  res.set({ 'Content-Type': m.mime, 'Content-Length': String(m.size), 'Cache-Control': 'public, max-age=3600', 'X-Content-Type-Options': 'nosniff', 'Cross-Origin-Resource-Policy': 'cross-origin', 'Content-Security-Policy': "default-src 'none'; sandbox" });
   res.end(Buffer.from(m.data));
 }));
 
@@ -30,17 +33,22 @@ publicAchievementsRouter.get('/achievements/:slug/image', asyncHandler(async (re
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 let shell = { html: null, at: 0 };
 
+// The app shell is fetched from Kotka's own site only (see publicOrigin), so a
+// forged Host header can't make the server fetch, cache and serve another
+// site's HTML.
 async function appShell(origin) {
   if (shell.html && Date.now() - shell.at < 5 * 60e3) return shell.html;
-  const r = await fetch(`${origin}/index.html`, { signal: AbortSignal.timeout(4000) });
+  const r = await fetch(`${origin}/index.html`, { signal: AbortSignal.timeout(4000), redirect: 'error' });
   if (!r.ok) throw new Error(`index.html ${r.status}`);
-  shell = { html: await r.text(), at: Date.now() };
+  const html = await r.text();
+  // Only cache something that is recognisably Kotka's own app shell.
+  if (!html.includes('<div id="root"></div>') || html.length > 20_000) throw new Error('unexpected app shell');
+  shell = { html, at: Date.now() };
   return shell.html;
 }
 
 export const achievementPage = asyncHandler(async (req, res) => {
-  const proto = String(req.get('x-forwarded-proto') ?? req.protocol).split(',')[0];
-  const origin = `${proto}://${req.get('x-forwarded-host') ?? req.get('host')}`;
+  const origin = publicOrigin(req);
   const s = await live(req.params.slug);
   const snap = s?.snapshot;
   const title = snap ? `${snap.headline} · Kotka` : 'Kotka achievement';

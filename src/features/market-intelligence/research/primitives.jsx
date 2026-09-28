@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from 'react';
 import clsx from 'clsx';
 import { ArrowUpRight } from 'lucide-react';
+import { safeHref } from '../../../lib/safeHref';
 
 // True below a width (default: Tailwind's md, 768px). Tables switch to
 // compact layouts and bars get narrower there.
@@ -230,7 +231,8 @@ export function NotAvailable({ children = 'DATA NOT AVAILABLE', reason, classNam
   );
 }
 
-export function SourceLink({ href, children, className }) {
+export function SourceLink({ href: raw, children, className }) {
+  const href = safeHref(raw);
   if (!href) return <span className={className}>{children}</span>;
   return (
     <a href={href} target="_blank" rel="noopener noreferrer" className={clsx('inline-flex items-center gap-0.5 text-accent-700 underline decoration-accent-500/30 underline-offset-2 hover:decoration-accent-500 dark:text-accent-300', className)}>

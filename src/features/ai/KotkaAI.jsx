@@ -11,6 +11,8 @@ import ConversationList from './components/ConversationList';
 import ChatMessage from './components/ChatMessage';
 import { markets, timeframes } from './options';
 import { api } from '../../lib/api';
+import { compressImage } from '../community/util';
+import { toast } from '../../lib/dialogs';
 
 // Starting points that show what Kotka can read. Each is answered from live
 // app data, not general knowledge.
@@ -101,12 +103,18 @@ export default function KotkaAI() {
     });
   };
 
-  const handleImagePick = (e) => {
+  // Charts are resized and re-encoded in the browser (smaller upload, no
+  // photo metadata); the server accepts PNG, JPEG or WebP under 4 MB.
+  const handleImagePick = async (e) => {
     const file = e.target.files?.[0];
+    e.target.value = '';
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => setPendingImage(reader.result);
-    reader.readAsDataURL(file);
+    try {
+      const { dataUrl } = await compressImage(file, { maxSide: 2000, quality: 0.85 });
+      setPendingImage(dataUrl);
+    } catch {
+      toast('That file couldn’t be opened as an image. Try a PNG or JPEG screenshot.', { tone: 'error' });
+    }
   };
 
   const handleSend = async (override) => {

@@ -3,6 +3,7 @@ import { Link, useParams, useSearchParams } from 'react-router-dom';
 import clsx from 'clsx';
 import { ArrowLeft, BellRing, ExternalLink, Radio, Sparkles } from 'lucide-react';
 import { api } from '../../../lib/api';
+import { safeHref } from '../../../lib/safeHref';
 import { price, signedPct } from '../util';
 import { FollowButton, SaveButton } from '../components/Buttons';
 import AiPanel, { useAiAction } from '../components/AiPanel';
@@ -85,7 +86,7 @@ export default function EventDetail() {
             <div className="mt-4 flex flex-wrap items-center gap-2">
               <FollowButton targetType="event" targetId={e.id} following={data.following} labels={['Remind me', 'Reminder set']} />
               <SaveButton itemType="event" itemId={e.id} />
-              {e.sourceUrl ? <a href={e.sourceUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs font-medium text-ink-500 hover:underline dark:text-ink-400">{e.sourceName ?? 'Source'} <ExternalLink className="h-3 w-3" /></a> : null}
+              {safeHref(e.sourceUrl) ? <a href={safeHref(e.sourceUrl)} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs font-medium text-ink-500 hover:underline dark:text-ink-400">{e.sourceName ?? 'Source'} <ExternalLink className="h-3 w-3" /></a> : null}
               <span className="ml-auto inline-flex items-center gap-1 text-[11px] text-ink-400"><BellRing className="h-3 w-3" /> {data.followers} reminder{data.followers === 1 ? '' : 's'} set</span>
             </div>
           </header>

@@ -10,6 +10,7 @@ import { screenText } from '../lib/community/safety.js';
 import { BADGES, LEVELS, METRICS, PERIODS, addDays, computeStats, evaluate, goalProgress, goalRoomPrefs, loadContext, localDate, monthLabel, monthStats } from '../lib/goals/engine.js';
 import { buildCard, presetKeys, publicSnapshot, safeGoalName } from '../lib/goals/cards.js';
 import { afterEarned, postAchievement, postable } from '../lib/goals/social.js';
+import { limit } from '../lib/rateLimit.js';
 
 // Goal Room: goals, daily check-ins, achievements and share links.
 export const goalsRouter = Router();
@@ -88,7 +89,7 @@ goalsRouter.get('/', asyncHandler(async (req, res) => {
 }));
 
 // ── check-ins ──────────────────────────────────────────────────────────────
-goalsRouter.post('/checkins', asyncHandler(async (req, res) => {
+goalsRouter.post('/checkins', limit('checkin'), asyncHandler(async (req, res) => {
   const b = req.body ?? {};
   const date = localDate(b.date);
   const traded = bool(b.traded);
@@ -134,7 +135,7 @@ function validateGoal(b, today, { existing = null } = {}) {
   return { goal: { metric, periodDays, target, title, why, startDate, endDate: addDays(startDate, periodDays - 1) } };
 }
 
-goalsRouter.post('/goals', asyncHandler(async (req, res) => {
+goalsRouter.post('/goals', limit('goalWrite'), asyncHandler(async (req, res) => {
   const today = localDate(req.body?.today);
   const open = await prisma.goal.count({ where: { userId: req.userId, status: { in: ['draft', 'active', 'achieved'] } } });
   if (open >= MAX_OPEN_GOALS) return res.status(400).json({ error: `You can have up to ${MAX_OPEN_GOALS} open goals. Finish or abandon one first.` });
@@ -148,7 +149,7 @@ goalsRouter.post('/goals', asyncHandler(async (req, res) => {
   res.status(201).json({ ...(await overview(req.userId, today)), goalId: g.id });
 }));
 
-goalsRouter.patch('/goals/:id', asyncHandler(async (req, res) => {
+goalsRouter.patch('/goals/:id', limit('goalWrite'), asyncHandler(async (req, res) => {
   const today = localDate(req.body?.today);
   const existing = await prisma.goal.findFirst({ where: { id: req.params.id, userId: req.userId } });
   if (!existing) return res.status(404).json({ error: 'We couldn’t find that goal. It may have been deleted. Refresh your Goal Room.' });
@@ -159,7 +160,7 @@ goalsRouter.patch('/goals/:id', asyncHandler(async (req, res) => {
   res.json(await overview(req.userId, today));
 }));
 
-goalsRouter.post('/goals/:id/lock', asyncHandler(async (req, res) => {
+goalsRouter.post('/goals/:id/lock', limit('goalWrite'), asyncHandler(async (req, res) => {
   const today = localDate(req.body?.today);
   const g = await prisma.goal.findFirst({ where: { id: req.params.id, userId: req.userId } });
   if (!g) return res.status(404).json({ error: 'We couldn’t find that goal. It may have been deleted. Refresh your Goal Room.' });
@@ -176,7 +177,7 @@ goalsRouter.post('/goals/:id/lock', asyncHandler(async (req, res) => {
   res.json(await overview(req.userId, today));
 }));
 
-goalsRouter.post('/goals/:id/abandon', asyncHandler(async (req, res) => {
+goalsRouter.post('/goals/:id/abandon', limit('goalWrite'), asyncHandler(async (req, res) => {
   const g = await prisma.goal.findFirst({ where: { id: req.params.id, userId: req.userId } });
   if (!g) return res.status(404).json({ error: 'We couldn’t find that goal. It may have been deleted. Refresh your Goal Room.' });
   if (!['active', 'achieved'].includes(g.status)) return res.status(400).json({ error: 'Only a goal in progress can be abandoned.' });
@@ -185,7 +186,7 @@ goalsRouter.post('/goals/:id/abandon', asyncHandler(async (req, res) => {
   res.json(await overview(req.userId, localDate(req.body?.today)));
 }));
 
-goalsRouter.delete('/goals/:id', asyncHandler(async (req, res) => {
+goalsRouter.delete('/goals/:id', limit('goalWrite'), asyncHandler(async (req, res) => {
   const g = await prisma.goal.findFirst({ where: { id: req.params.id, userId: req.userId } });
   if (!g) return res.status(404).json({ error: 'We couldn’t find that goal. It may have been deleted. Refresh your Goal Room.' });
   if (g.status !== 'draft') return res.status(400).json({ error: 'Locked goals stay on your record. You can abandon a running goal instead.' });
@@ -196,7 +197,7 @@ goalsRouter.delete('/goals/:id', asyncHandler(async (req, res) => {
 }));
 
 // ── achievements ───────────────────────────────────────────────────────────
-goalsRouter.patch('/achievements/:id', asyncHandler(async (req, res) => {
+goalsRouter.patch('/achievements/:id', limit('goalWrite'), asyncHandler(async (req, res) => {
   const a = await prisma.achievement.findFirst({ where: { id: req.params.id, userId: req.userId } });
   if (!a) return res.status(404).json({ error: 'We couldn’t find that achievement. Refresh your Goal Room.' });
   if (typeof req.body?.pinned === 'boolean') {
@@ -206,7 +207,7 @@ goalsRouter.patch('/achievements/:id', asyncHandler(async (req, res) => {
   res.json({ ok: true });
 }));
 
-goalsRouter.post('/achievements/:id/post', asyncHandler(async (req, res) => {
+goalsRouter.post('/achievements/:id/post', limit('goalWrite'), asyncHandler(async (req, res) => {
   const note = str(req.body?.note, 1000);
   if (note) {
     const screen = screenText(note);
@@ -284,7 +285,7 @@ goalsRouter.get('/monthly/:month', asyncHandler(async (req, res) => {
   res.json({ review: monthStats(ctx, req.params.month, localDate(req.query.today)) });
 }));
 
-goalsRouter.put('/preferences', asyncHandler(async (req, res) => {
+goalsRouter.put('/preferences', limit('goalWrite'), asyncHandler(async (req, res) => {
   const current = await prisma.userSettings.findUnique({ where: { userId: req.userId }, select: { goalRoomPreferences: true } });
   const prefs = goalRoomPrefs(current?.goalRoomPreferences);
   for (const k of ['autoPost', 'showOnProfile']) if (typeof req.body?.[k] === 'boolean') prefs[k] = req.body[k];

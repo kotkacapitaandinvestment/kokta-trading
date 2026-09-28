@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import clsx from 'clsx';
 import { ArrowDownRight, ArrowUpRight, CalendarDays, ExternalLink } from 'lucide-react';
 import { api } from '../../lib/api';
+import { safeHref } from '../../lib/safeHref';
 import { txt } from './research/primitives';
 import InfoTip from '../../components/ui/InfoTip';
 import EmptyState from '../../components/ui/EmptyState';
@@ -176,7 +177,7 @@ export function ReleaseCalendar({ days = 14 }) {
                       {e.importance === 'High' ? <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-accent-500" title="High importance" aria-label="High importance" /> : null}
                       <span className="leading-snug text-ink-800 dark:text-ink-100">{txt(e.title)}</span>
                     </span>
-                    <a href={e.source.url} target="_blank" rel="noreferrer" className="mt-0.5 inline-flex items-center gap-1 text-[11px] text-ink-400 hover:text-accent-600 dark:hover:text-accent-400">
+                    <a href={safeHref(e.source.url)} target="_blank" rel="noopener noreferrer" className="mt-0.5 inline-flex items-center gap-1 text-[11px] text-ink-400 hover:text-accent-600 dark:hover:text-accent-400">
                       {txt(e.source.name.split(/ [—-] /)[0])}
                       {e.referencePeriod ? ` · ${e.referencePeriod}` : ''}
                       <ExternalLink className="h-2.5 w-2.5" />

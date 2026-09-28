@@ -16,6 +16,8 @@ import { asyncHandler } from '../lib/asyncHandler.js';
 export const adminIntegrationsRouter = Router();
 adminIntegrationsRouter.use(requireAuth, requireRole('super_admin'));
 
+const CONFIG_KEYS = { nvidia: ['model', 'chatFallbacks', 'visionModel', 'visionFallbacks', 'baseUrl'], paystack: [], finnhub: [], massive: [], fred: [], cronjob: [] };
+
 const SERVICE_NAME = { nvidia: 'NVIDIA', paystack: 'Paystack', finnhub: 'Finnhub', massive: 'Massive', fred: 'FRED', cronjob: 'cron-job.org' };
 
 const TEST_CONNECTIONS = {
@@ -77,7 +79,16 @@ adminIntegrationsRouter.get('/', asyncHandler(async (req, res) => {
 adminIntegrationsRouter.put('/:provider', asyncHandler(async (req, res) => {
   const { provider } = req.params;
   if (provider === 'webpush') return res.status(400).json({ error: 'Web Push keys are managed by Kotka and cannot be edited here.' });
-  const { publicKey, config, enabled } = req.body ?? {};
+  if (!CONFIG_KEYS[provider]) return res.status(404).json({ error: 'That service isn’t one Kotka connects to.' });
+  const { publicKey, enabled } = req.body ?? {};
+  // Only each service's own settings; server-managed fields (model health,
+  // switch history) can't be written from here.
+  const allowed = CONFIG_KEYS[provider] ?? [];
+  const config = req.body?.config && typeof req.body.config === 'object'
+    ? Object.fromEntries(Object.entries(req.body.config).filter(([k, v]) => allowed.includes(k) && (typeof v === 'string' ? v.length <= 1000 : ['number', 'boolean'].includes(typeof v))))
+    : undefined;
+  if (config?.baseUrl && !/^https:\/\/[a-z0-9.-]+(\/[\w./-]*)?$/i.test(config.baseUrl)) return res.status(400).json({ error: 'The address must start with https://' });
+  if (publicKey !== undefined && (typeof publicKey !== 'string' || publicKey.length > 500)) return res.status(400).json({ error: 'That public key doesn’t look right.' });
   const secret = typeof req.body?.secret === 'string' ? req.body.secret.trim() : undefined;
 
   const existing = await prisma.integration.findUnique({ where: { provider } });

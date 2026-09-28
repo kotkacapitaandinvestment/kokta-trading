@@ -4,6 +4,7 @@ import { asyncHandler } from '../lib/asyncHandler.js';
 import { auditLater } from '../lib/audit.js';
 import { requireAuth } from '../middleware/auth.js';
 import { vapidPublicKey, sendPush } from '../lib/push.js';
+import { limit } from '../lib/rateLimit.js';
 
 // Web Push subscriptions for the signed-in user's browsers and devices.
 export const pushRouter = Router();
@@ -11,11 +12,22 @@ pushRouter.use(requireAuth);
 
 const MAX_DEVICES = 10;
 
+// Browsers' push services. The server POSTs to a subscription's endpoint, so
+// only these hosts are accepted (no pushing to arbitrary or internal URLs).
+const PUSH_HOSTS = [/^fcm\.googleapis\.com$/, /^android\.googleapis\.com$/, /(^|\.)push\.services\.mozilla\.com$/, /(^|\.)push\.apple\.com$/, /(^|\.)notify\.windows\.com$/];
+
 function parseSubscription(raw) {
   const endpoint = typeof raw?.endpoint === 'string' ? raw.endpoint : '';
   const p256dh = typeof raw?.keys?.p256dh === 'string' ? raw.keys.p256dh : '';
   const auth = typeof raw?.keys?.auth === 'string' ? raw.keys.auth : '';
   if (!/^https:\/\/[^\s]{10,2000}$/.test(endpoint) || !p256dh || p256dh.length > 200 || !auth || auth.length > 100) return null;
+  let host;
+  try {
+    host = new URL(endpoint).hostname;
+  } catch {
+    return null;
+  }
+  if (!PUSH_HOSTS.some((re) => re.test(host))) return null;
   return { endpoint, p256dh, auth };
 }
 
@@ -34,7 +46,7 @@ pushRouter.get('/devices', asyncHandler(async (req, res) => {
   res.json({ devices: rows.map((r) => ({ id: r.id, endpoint: r.endpoint, name: deviceName(r.userAgent ?? ''), createdAt: r.createdAt, lastUsedAt: r.lastUsedAt })) });
 }));
 
-pushRouter.post('/subscribe', asyncHandler(async (req, res) => {
+pushRouter.post('/subscribe', limit('push'), asyncHandler(async (req, res) => {
   const sub = parseSubscription(req.body?.subscription);
   if (!sub) return res.status(400).json({ error: 'That push subscription is not valid.' });
   const userAgent = String(req.get('user-agent') ?? '').slice(0, 300);
@@ -62,7 +74,7 @@ pushRouter.post('/unsubscribe', asyncHandler(async (req, res) => {
 }));
 
 // Sends a real push to the user's own devices so they can check it arrives.
-pushRouter.post('/test', asyncHandler(async (req, res) => {
+pushRouter.post('/test', limit('push'), asyncHandler(async (req, res) => {
   const count = await prisma.pushSubscription.count({ where: { userId: req.userId } });
   if (!count) return res.status(400).json({ error: 'Turn on push notifications on this device first.' });
   const result = await sendPush([{ userId: req.userId, title: 'Push notifications are on', body: 'This is how Kotka will reach you when the app is closed.', link: '/app/settings?section=notifications', tag: 'push-test', skipIfFocused: false }]);

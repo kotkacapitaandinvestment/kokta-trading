@@ -49,6 +49,15 @@ model User {
   lastSeenAt          DateTime?
   communityMutedUntil DateTime?
 
+  // Security. Sessions issued before sessionsValidAfter are rejected (set on
+  // password change and "sign out everywhere"). Two-step verification (TOTP)
+  // is optional; the secret is encrypted and recovery codes are stored hashed.
+  sessionsValidAfter  DateTime?
+  mfaSecretCipher     String?
+  mfaEnabledAt        DateTime?
+  mfaRecoveryHashes   String[]  @default([])
+  mfaLastUsedStep     Int?
+
   media               Media[]
   memberships         ConversationMember[]
   messages            Message[]
@@ -62,6 +71,7 @@ model User {
   savedItems          SavedItem[]
   notifications       Notification[]
   pushSubscriptions   PushSubscription[]
+  sessions            Session[]
   goals               Goal[]
   goalCheckIns        GoalCheckIn[]
   achievements        Achievement[]
@@ -384,6 +394,31 @@ model AuditLog {
 }
 
 // Sign-in / sign-up attempts, used for rate limiting.
+// One row per signed-in browser. The session cookie carries this id (signed);
+// revoking the row signs that browser out.
+model Session {
+  id         String    @id
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt  DateTime  @default(now())
+  lastSeenAt DateTime  @default(now())
+  expiresAt  DateTime
+  revokedAt  DateTime?
+  ip         String?
+  device     String?
+
+  @@index([userId])
+}
+
+// Sliding-window rate limits shared by every server instance.
+model RateLimitHit {
+  id        BigInt   @id @default(autoincrement())
+  key       String
+  createdAt DateTime @default(now())
+
+  @@index([key, createdAt])
+}
+
 model AuthAttempt {
   id        String   @id @default(cuid())
   kind      String // login | signup

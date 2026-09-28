@@ -5,6 +5,7 @@
 
 import crypto from 'node:crypto';
 import { prisma } from './prisma.js';
+import { cleanImage } from './imageSafety.js';
 
 export const MAX_BYTES = { image: 2.5 * 1024 * 1024, audio: 2.5 * 1024 * 1024 };
 
@@ -27,13 +28,22 @@ export function mediaUrl(m) {
 
 // Returns { media } or { error }.
 export async function saveMedia(ownerId, { dataUrl, width, height, durationMs }) {
+  if (typeof dataUrl === 'string' && dataUrl.length > 4_000_000) return { error: 'That file is too large. Try a smaller one.' };
   const match = typeof dataUrl === 'string' ? /^data:([\w/+.-]+);base64,([A-Za-z0-9+/=\s]+)$/.exec(dataUrl) : null;
   if (!match) return { error: 'Upload must be a base64 data URL.' };
-  const buf = Buffer.from(match[2], 'base64');
+  let buf = Buffer.from(match[2], 'base64');
   const type = sniff(buf);
   if (!type) return { error: 'Only PNG, JPEG, WebP or GIF images and WebM, Ogg or MP4 audio are supported.' };
   if (buf.length > MAX_BYTES[type.kind]) return { error: `That file is too large (max ${Math.round(MAX_BYTES[type.kind] / 1024 / 1024 * 10) / 10} MB).` };
   const int = (v, max) => (Number.isInteger(v) && v > 0 && v <= max ? v : null);
+  // Images: real size from the file itself, and location/camera metadata removed.
+  if (type.kind === 'image') {
+    const clean = cleanImage(buf, type.mime);
+    if (clean.error) return { error: clean.error };
+    buf = clean.bytes;
+    width = clean.width;
+    height = clean.height;
+  }
   const media = await prisma.media.create({
     data: {
       ownerId,
@@ -68,6 +78,8 @@ export async function serveMedia(req, res) {
     'Cache-Control': 'private, max-age=31536000, immutable',
     'X-Content-Type-Options': 'nosniff',
     'Content-Disposition': 'inline',
+    // Opened directly, an upload is inert: no scripts, no plugins, no forms.
+    'Content-Security-Policy': "default-src 'none'; img-src 'self'; media-src 'self'; sandbox",
   });
   res.end(Buffer.from(m.data));
 }

@@ -27,8 +27,17 @@ export function AuthProvider({ children }) {
     refreshUser().finally(() => setLoading(false));
   }, [refreshUser]);
 
+  // Returns the user, or { mfaRequired, challenge } when the account uses
+  // two-step verification; finish with verifyMfa().
   const login = async ({ email, password }) => {
-    const { user } = await api.post('/auth/login', { email, password });
+    const res = await api.post('/auth/login', { email, password });
+    if (res.mfaRequired) return { mfaRequired: true, challenge: res.challenge };
+    setUser(res.user);
+    return res.user;
+  };
+
+  const verifyMfa = async ({ challenge, code }) => {
+    const { user } = await api.post('/auth/login/mfa', { challenge, code });
     setUser(user);
     return user;
   };
@@ -50,7 +59,7 @@ export function AuthProvider({ children }) {
   const patchUser = useCallback((changes) => setUser((prev) => (prev ? { ...prev, ...changes } : prev)), []);
 
   const value = useMemo(
-    () => ({ user, loading, login, signup, logout, refreshUser, patchUser, setUser, isAuthenticated: !!user }),
+    () => ({ user, loading, login, verifyMfa, signup, logout, refreshUser, patchUser, setUser, isAuthenticated: !!user }),
     [user, loading, refreshUser, patchUser],
   );
 

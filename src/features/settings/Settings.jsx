@@ -12,12 +12,13 @@ import { useAuth } from '../../context/AuthContext';
 import { useTheme } from '../../context/ThemeContext';
 import { api } from '../../lib/api';
 import PushSettings from './PushSettings';
+import { DevicesSection, TwoStepSection } from './SecuritySettings';
 import { uploadAvatar, removeAvatar } from '../../lib/avatar';
 import { useCommunity } from '../community/CommunityContext';
 
 const sections = [
   { id: 'profile', label: 'Profile', icon: User },
-  { id: 'security', label: 'Password', icon: Lock },
+  { id: 'security', label: 'Password & security', icon: Lock },
   { id: 'verification', label: 'Verification', icon: BadgeCheck },
   { id: 'notifications', label: 'Notifications', icon: Bell },
   { id: 'community', label: 'Community', icon: MessagesSquare },
@@ -178,9 +179,9 @@ function PasswordSection() {
     if (mismatch) return;
     setState({ saving: true });
     try {
-      await api.post('/account/password', { currentPassword: form.currentPassword, newPassword: form.newPassword });
+      const r = await api.post('/account/password', { currentPassword: form.currentPassword, newPassword: form.newPassword });
       setForm({ currentPassword: '', newPassword: '', confirm: '' });
-      setState({ ok: 'Password updated.' });
+      setState({ ok: r.signedOut ? `Password updated. ${r.signedOut} other device${r.signedOut === 1 ? ' was' : 's were'} signed out.` : 'Password updated.' });
     } catch (err) {
       setState({ error: err.message });
     }
@@ -188,7 +189,7 @@ function PasswordSection() {
 
   return (
     <form onSubmit={save} className="max-w-md space-y-4">
-      <SectionTitle title="Password" description="Use at least 8 characters. A passphrase of a few unrelated words is easier to remember and harder to guess." />
+      <SectionTitle title="Password" description="Use at least 8 characters. A passphrase of a few unrelated words is easier to remember and harder to guess. Changing it signs out your other devices." />
       <Input label="Current password" type="password" autoComplete="current-password" value={form.currentPassword} onChange={(e) => setForm({ ...form, currentPassword: e.target.value })} required />
       <Input label="New password" type="password" autoComplete="new-password" minLength={8} value={form.newPassword} onChange={(e) => setForm({ ...form, newPassword: e.target.value })} required />
       <Input label="Confirm new password" type="password" autoComplete="new-password" value={form.confirm} onChange={(e) => setForm({ ...form, confirm: e.target.value })} error={mismatch ? 'Passwords do not match.' : undefined} required />
@@ -436,7 +437,13 @@ export default function Settings() {
 
         <Card className="p-6 lg:col-span-3 lg:p-8">
           {active === 'profile' ? <ProfileSection /> : null}
-          {active === 'security' ? <PasswordSection /> : null}
+          {active === 'security' ? (
+            <div className="space-y-10">
+              <PasswordSection />
+              <TwoStepSection />
+              <DevicesSection />
+            </div>
+          ) : null}
           {active === 'verification' ? <VerificationSection /> : null}
           {active === 'community' ? <CommunitySection /> : null}
           {active === 'account' ? <DeleteAccountSection /> : null}

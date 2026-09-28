@@ -6,6 +6,8 @@ import { instrument } from '../../lib/instruments.js';
 import { notify } from '../../lib/community/notify.js';
 import { userCards } from '../../lib/community/users.js';
 import { requireProfile } from './context.js';
+import { conversationAccess } from '../../lib/community/access.js';
+import { limit } from '../../lib/rateLimit.js';
 
 export const socialRouter = Router();
 
@@ -37,7 +39,7 @@ async function validTarget(type, id, me) {
   }
 }
 
-socialRouter.post('/follow', requireProfile, asyncHandler(async (req, res) => {
+socialRouter.post('/follow', requireProfile, limit('follow'), asyncHandler(async (req, res) => {
   const type = String(req.body?.targetType ?? '');
   if (!FOLLOW_TYPES.includes(type)) return res.status(400).json({ error: 'You can’t follow that.' });
   const t = await validTarget(type, String(req.body?.targetId ?? ''), req.me);
@@ -79,10 +81,33 @@ socialRouter.get('/following', asyncHandler(async (req, res) => {
   });
 }));
 
-socialRouter.post('/saved', requireProfile, asyncHandler(async (req, res) => {
+// Only items the viewer can see right now can be saved (object-level check:
+// a message id from someone else's private chat must never be saveable).
+async function canSave(itemType, itemId, me) {
+  switch (itemType) {
+    case 'post':
+    case 'idea':
+      return !!(await prisma.post.findFirst({ where: { id: itemId, deletedAt: null, removedAt: null }, select: { id: true } }));
+    case 'news':
+      return !!(await prisma.newsItem.findUnique({ where: { id: itemId }, select: { id: true } }));
+    case 'event':
+      return !!(await prisma.marketEvent.findUnique({ where: { id: itemId }, select: { id: true } }));
+    case 'message': {
+      const m = await prisma.message.findUnique({ where: { id: itemId }, select: { deletedAt: true, removedById: true, conversation: true } });
+      return !!m && !m.deletedAt && !m.removedById && (await conversationAccess(m.conversation, me)).canRead;
+    }
+    case 'conversation':
+      return (await conversationAccess(itemId, me)).canRead;
+    default:
+      return false;
+  }
+}
+
+socialRouter.post('/saved', requireProfile, limit('save'), asyncHandler(async (req, res) => {
   const itemType = String(req.body?.itemType ?? '');
-  const itemId = String(req.body?.itemId ?? '');
+  const itemId = String(req.body?.itemId ?? '').slice(0, 64);
   if (!SAVE_TYPES.includes(itemType) || !itemId) return res.status(400).json({ error: 'That can’t be saved.' });
+  if (!(await canSave(itemType, itemId, req.me))) return res.status(404).json({ error: 'We couldn’t find that. It may have been removed.' });
   await prisma.savedItem.upsert({ where: { userId_itemType_itemId: { userId: req.me.id, itemType, itemId } }, update: {}, create: { userId: req.me.id, itemType, itemId } });
   res.json({ saved: true });
 }));
@@ -94,7 +119,7 @@ socialRouter.delete('/saved', asyncHandler(async (req, res) => {
 
 // Block / mute. Blocking also stops DMs both ways.
 for (const kind of ['block', 'mute']) {
-  socialRouter.post(`/users/:id/${kind}`, asyncHandler(async (req, res) => {
+  socialRouter.post(`/users/:id/${kind}`, limit('follow'), asyncHandler(async (req, res) => {
     if (req.params.id === req.me.id) return res.status(400).json({ error: `You can't ${kind} yourself.` });
     const target = await prisma.user.findUnique({ where: { id: req.params.id }, select: { id: true } });
     if (!target) return res.status(404).json({ error: 'We couldn’t find that trader. Their account may have been closed.' });

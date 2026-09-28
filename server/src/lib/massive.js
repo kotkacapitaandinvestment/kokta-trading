@@ -1,7 +1,8 @@
 const MASSIVE_BASE_URL = 'https://api.massive.com';
 
 export async function massiveGet(apiKey, path) {
-  const res = await fetch(`${MASSIVE_BASE_URL}${path}${path.includes('?') ? '&' : '?'}apiKey=${apiKey}`);
+  // Key in the Authorization header, not the URL, so it never appears in logs.
+  const res = await fetch(`${MASSIVE_BASE_URL}${path}`, { headers: { Authorization: `Bearer ${apiKey}` } });
   const data = await res.json().catch(() => null);
   if (!res.ok || data?.status === 'NOT_AUTHORIZED' || data?.status === 'ERROR') {
     throw new Error(data?.message || `Massive API error (${res.status})`);

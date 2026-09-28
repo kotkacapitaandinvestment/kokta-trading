@@ -2,7 +2,8 @@ import { Router } from 'express';
 import { prisma } from '../../lib/prisma.js';
 import { asyncHandler } from '../../lib/asyncHandler.js';
 import { cachedSource } from '../../lib/research/cache.js';
-import { usageSnapshot, limitReached, logUsage } from '../../lib/aiUsage.js';
+import { reserveAiUse, settleAiUse } from '../../lib/aiUsage.js';
+import { hit, LIMITS } from '../../lib/rateLimit.js';
 import { instrument, instrumentView, marketStatus } from '../../lib/instruments.js';
 import { instrumentMarketData } from '../../lib/marketPulse.js';
 import { latestReportSummaries } from '../../lib/research/engine.js';
@@ -16,18 +17,23 @@ import { requireProfile } from './context.js';
 
 export const aiRouter = Router();
 
-// Wraps an AI action: limit check, usage accounting, friendly failures.
+// Wraps an AI action: burst limit, daily cap (reserved up front so parallel
+// requests can't overshoot it), usage accounting, friendly failures. Cached
+// answers cost nothing and release the reservation.
 function aiAction(handler) {
   return asyncHandler(async (req, res) => {
-    const usage = await usageSnapshot(req.me.id);
-    if (limitReached(usage)) return res.status(429).json({ error: "You’ve used today’s Kotka AI requests. More become available overnight.", ...usage });
+    const [max, windowMs] = LIMITS.communityAi;
+    if (await hit(`communityAi:${req.me.id}`, max, windowMs)) return res.status(429).json({ error: 'You’re asking Kotka AI a lot right now. Please wait a few minutes.' });
+    const { usage, reservation } = await reserveAiUse(req.me.id);
+    if (!reservation) return res.status(429).json({ error: "You’ve used today’s Kotka AI requests. More become available overnight.", ...usage });
     const started = Date.now();
     try {
       const out = await handler(req, res);
-      if (out === undefined) return; // handler already responded
-      if (out.charged !== false) logUsage(req.me.id, 'nvidia', out.result?.model ?? 'community', started);
+      if (out === undefined) return settleAiUse(reservation, 'error', 'none', started); // handler already responded
+      settleAiUse(reservation, out.charged === false ? 'cached' : 'nvidia', out.result?.model ?? 'community', started);
       res.json({ result: out.result, cached: !!out.cached });
     } catch (err) {
+      settleAiUse(reservation, 'error', 'none', started);
       if (err instanceof AiUnavailable) return res.status(503).json({ error: err.message });
       console.error('Community AI failed:', err.message);
       res.status(502).json({ error: 'Kotka AI could not complete that right now. Try again shortly.' });

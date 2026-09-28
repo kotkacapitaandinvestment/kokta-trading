@@ -1,4 +1,5 @@
-import { Outlet, useLocation, Navigate } from 'react-router-dom';
+import { Outlet, useLocation, Navigate, Link } from 'react-router-dom';
+import { ShieldAlert } from 'lucide-react';
 import Sidebar from './Sidebar';
 import Topbar from './Topbar';
 import MobileNav from './MobileNav';
@@ -49,6 +50,13 @@ export default function AdminLayout() {
         />
         <main className="flex-1 overflow-y-auto scrollbar-thin px-4 pb-[calc(1.5rem+env(safe-area-inset-bottom))] pt-6 lg:px-8 lg:py-8">
           <div className="mx-auto max-w-7xl animate-fade-in">
+            {!user.mfaEnabled ? (
+              <Link to="/app/settings?section=security" className="mb-6 flex items-center gap-3 rounded-2xl border border-amber-500/25 bg-amber-50 px-5 py-3 text-sm text-amber-800 transition-colors hover:bg-amber-100 dark:bg-amber-500/10 dark:text-amber-300 dark:hover:bg-amber-500/15">
+                <ShieldAlert className="h-4 w-4 shrink-0" />
+                <span className="flex-1">Protect this staff account with two-step verification. A stolen password alone then can’t open admin tools.</span>
+                <span className="font-medium">Set it up</span>
+              </Link>
+            ) : null}
             <Outlet />
           </div>
         </main>

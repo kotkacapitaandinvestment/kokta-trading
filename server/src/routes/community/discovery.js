@@ -148,10 +148,20 @@ discoveryRouter.get('/saved', asyncHandler(async (req, res) => {
   const rows = await prisma.savedItem.findMany({ where: { userId: req.me.id, ...(type ? { itemType: type } : {}) }, orderBy: { createdAt: 'desc' }, take: 100 });
   const ids = (t) => rows.filter((r) => r.itemType === t).map((r) => r.itemId);
   const [posts, news, events, messages] = await Promise.all([
-    prisma.post.findMany({ where: { id: { in: [...ids('post'), ...ids('idea')] } }, include: POST_INCLUDE }),
+    prisma.post.findMany({ where: { id: { in: [...ids('post'), ...ids('idea')] }, deletedAt: null }, include: POST_INCLUDE }),
     prisma.newsItem.findMany({ where: { id: { in: ids('news') } } }),
     prisma.marketEvent.findMany({ where: { id: { in: ids('event') } } }),
-    prisma.message.findMany({ where: { id: { in: ids('message') }, deletedAt: null, removedById: null }, include: { conversation: { select: { id: true, kind: true, name: true, instrument: true, eventId: true } } } }),
+    // Only messages in chats the viewer can still read: public rooms, public
+    // communities, or chats they are an active member of.
+    prisma.message.findMany({
+      where: {
+        id: { in: ids('message') },
+        deletedAt: null,
+        removedById: null,
+        conversation: { archivedAt: null, OR: [{ kind: { in: ['room', 'event'] } }, { kind: 'community', visibility: 'public' }, { members: { some: { userId: req.me.id, status: 'active' } } }] },
+      },
+      include: { conversation: { select: { id: true, kind: true, name: true, instrument: true, eventId: true } } },
+    }),
   ]);
   const postV = new Map((await postViews(posts, req.me.id)).map((p) => [p.id, p]));
   const cards = await userCards(messages.map((m) => m.authorId));

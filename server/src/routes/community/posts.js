@@ -4,7 +4,7 @@ import { prisma } from '../../lib/prisma.js';
 import { asyncHandler } from '../../lib/asyncHandler.js';
 import { publish } from '../../lib/realtime.js';
 import { instrument } from '../../lib/instruments.js';
-import { isStaff, userCards, relationsFor } from '../../lib/community/users.js';
+import { isStaff, staffOutranks, userCards, relationsFor } from '../../lib/community/users.js';
 import { normalizeAttachments, REACTIONS, excerpt, flagLabels, reactionSummary } from '../../lib/community/serialize.js';
 import { screenText, REVIEW_FLAGS } from '../../lib/community/safety.js';
 import { overLimit } from '../../lib/community/throttle.js';
@@ -12,6 +12,7 @@ import { notify } from '../../lib/community/notify.js';
 import { resolveMentions } from '../../lib/community/mentions.js';
 import { postViews, buildFeed, POST_INCLUDE, trendScore } from '../../lib/community/posts.js';
 import { audit, auditLater } from '../../lib/audit.js';
+import { limit } from '../../lib/rateLimit.js';
 import { TOPICS } from './social.js';
 import { requireProfile, clampInt, str } from './context.js';
 
@@ -192,7 +193,7 @@ postsRouter.delete('/posts/:id', asyncHandler(async (req, res) => {
   const post = await prisma.post.findUnique({ where: { id: req.params.id } });
   if (!post || post.deletedAt) return res.status(404).json({ error: 'This post isn’t available. It may have been deleted.' });
   const own = post.authorId === req.me.id;
-  if (!own && !isStaff(req.me)) return res.status(403).json({ error: 'You can only delete your own posts.' });
+  if (!own && !(await staffOutranks(req.me, post.authorId))) return res.status(403).json({ error: 'You can only delete your own posts.' });
   if (own) {
     await prisma.post.update({ where: { id: post.id }, data: { deletedAt: new Date() } });
     auditLater(req, 'community.post_deleted', { targetType: 'post', targetId: post.id, actor: req.me, detail: { kind: post.kind } });
@@ -205,22 +206,19 @@ postsRouter.delete('/posts/:id', asyncHandler(async (req, res) => {
   res.json({ ok: true });
 }));
 
-postsRouter.post('/posts/:id/reactions', requireProfile, asyncHandler(async (req, res) => {
+postsRouter.post('/posts/:id/reactions', requireProfile, limit('reaction'), asyncHandler(async (req, res) => {
   const emoji = String(req.body?.emoji ?? 'like');
   if (emoji !== 'like' && !REACTIONS.includes(emoji)) return res.status(400).json({ error: 'That reaction isn’t available.' });
   const post = await prisma.post.findUnique({ where: { id: req.params.id } });
   if (!post || post.deletedAt || post.removedAt) return res.status(404).json({ error: 'This post isn’t available. It may have been deleted.' });
-  const key = { postId_userId_emoji: { postId: post.id, userId: req.me.id, emoji } };
-  const existing = await prisma.postReaction.findUnique({ where: key });
-  if (existing) {
-    await prisma.postReaction.delete({ where: key });
-    await prisma.post.update({ where: { id: post.id }, data: { reactionCount: { decrement: 1 } } });
-  } else {
-    await prisma.postReaction.create({ data: { postId: post.id, userId: req.me.id, emoji } });
-    await prisma.post.update({ where: { id: post.id }, data: { reactionCount: { increment: 1 } } });
-    await notify([{ userId: post.authorId, type: 'reaction', actorId: req.me.id, title: `${req.me.name} ${post.kind === 'achievement' ? (emoji === '👏' ? 'celebrated' : emoji === '💪' ? 'encouraged you on' : 'reacted to') : 'reacted to'} your ${KIND_NOUN[post.kind] ?? 'post'}`, body: excerpt(post.body, 80), link: postLink(post), groupKey: `react:post:${post.id}` }]);
+  // Toggle without a read-then-write race; the count is always recomputed.
+  const removed = await prisma.postReaction.deleteMany({ where: { postId: post.id, userId: req.me.id, emoji } });
+  if (!removed.count) {
+    await prisma.postReaction.createMany({ data: [{ postId: post.id, userId: req.me.id, emoji }], skipDuplicates: true });
+    if (post.authorId !== req.me.id) await notify([{ userId: post.authorId, type: 'reaction', actorId: req.me.id, title: `${req.me.name} ${post.kind === 'achievement' ? (emoji === '👏' ? 'celebrated' : emoji === '💪' ? 'encouraged you on' : 'reacted to') : 'reacted to'} your ${KIND_NOUN[post.kind] ?? 'post'}`, body: excerpt(post.body, 80), link: postLink(post), groupKey: `react:post:${post.id}` }]);
   }
   const reactions = await prisma.postReaction.findMany({ where: { postId: post.id }, select: { emoji: true, userId: true } });
+  await prisma.post.update({ where: { id: post.id }, data: { reactionCount: reactions.length } });
   res.json({ reactions: reactionSummary(reactions, req.me.id), reactionCount: reactions.length });
 }));
 
@@ -243,7 +241,7 @@ postsRouter.patch('/ideas/:postId/status', requireProfile, asyncHandler(async (r
   res.json({ post: view });
 }));
 
-postsRouter.post('/polls/:id/vote', requireProfile, asyncHandler(async (req, res) => {
+postsRouter.post('/polls/:id/vote', requireProfile, limit('reaction'), asyncHandler(async (req, res) => {
   const poll = await prisma.poll.findUnique({ where: { id: req.params.id }, include: { options: true } });
   if (!poll) return res.status(404).json({ error: 'We couldn’t find that poll. It may have been deleted.' });
   if (poll.closesAt && poll.closesAt < new Date()) return res.status(400).json({ error: 'This poll has closed.' });
@@ -296,6 +294,8 @@ postsRouter.get('/comments', asyncHandler(async (req, res) => {
   const targetType = req.query.targetType === 'news' ? 'news' : 'post';
   const targetId = String(req.query.targetId ?? '');
   const challengesOnly = req.query.challenges === '1';
+  // Discussion under a deleted or removed post goes with it.
+  if (targetType === 'post' && !(await commentTarget('post', targetId))) return res.json({ comments: [] });
   const rows = await prisma.comment.findMany({
     where: { targetType, targetId, ...(challengesOnly ? { challengeCategory: { not: null } } : {}) },
     orderBy: { createdAt: 'asc' },
@@ -373,7 +373,7 @@ postsRouter.delete('/comments/:id', asyncHandler(async (req, res) => {
   const c = await prisma.comment.findUnique({ where: { id: req.params.id } });
   if (!c || c.deletedAt) return res.status(404).json({ error: 'We couldn’t find that comment. It may have been deleted.' });
   const own = c.authorId === req.me.id;
-  if (!own && !isStaff(req.me)) return res.status(403).json({ error: 'You can only delete your own comments.' });
+  if (!own && !(await staffOutranks(req.me, c.authorId))) return res.status(403).json({ error: 'You can only delete your own comments.' });
   if (own) await prisma.comment.update({ where: { id: c.id }, data: { deletedAt: new Date() } });
   else {
     await prisma.comment.update({ where: { id: c.id }, data: { removedById: req.me.id } });

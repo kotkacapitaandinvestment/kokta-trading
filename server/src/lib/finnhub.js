@@ -2,10 +2,10 @@ const FINNHUB_BASE_URL = 'https://finnhub.io/api/v1';
 
 async function finnhubGet(apiKey, path, params = {}) {
   const url = new URL(`${FINNHUB_BASE_URL}${path}`);
-  url.searchParams.set('token', apiKey);
   for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
 
-  const res = await fetch(url.toString());
+  // Key in a header, not the URL, so it never appears in logs.
+  const res = await fetch(url.toString(), { headers: { 'X-Finnhub-Token': apiKey } });
   const data = await res.json().catch(() => null);
   if (!res.ok) {
     throw new Error(data?.error || `Finnhub API error (${res.status})`);

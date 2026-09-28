@@ -3,6 +3,7 @@ import { prisma } from '../lib/prisma.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 import { forgetUserAccess } from '../middleware/auth.js';
 import { audit } from '../lib/audit.js';
+import { revokeUserSessions } from '../lib/sessions.js';
 
 export const adminUsersRouter = Router();
 
@@ -37,8 +38,8 @@ adminUsersRouter.patch('/:id', asyncHandler(async (req, res) => {
   const target = await prisma.user.findUnique({ where: { id: req.params.id } });
   if (!target) return res.status(404).json({ error: 'User not found.' });
 
-  if (target.id === actor.id && (role !== undefined || status !== undefined)) {
-    return res.status(403).json({ error: 'You cannot change your own role or status.' });
+  if (target.id === actor.id && (role !== undefined || status !== undefined || plan !== undefined)) {
+    return res.status(403).json({ error: 'You cannot change your own role, status or plan.' });
   }
   if (role !== undefined) {
     if (actor.role !== 'super_admin') return res.status(403).json({ error: 'Only a super admin can change roles.' });
@@ -58,6 +59,8 @@ adminUsersRouter.patch('/:id', asyncHandler(async (req, res) => {
       ...(typeof plan === 'string' && plan.trim() ? { plan: plan.trim().slice(0, 40) } : {}),
     },
   });
+  // Suspended or banned: every signed-in browser is signed out now.
+  if (status && status !== 'active' && status !== target.status) await revokeUserSessions(user.id);
   forgetUserAccess(user.id);
   const changed = {};
   if (status && status !== target.status) changed.status = { from: target.status, to: status };

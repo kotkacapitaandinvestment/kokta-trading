@@ -1,6 +1,9 @@
-import jwt from 'jsonwebtoken';
 import { prisma } from '../lib/prisma.js';
 import { loadAppSettings, ADMIN_ROLES } from '../lib/appSettings.js';
+import { readToken, liveSession, startSession, clearSessionCookie, pruneSessions } from '../lib/sessions.js';
+import { memoryHit } from '../lib/rateLimit.js';
+
+export { clearSessionCookie } from '../lib/sessions.js';
 
 // Account status (and verification state) is re-checked on every request,
 // cached ~60s per instance, so suspending or banning a user takes effect
@@ -13,9 +16,9 @@ async function accessFor(userId) {
   if (hit && hit.expires > Date.now()) return hit.value;
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: { status: true, role: true, kyc: { select: { status: true } } },
+    select: { status: true, role: true, sessionsValidAfter: true, kyc: { select: { status: true } } },
   });
-  const value = { active: user?.status === 'active', role: user?.role ?? null, kycStatus: user?.kyc?.status ?? 'none' };
+  const value = { exists: !!user, active: user?.status === 'active', role: user?.role ?? null, kycStatus: user?.kyc?.status ?? 'none', sessionsValidAfter: user?.sessionsValidAfter ?? null };
   accessCache.set(userId, { value, expires: Date.now() + ACCESS_TTL_MS });
   return value;
 }
@@ -38,31 +41,62 @@ async function kycBlocks(req, access) {
   return settings.kycRequired;
 }
 
-export function requireAuth(req, res, next) {
-  const token = req.cookies?.kotka_session;
-  if (!token) return res.status(401).json({ error: 'Please sign in to continue.' });
+// Cookies issued before revocable sessions carry no `sid`. They are accepted
+// once (unless invalidated by a password change) and swapped for a real
+// session, so nobody is signed out by the upgrade.
+const upgraded = new Map();
 
-  let payload;
-  try {
-    payload = jwt.verify(token, process.env.JWT_SECRET);
-  } catch {
-    return res.status(401).json({ error: 'Your session has ended. Please sign in again.' });
+const ENDED = 'Your session has ended. Please sign in again.';
+const PER_USER_PER_MINUTE = 300;
+
+export function requireAuth(req, res, next) {
+  const payload = readToken(req);
+  if (!payload) {
+    // A cookie that fails verification (tampered, expired, wrong algorithm).
+    if (req.cookies?.kotka_session) clearSessionCookie(res);
+    return res.status(401).json({ error: req.cookies?.kotka_session ? ENDED : 'Please sign in to continue.' });
   }
-  req.userId = payload.sub;
-  accessFor(payload.sub)
-    .then(async (access) => {
-      if (!access.active) {
-        res.clearCookie('kotka_session');
-        return res.status(403).json({ error: 'This account is paused. Please contact support for help.' });
+  (async () => {
+    const access = await accessFor(payload.sub);
+    if (!access.exists) {
+      clearSessionCookie(res);
+      return res.status(401).json({ error: ENDED });
+    }
+    if (payload.sid) {
+      const session = await liveSession(payload);
+      if (!session) {
+        clearSessionCookie(res);
+        return res.status(401).json({ error: ENDED });
       }
-      if (await kycBlocks(req, access)) {
-        return res.status(403).json({ error: 'Verify your identity to continue.', code: 'kyc_required' });
+      req.sessionId = session.id;
+    } else {
+      if (access.sessionsValidAfter && payload.iat * 1000 < new Date(access.sessionsValidAfter).getTime()) {
+        clearSessionCookie(res);
+        return res.status(401).json({ error: ENDED });
       }
-      next();
-    })
-    .catch(next);
+      const token = req.cookies.kotka_session;
+      if (!upgraded.has(token)) {
+        upgraded.set(token, true);
+        if (upgraded.size > 5000) upgraded.clear();
+        req.sessionId = await startSession(req, res, payload.sub);
+      }
+    }
+    req.userId = payload.sub;
+    pruneSessions();
+    if (memoryHit(`api:${payload.sub}`, PER_USER_PER_MINUTE, 60e3)) return res.status(429).json({ error: 'You’re going a bit fast. Please wait a moment and try again.', code: 'rate_limited' });
+    if (!access.active) {
+      clearSessionCookie(res);
+      return res.status(403).json({ error: 'This account is paused. Please contact support for help.' });
+    }
+    if (await kycBlocks(req, access)) {
+      return res.status(403).json({ error: 'Verify your identity to continue.', code: 'kyc_required' });
+    }
+    next();
+  })().catch(next);
 }
 
+// Role checks always read the role from the database, never from the client
+// or the cookie.
 export function requireRole(...roles) {
   return (req, res, next) => {
     prisma.user
@@ -78,28 +112,8 @@ export function requireRole(...roles) {
   };
 }
 
-export function issueSessionCookie(res, userId) {
-  const token = jwt.sign({ sub: userId }, process.env.JWT_SECRET, { expiresIn: '7d' });
-  res.cookie('kotka_session', token, {
-    httpOnly: true,
-    sameSite: 'lax',
-    secure: process.env.NODE_ENV === 'production',
-    maxAge: 7 * 24 * 60 * 60 * 1000,
-  });
-}
-
-export function clearSessionCookie(res) {
-  res.clearCookie('kotka_session', { httpOnly: true, sameSite: 'lax', secure: process.env.NODE_ENV === 'production' });
-}
-
 // The signed-in user's id from the session cookie, or null. For routes that
 // don't require sign-in but want to know who is calling (e.g. sign-out).
 export function sessionUserId(req) {
-  const token = req.cookies?.kotka_session;
-  if (!token) return null;
-  try {
-    return jwt.verify(token, process.env.JWT_SECRET).sub ?? null;
-  } catch {
-    return null;
-  }
+  return readToken(req)?.sub ?? null;
 }
