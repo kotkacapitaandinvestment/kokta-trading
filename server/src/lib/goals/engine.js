@@ -28,7 +28,7 @@ export function localDate(input) {
 export const METRICS = {
   checkins: { label: 'Consistency goal', noun: 'consistency', unit: 'check-ins', describe: (t) => `Check in on ${t} days` },
   disciplined_days: { label: 'Discipline goal', noun: 'discipline', unit: 'disciplined days', describe: (t) => `${t} days following your plan and risk rules` },
-  streak: { label: 'Streak goal', noun: 'streak', unit: 'day streak', describe: (t) => `Reach a ${t}-day check-in streak` },
+  streak: { label: 'Streak goal', noun: 'streak', unit: 'days', describe: (t) => `Reach a ${t}-day check-in streak` },
   learning: { label: 'Learning goal', noun: 'learning', unit: 'learning activities', describe: (t) => `${t} learning activities` },
   backtests: { label: 'Backtesting goal', noun: 'backtesting', unit: 'backtesting sessions', describe: (t) => `${t} backtesting sessions` },
   journal_trades: { label: 'Journaling goal', noun: 'journaling', unit: 'journaled trades', describe: (t) => `Journal ${t} trades` },

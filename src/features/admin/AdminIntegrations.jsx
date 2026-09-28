@@ -1,13 +1,14 @@
 import { useEffect, useState } from 'react';
 import { Plug, CheckCircle2, XCircle, Loader2, ChevronRight } from 'lucide-react';
 import PageHeader from '../../components/ui/PageHeader';
-import Card, { CardHeader, CardBody } from '../../components/ui/Card';
+import Card from '../../components/ui/Card';
 import Input from '../../components/ui/Input';
 import Button from '../../components/ui/Button';
 import Badge from '../../components/ui/Badge';
 import Modal from '../../components/ui/Modal';
 import { api } from '../../lib/api';
 import { INTEGRATION_PROVIDERS } from './integrationProviders';
+import { modelName, MODEL_ROLE, MODEL_STATE } from '../../lib/aiModelNames';
 
 function getPath(obj, path) {
   return path.split('.').reduce((o, k) => (o == null ? undefined : o[k]), obj);
@@ -32,26 +33,27 @@ function ProviderCard({ provider, integration, onOpen }) {
           <provider.icon className="h-5 w-5 text-ink-700 dark:text-ink-200" strokeWidth={1.75} />
         </div>
         {configured ? (
-          <Badge tone={integration.enabled ? 'profit' : 'neutral'}>{integration.enabled ? 'Active' : 'Disabled'}</Badge>
+          <Badge tone={integration.enabled ? 'profit' : 'neutral'}>{integration.enabled ? 'On' : 'Switched off'}</Badge>
         ) : (
-          <Badge tone="warning">Not configured</Badge>
+          <Badge tone="warning">Not connected</Badge>
         )}
       </div>
       <h3 className="text-sm font-semibold text-ink-900 dark:text-ink-50">{provider.name}</h3>
-      <p className="mt-0.5 text-xs font-medium uppercase tracking-wide text-ink-400">{provider.category}</p>
+      <p className="mt-0.5 text-xs font-medium text-ink-400">{provider.category}</p>
       <p className="mt-2.5 flex-1 text-sm text-ink-500 dark:text-ink-400">{provider.description}</p>
       {configured ? (
         <p className="mt-3 font-mono text-xs text-ink-400">{integration.maskedSecret}</p>
       ) : null}
       <Button variant="secondary" size="sm" className="mt-4 w-full" onClick={() => onOpen(provider)} iconRight={ChevronRight}>
-        {configured ? 'Manage' : 'Configure'}
+        {configured ? 'Manage' : 'Set up'}
       </Button>
     </Card>
   );
 }
 
 const STATUS_TONE = { ok: 'profit', degraded: 'warning', retired: 'loss', unavailable: 'loss' };
-const when = (iso) => (iso ? new Date(iso).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'UTC' }) + ' UTC' : 'never');
+const when = (iso) => (iso ? new Date(iso).toLocaleString(undefined, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : 'never');
+const EVENT_WORDS = { retired: 'was retired by NVIDIA', unavailable: 'isn’t available', transient: 'had a temporary problem', incompatible: 'doesn’t work with Kotka', degraded: 'is slow or failing', recovered: 'is working again', switched: 'was replaced' };
 
 // Which model each feature is actually using, per-model health from the last
 // check, and a log of automatic switches.
@@ -78,19 +80,19 @@ function ModelHealthPanel({ integration, onUpdated }) {
     <div className="space-y-4 border-t border-ink-100 pt-4 dark:border-ink-800">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <p className="text-sm font-semibold text-ink-900 dark:text-ink-50">Model health</p>
+          <p className="text-sm font-semibold text-ink-900 dark:text-ink-50">AI model checks</p>
           <p className="text-xs text-ink-400">Last checked {when(integration.config?.modelHealthCheckedAt)}</p>
         </div>
         <Button type="button" size="sm" variant="secondary" disabled={checking} icon={checking ? Loader2 : undefined} onClick={check}>
-          {checking ? 'Checking' : 'Check models now'}
+          {checking ? 'Checking…' : 'Check models now'}
         </Button>
       </div>
       {error ? <p className="text-xs text-loss-500">{error}</p> : null}
       <dl className="grid grid-cols-1 gap-2 text-xs sm:grid-cols-3">
-        {[['Chat', 'chat'], ['Vision', 'vision'], ['Research narrative', 'narrative']].map(([label, role]) => (
+        {[['Chat', 'chat'], ['Chart reading', 'vision'], ['Research summaries', 'narrative']].map(([label, role]) => (
           <div key={role} className="rounded-lg bg-ink-50 px-3 py-2 dark:bg-ink-800">
-            <dt className="text-ink-400">{label} in use</dt>
-            <dd className="mt-0.5 break-all font-mono text-[11px] text-ink-800 dark:text-ink-100">{integration.models.effective[role] ?? 'none available'}</dd>
+            <dt className="text-ink-400">{label} uses</dt>
+            <dd className="mt-0.5 text-[13px] font-medium text-ink-800 dark:text-ink-100" title={integration.models.effective[role] ?? undefined}>{modelName(integration.models.effective[role]) ?? 'No working model'}</dd>
           </div>
         ))}
       </dl>
@@ -99,10 +101,10 @@ function ModelHealthPanel({ integration, onUpdated }) {
           const h = health[m];
           return (
             <li key={m} className="flex items-start justify-between gap-3 text-xs">
-              <span className="break-all font-mono text-[11px] text-ink-600 dark:text-ink-300">{m}</span>
+              <span className="text-ink-600 dark:text-ink-300" title={m}>{modelName(m)}</span>
               <span className="flex shrink-0 items-center gap-2">
                 {h?.latencyMs ? <span className="font-mono text-[11px] text-ink-400">{(h.latencyMs / 1000).toFixed(1)}s</span> : null}
-                <Badge tone={STATUS_TONE[h?.status] ?? 'neutral'}>{h?.status ?? 'untested'}</Badge>
+                <Badge tone={STATUS_TONE[h?.status] ?? 'neutral'}>{MODEL_STATE[h?.status ?? 'untested'] ?? h?.status}</Badge>
               </span>
             </li>
           );
@@ -110,12 +112,12 @@ function ModelHealthPanel({ integration, onUpdated }) {
       </ul>
       {events.length ? (
         <div>
-          <p className="mb-1.5 text-xs font-medium text-ink-700 dark:text-ink-200">Recent model events</p>
+          <p className="mb-1.5 text-xs font-medium text-ink-700 dark:text-ink-200">Recent changes</p>
           <ul className="space-y-1">
             {events.slice(0, 8).map((e, i) => (
               <li key={i} className="text-[11px] text-ink-500 dark:text-ink-400">
-                <span className="text-ink-400">{when(e.at)}</span> · {e.role}: <span className="font-mono">{e.model}</span> {e.type}
-                {e.switchedTo ? <> → now using <span className="font-mono">{e.switchedTo}</span></> : null}
+                <span className="text-ink-400">{when(e.at)}</span> · {MODEL_ROLE[e.role] ?? e.role}: {modelName(e.model) ?? 'No model'} {EVENT_WORDS[e.type] ?? e.type}
+                {e.type === 'switched' ? (e.switchedTo ? `. Now using ${modelName(e.switchedTo)}.` : '. No working model is left.') : '.'}
               </li>
             ))}
           </ul>
@@ -175,6 +177,9 @@ export default function AdminIntegrations() {
       const { integration } = await api.put(`/admin/integrations/${activeProvider.id}`, body);
       setIntegrations((prev) => ({ ...prev, [activeProvider.id]: integration }));
       setForm((f) => ({ ...f, secret: '' }));
+      setTestResult({ ok: true, message: 'Saved. Use Test connection to check it works.' });
+    } catch (err) {
+      setTestResult({ ok: false, message: err.message });
     } finally {
       setSaving(false);
     }
@@ -196,7 +201,7 @@ export default function AdminIntegrations() {
   if (loading) {
     return (
       <div className="flex items-center gap-2 py-12 text-sm text-ink-400">
-        <Loader2 className="h-4 w-4 animate-spin" /> Loading integrations…
+        <Loader2 className="h-4 w-4 animate-spin" /> Loading connected services…
       </div>
     );
   }
@@ -205,13 +210,13 @@ export default function AdminIntegrations() {
     <div className="space-y-6">
       <PageHeader
         eyebrow="Super Admin"
-        title="Integrations"
-        description="Connect the external providers that power Kotka Trading. Secrets are encrypted at rest and never sent to the browser."
+        title="Connected services"
+        description="Connect the outside services Kotka relies on. Keys are stored securely and never shown in full."
       />
 
       {loadError ? (
         <div className="rounded-lg bg-loss-50 p-3 text-sm text-loss-600 dark:bg-loss-500/10 dark:text-loss-400">
-          Couldn't load integrations: {loadError}
+          Couldn’t load connected services. {loadError}
         </div>
       ) : null}
 
@@ -221,7 +226,7 @@ export default function AdminIntegrations() {
         ))}
       </div>
 
-      <Modal open={!!activeProvider} onClose={() => setActiveProvider(null)} title={activeProvider ? `Configure ${activeProvider.name}` : ''} width={activeProvider?.id === 'nvidia' ? 'max-w-2xl' : 'max-w-lg'}>
+      <Modal open={!!activeProvider} onClose={() => setActiveProvider(null)} title={activeProvider ? `Set up ${activeProvider.name}` : ''} width={activeProvider?.id === 'nvidia' ? 'max-w-2xl' : 'max-w-lg'}>
         {activeProvider ? (
           <form onSubmit={handleSave} className="space-y-4">
             <p className="text-xs text-ink-400">{activeProvider.fallbackNote}</p>
@@ -250,7 +255,7 @@ export default function AdminIntegrations() {
                 onChange={(e) => setField('enabled', e.target.checked)}
                 className="h-4 w-4 rounded accent-ink-900"
               />
-              Use this integration
+              Turn this service on
             </label>
 
             <div className="flex flex-wrap items-center gap-3 pt-2">

@@ -129,7 +129,7 @@ async function removeContent(req, type, id) {
     const c = await prisma.conversation.update({ where: { id }, data: { archivedAt: new Date() } });
     return c.createdById;
   }
-  throw new Error('Unsupported target');
+  throw Object.assign(new Error('This item can’t be changed from here.'), { status: 400, expose: true });
 }
 
 async function restoreContent(type, id) {
@@ -137,8 +137,11 @@ async function restoreContent(type, id) {
   if (type === 'comment') return prisma.comment.update({ where: { id }, data: { removedById: null } });
   if (type === 'message') return prisma.message.update({ where: { id }, data: { removedById: null } });
   if (type === 'conversation') return prisma.conversation.update({ where: { id }, data: { archivedAt: null } });
-  throw new Error('Unsupported target');
+  throw Object.assign(new Error('This item can’t be changed from here.'), { status: 400, expose: true });
 }
+
+// How a closed report reads in the moderation queue.
+const RESOLUTION = { remove: 'Removed', restore: 'Restored', mute: 'Posting paused', unmute: 'Posting pause ended', suspend: 'Account suspended', ban: 'Account banned', dismiss: 'Dismissed' };
 
 // One endpoint for every moderation action, logged in ModerationAction and
 // the audit log. Actions: remove, restore, mute, unmute, suspend, ban, dismiss.
@@ -172,22 +175,22 @@ adminCommunityRouter.post('/actions', asyncHandler(async (req, res) => {
       if (!isAdmin(req.user)) return res.status(403).json({ error: 'Only admins can suspend or ban accounts.' });
       if (!targetUserId || targetUserId === req.user.id) return res.status(400).json({ error: 'Choose another trader.' });
       const target = await prisma.user.findUnique({ where: { id: targetUserId }, select: { role: true } });
-      if (['admin', 'super_admin'].includes(target?.role) && req.user.role !== 'super_admin') return res.status(403).json({ error: 'Only a Super Admin can act on admin accounts.' });
+      if (['admin', 'super_admin'].includes(target?.role) && req.user.role !== 'super_admin') return res.status(403).json({ error: 'Only a super admin can act on other admin accounts.' });
       await prisma.user.update({ where: { id: targetUserId }, data: { status: action === 'reinstate' ? 'active' : action === 'ban' ? 'banned' : 'suspended' } });
       forgetUserAccess(targetUserId);
       break;
     }
     case 'dismiss':
-      if (!report) return res.status(400).json({ error: 'Nothing to dismiss.' });
+      if (!report) return res.status(400).json({ error: 'There’s no open report to dismiss.' });
       break;
     default:
-      return res.status(400).json({ error: 'Unknown action.' });
+      return res.status(400).json({ error: 'That action isn’t available here.' });
   }
 
   await prisma.moderationAction.create({ data: { moderatorId: req.user.id, action, targetType: targetType || 'user', targetId: targetId || targetUserId || '', targetUserId, reportId: report?.id ?? null, reason } });
   if (report) {
     // Resolve every open report about the same item together.
-    await prisma.report.updateMany({ where: { status: 'open', targetType: report.targetType, targetId: report.targetId }, data: { status: action === 'dismiss' ? 'dismissed' : 'actioned', resolvedById: req.user.id, resolvedAt: new Date(), resolution: `${action}${reason ? `: ${reason}` : ''}` } });
+    await prisma.report.updateMany({ where: { status: 'open', targetType: report.targetType, targetId: report.targetId }, data: { status: action === 'dismiss' ? 'dismissed' : 'actioned', resolvedById: req.user.id, resolvedAt: new Date(), resolution: `${RESOLUTION[action] ?? action}${reason ? `: ${reason}` : ''}` } });
   }
   await audit(req, `community.${action}`, { targetType: targetType || 'user', targetId: targetId || targetUserId, detail: { reason, reportId: report?.id } });
   res.json({ ok: true });
@@ -242,7 +245,7 @@ adminCommunityRouter.post('/events', asyncHandler(async (req, res) => {
   const title = str(req.body?.title, 160);
   const currency = str(req.body?.currency, 3).toUpperCase();
   const at = new Date(req.body?.scheduledAt);
-  if (!title || !/^[A-Z]{3}$/.test(currency) || Number.isNaN(at.getTime())) return res.status(400).json({ error: 'Title, currency and date/time are required.' });
+  if (!title || !/^[A-Z]{3}$/.test(currency) || Number.isNaN(at.getTime())) return res.status(400).json({ error: 'Add a title, a currency and a date and time.' });
   const e = await prisma.marketEvent.create({
     data: { sourceKey: `admin:${Date.now()}:${title}`.slice(0, 250), source: 'admin', title, currency, country: str(req.body?.country, 60) || currency, category: str(req.body?.category, 40) || 'other', importance: ['High', 'Medium', 'Low'].includes(req.body?.importance) ? req.body.importance : 'Medium', scheduledAt: at, dateOnly: !!req.body?.dateOnly, sourceName: str(req.body?.sourceName, 120) || null, sourceUrl: /^https:\/\//.test(req.body?.sourceUrl ?? '') ? req.body.sourceUrl : null, instruments: instrumentsForCurrency(currency), createdById: req.user.id },
   });

@@ -30,7 +30,7 @@ discoveryRouter.get('/news', asyncHandler(async (req, res) => {
 
 discoveryRouter.get('/news/:id', asyncHandler(async (req, res) => {
   const n = await prisma.newsItem.findUnique({ where: { id: req.params.id } });
-  if (!n) return res.status(404).json({ error: 'News item not found.' });
+  if (!n) return res.status(404).json({ error: 'We couldn’t find that news story. It may have been removed.' });
   const [saved, takes] = await Promise.all([
     prisma.savedItem.findUnique({ where: { userId_itemType_itemId: { userId: req.me.id, itemType: 'news', itemId: n.id } } }),
     prisma.post.findMany({ where: { newsId: n.id, deletedAt: null, removedAt: null }, orderBy: { createdAt: 'desc' }, take: 20, include: POST_INCLUDE }),
@@ -64,13 +64,13 @@ discoveryRouter.get('/events', asyncHandler(async (req, res) => {
   const followSet = new Set(follows.map((f) => f.targetId));
   res.json({
     events: rows.map((e) => ({ ...eventView(e, now), messages: roomBy.get(e.id)?.messageCount ?? 0, following: followSet.has(e.id) })),
-    coverage: 'Official calendars: Federal Reserve, BLS and BEA (USD); ECB and Eurostat (EUR). Other economies are not covered yet.',
+    coverage: 'Major US and euro-area releases: Fed and ECB decisions, jobs, inflation and growth figures. More countries are coming.',
   });
 }));
 
 discoveryRouter.get('/events/:id', asyncHandler(async (req, res) => {
   const e = await prisma.marketEvent.findUnique({ where: { id: req.params.id } });
-  if (!e) return res.status(404).json({ error: 'Event not found.' });
+  if (!e) return res.status(404).json({ error: 'We couldn’t find that event. It may have been cancelled.' });
   const room = await ensureEventRoom(e);
   const [reaction, following, followers, participants] = await Promise.all([
     eventReaction(e),
@@ -117,7 +117,7 @@ discoveryRouter.get('/trending', asyncHandler(async (req, res) => {
   const topics = await prisma.$queryRaw`
     SELECT t AS topic, COUNT(*)::int AS n FROM "Post", unnest(topics) AS t
     WHERE "createdAt" >= ${since} AND "deletedAt" IS NULL AND "removedAt" IS NULL GROUP BY t ORDER BY n DESC LIMIT 6`;
-  res.json({ markets: rows.slice(0, 8), topics, basis: 'Last 24 hours: messages, posts, comments, distinct participants, the latest daily move against normal volatility, and high-importance events.' });
+  res.json({ markets: rows.slice(0, 8), topics, basis: 'Based on the last 24 hours: chat, posts and comments, how many traders joined in, bigger-than-usual price moves and major releases.' });
 }));
 
 discoveryRouter.get('/live', asyncHandler(async (req, res) => {

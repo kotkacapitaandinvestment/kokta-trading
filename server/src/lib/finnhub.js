@@ -16,5 +16,5 @@ async function finnhubGet(apiKey, path, params = {}) {
 export async function finnhubTestConnection(apiKey) {
   const data = await finnhubGet(apiKey, '/quote', { symbol: 'AAPL' });
   if (typeof data?.c !== 'number') throw new Error('Unexpected response from Finnhub.');
-  return `Connected — AAPL quote: $${data.c}`;
+  return 'Connected. Finnhub is responding, so Community news headlines will keep loading.';
 }

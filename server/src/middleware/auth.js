@@ -53,7 +53,7 @@ export function requireAuth(req, res, next) {
     .then(async (access) => {
       if (!access.active) {
         res.clearCookie('kotka_session');
-        return res.status(403).json({ error: 'This account is not active. Contact support for help.' });
+        return res.status(403).json({ error: 'This account is paused. Please contact support for help.' });
       }
       if (await kycBlocks(req, access)) {
         return res.status(403).json({ error: 'Verify your identity to continue.', code: 'kyc_required' });

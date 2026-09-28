@@ -12,7 +12,7 @@ const PHASES = [
   ['upcoming', 'Before release'],
   ['live', 'Release'],
   ['reaction', 'Market reaction'],
-  ['released', 'Aftermath'],
+  ['released', 'After the release'],
 ];
 
 function Countdown({ at }) {
@@ -61,7 +61,7 @@ export default function EventDetail() {
             <h1 className="mt-2 text-2xl font-semibold tracking-tight text-ink-900 dark:text-ink-50">{e.title}</h1>
             <p className="mt-1 text-sm text-ink-500 dark:text-ink-400">
               {new Date(e.scheduledAt).toLocaleString(undefined, { weekday: 'long', day: 'numeric', month: 'long', ...(e.dateOnly ? {} : { hour: '2-digit', minute: '2-digit' }) })}
-              {e.dateOnly ? ' · time not published by the source' : ''}
+              {e.dateOnly ? ' · time not announced yet' : ''}
               {e.referencePeriod ? ` · covers ${e.referencePeriod}` : ''}
             </p>
             {e.phase === 'upcoming' && !e.dateOnly ? <p className="mt-3 text-sm text-ink-700 dark:text-ink-200">Starts in <Countdown at={e.scheduledAt} /></p> : null}
@@ -76,12 +76,12 @@ export default function EventDetail() {
             <dl className="mt-5 grid grid-cols-3 gap-3 border-t border-ink-100 pt-4 dark:border-ink-800">
               {values.map(([k, v]) => (
                 <div key={k}>
-                  <dt className="text-[11px] uppercase tracking-wide text-ink-400">{k}</dt>
-                  <dd className="mt-0.5 font-mono text-lg font-semibold text-ink-900 dark:text-ink-50">{v ?? <span className="font-sans text-xs font-normal text-ink-400">Not published</span>}</dd>
+                  <dt className="text-[11px] text-ink-400">{k}</dt>
+                  <dd className="mt-0.5 font-mono text-lg font-semibold text-ink-900 dark:text-ink-50">{v ?? <span className="font-sans text-xs font-normal text-ink-400">Not out yet</span>}</dd>
                 </div>
               ))}
             </dl>
-            <p className="mt-2 text-[11px] text-ink-400">{e.valuesNote ? `Figures: ${e.valuesNote}.` : 'Official calendars list the date only; figures appear here when an administrator adds them from the release.'}</p>
+            <p className="mt-2 text-[11px] text-ink-400">{e.valuesNote ? `Figures: ${e.valuesNote}.` : 'Forecast and actual figures appear here once they’re published.'}</p>
             <div className="mt-4 flex flex-wrap items-center gap-2">
               <FollowButton targetType="event" targetId={e.id} following={data.following} labels={['Remind me', 'Reminder set']} />
               <SaveButton itemType="event" itemId={e.id} />
@@ -95,7 +95,7 @@ export default function EventDetail() {
             {data.reaction.length ? (
               <>
                 <table className="mt-3 w-full text-sm">
-                  <thead><tr className="text-left text-[11px] uppercase tracking-wide text-ink-400"><th className="pb-1 font-medium">Market</th><th className="pb-1 text-right font-medium">Close</th><th className="pb-1 text-right font-medium">Day change</th><th className="pb-1 text-right font-medium">Day range</th></tr></thead>
+                  <thead><tr className="text-left text-[11px] text-ink-400"><th className="pb-1 font-medium">Market</th><th className="pb-1 text-right font-medium">Close</th><th className="pb-1 text-right font-medium">Day change</th><th className="pb-1 text-right font-medium">Day range</th></tr></thead>
                   <tbody className="divide-y divide-ink-100 dark:divide-ink-800">
                     {data.reaction.map((r) => (
                       <tr key={r.symbol}>
@@ -107,26 +107,26 @@ export default function EventDetail() {
                     ))}
                   </tbody>
                 </table>
-                <p className="mt-2 text-[11px] text-ink-400">Daily closes on the release date (Massive end-of-day bars). A daily change includes everything else that happened that day.</p>
+                <p className="mt-2 text-[11px] text-ink-400">Closing prices on the release day. The day’s change includes everything else that happened that day too.</p>
               </>
             ) : (
-              <p className="mt-2 text-sm text-ink-400">{e.phase === 'upcoming' || e.phase === 'live' ? 'Appears after the release date closes.' : 'Daily bars for this date are not cached yet.'}</p>
+              <p className="mt-2 text-sm text-ink-400">{e.phase === 'upcoming' || e.phase === 'live' ? 'Shows up after markets close on the release day.' : 'Prices for this day aren’t in yet. Check back later.'}</p>
             )}
-            {e.instruments?.length ? <div className="mt-3 flex flex-wrap gap-1.5">{e.instruments.map((s) => <Link key={s} to={`/app/community/markets/${s}`} className="rounded bg-ink-50 px-1.5 py-0.5 font-mono text-[11px] text-ink-600 hover:bg-ink-100 dark:bg-ink-800 dark:text-ink-300">{s}</Link>)}</div> : null}
+            {e.instruments?.length ? <div className="mt-3 flex flex-wrap gap-1.5">{e.instruments.map((s) => <Link key={s} to={`/app/community/markets/${s}`} className="rounded bg-ink-50 px-1.5 py-0.5 font-mono text-[11px] text-ink-600 hover:bg-ink-100 dark:bg-ink-800 dark:text-ink-300">{/^[A-Z]{6}$/.test(s) ? `${s.slice(0, 3)}/${s.slice(3)}` : s}</Link>)}</div> : null}
           </section>
 
           <section className="rounded-2xl border border-ink-100 bg-white p-5 dark:border-ink-800 dark:bg-ink-900">
             <div className="flex items-center justify-between gap-2">
               <h2 className="text-sm font-semibold text-ink-900 dark:text-ink-50">Kotka summary</h2>
-              <button type="button" onClick={() => ai.run('summary', '/community/ai/summarize', { conversationId: data.room.id })} className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-accent-700 hover:bg-accent-500/10 dark:text-accent-300"><Sparkles className="h-3.5 w-3.5" /> {e.summary ? 'Refresh' : 'Summarize discussion'}</button>
+              <button type="button" onClick={() => ai.run('summary', '/community/ai/summarize', { conversationId: data.room.id })} className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-accent-700 hover:bg-accent-500/10 dark:text-accent-300"><Sparkles className="h-3.5 w-3.5" /> {e.summary ? 'Refresh' : 'Summarise discussion'}</button>
             </div>
-            {summary ? <AiPanel state={summary} onClose={ai.clear} className="mt-3" /> : <p className="mt-2 text-sm text-ink-400">Once the room has some discussion, Kotka can summarize it, separating verified figures from opinion.</p>}
+            {summary ? <AiPanel state={summary} onClose={ai.clear} className="mt-3" /> : <p className="mt-2 text-sm text-ink-400">Once there’s some chat about this event, Kotka can summarise it, keeping confirmed figures apart from opinion.</p>}
           </section>
         </div>
 
         <div className="flex h-[70dvh] min-h-[28rem] flex-col overflow-hidden rounded-2xl border border-ink-100 bg-white dark:border-ink-800 dark:bg-ink-900 xl:sticky xl:top-4 xl:h-[calc(100dvh-10rem)]">
-          <p className="border-b border-ink-100 px-4 py-2.5 text-sm font-semibold text-ink-900 dark:border-ink-800 dark:text-ink-50">Event room <span className="font-normal text-ink-400">· {data.room.participants} trader{data.room.participants === 1 ? '' : 's'}</span></p>
-          <ConversationChat conversationId={data.room.id} variant="event" isPublic focusId={params.get('m')} emptyText="No discussion yet. Share what you expect before the release." />
+          <p className="border-b border-ink-100 px-4 py-2.5 text-sm font-semibold text-ink-900 dark:border-ink-800 dark:text-ink-50">Event chat <span className="font-normal text-ink-400">· {data.room.participants} trader{data.room.participants === 1 ? '' : 's'}</span></p>
+          <ConversationChat conversationId={data.room.id} variant="event" isPublic focusId={params.get('m')} emptyText="No messages yet. Share what you expect before the release." />
         </div>
       </div>
     </div>

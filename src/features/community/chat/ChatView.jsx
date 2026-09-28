@@ -120,7 +120,7 @@ function ThreadPanel({ conversationId, root, variant, isPublic, access, canModer
       <div className="flex items-center justify-between border-b border-ink-100 px-4 py-3 dark:border-ink-800">
         <p className="flex items-center gap-2 text-sm font-semibold text-ink-900 dark:text-ink-50"><MessagesSquare className="h-4 w-4" /> Thread</p>
         <div className="flex items-center gap-1">
-          <button type="button" onClick={() => onAi('summary', '/community/ai/summarize', { conversationId, threadRootId: root.id })} className="inline-flex h-8 items-center gap-1 rounded-lg px-2 text-xs font-medium text-accent-700 hover:bg-accent-500/10 dark:text-accent-300"><Sparkles className="h-3.5 w-3.5" /> Summarize</button>
+          <button type="button" onClick={() => onAi('summary', '/community/ai/summarize', { conversationId, threadRootId: root.id })} className="inline-flex h-8 items-center gap-1 rounded-lg px-2 text-xs font-medium text-accent-700 hover:bg-accent-500/10 dark:text-accent-300"><Sparkles className="h-3.5 w-3.5" /> Summarise</button>
           <button type="button" onClick={onClose} className="rounded-lg p-1.5 text-ink-400 hover:bg-ink-100 dark:hover:bg-ink-800" aria-label="Close thread"><X className="h-4 w-4" /></button>
         </div>
       </div>
@@ -200,7 +200,7 @@ export default function ChatView({ conversationId, variant = 'room', access, mem
             <span className="flex-1" />
           )}
           <button type="button" onClick={() => setSearch(search ? null : { q: '', results: null })} className="rounded-lg p-1.5 text-ink-400 hover:bg-ink-100 hover:text-ink-700 dark:hover:bg-ink-800" aria-label="Search this conversation"><Search className="h-4 w-4" /></button>
-          <button type="button" onClick={() => ai.run('summary', '/community/ai/summarize', { conversationId })} className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-accent-700 hover:bg-accent-500/10 dark:text-accent-300" title="Summarize with Kotka AI"><Sparkles className="h-3.5 w-3.5" /> <span className="hidden sm:inline">Summarize</span></button>
+          <button type="button" onClick={() => ai.run('summary', '/community/ai/summarize', { conversationId })} className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-accent-700 hover:bg-accent-500/10 dark:text-accent-300" title="Summarise with Kotka AI"><Sparkles className="h-3.5 w-3.5" /> <span className="hidden sm:inline">Summarise</span></button>
         </div>
         {showPins ? (
           <div className="max-h-52 overflow-y-auto border-b border-ink-100 bg-ink-50/60 dark:border-ink-800 dark:bg-ink-900/60">

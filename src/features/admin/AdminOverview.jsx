@@ -8,25 +8,28 @@ import StatTile from '../../components/ui/StatTile';
 import { api } from '../../lib/api';
 import { CHART_COLORS } from '../../lib/chartColors';
 import EmptyState from '../../components/ui/EmptyState';
+import LoadError from './components/LoadError';
 
 export default function AdminOverview() {
   const [stats, setStats] = useState(null);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
-    api.get('/admin/stats/overview').then(setStats);
+    api.get('/admin/stats/overview').then(setStats).catch((err) => setError(err.message));
   }, []);
 
-  if (!stats) return null;
+  if (error) return <LoadError message={error} />;
+  if (!stats) return <div className="h-64 animate-pulse rounded-2xl bg-white dark:bg-ink-900" />;
 
   return (
     <div className="space-y-6">
-      <PageHeader eyebrow="Admin" title="Overview" description="Platform-wide health, growth, and engagement at a glance." />
+      <PageHeader eyebrow="Admin" title="Overview" description="How many people use Kotka and what they use most." />
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <StatTile label="Daily Active Users" value={stats.dau.toLocaleString()} icon={Users} />
-        <StatTile label="Monthly Active Users" value={stats.mau.toLocaleString()} icon={TrendingUp} />
+        <StatTile label="Signed in today" value={stats.dau.toLocaleString()} icon={Users} />
+        <StatTile label="Signed in, last 30 days" value={stats.mau.toLocaleString()} icon={TrendingUp} />
         <StatTile label="New sign-ups, 7 days" value={stats.newSignups7d.toLocaleString()} icon={UserPlus} hint={`${stats.totalUsers.toLocaleString()} accounts in total`} />
-        <StatTile label="AI Requests Today" value={stats.aiRequestsToday.toLocaleString()} icon={Cpu} />
+        <StatTile label="Kotka AI messages today" value={stats.aiRequestsToday.toLocaleString()} icon={Cpu} />
       </div>
 
       {stats.pendingKyc ? (
@@ -39,7 +42,7 @@ export default function AdminOverview() {
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <Card className="lg:col-span-2">
-          <CardHeader title="Daily Active Users" subtitle="Last 14 days" />
+          <CardHeader title="Recent sign-ins" subtitle="People by the day they last signed in, last 14 days" />
           <CardBody>
             <div className="h-64 w-full">
               <ResponsiveContainer width="100%" height="100%">
@@ -54,7 +57,7 @@ export default function AdminOverview() {
                   <XAxis dataKey="day" tickLine={false} axisLine={false} tick={{ fontSize: 12, fill: CHART_COLORS.tick.light }} />
                   <YAxis tickLine={false} axisLine={false} tick={{ fontSize: 12, fill: CHART_COLORS.tick.light }} allowDecimals={false} />
                   <Tooltip contentStyle={{ borderRadius: 12, border: `1px solid ${CHART_COLORS.grid.light}`, fontSize: 12 }} />
-                  <Area type="monotone" dataKey="dau" stroke={CHART_COLORS.accent} strokeWidth={2.5} fill="url(#dauFill)" />
+                  <Area type="monotone" dataKey="dau" name="People" stroke={CHART_COLORS.accent} strokeWidth={2.5} fill="url(#dauFill)" />
                 </AreaChart>
               </ResponsiveContainer>
             </div>
@@ -62,10 +65,10 @@ export default function AdminOverview() {
         </Card>
 
         <Card>
-          <CardHeader title="Feature Usage" subtitle="Tracked actions, last 30 days" />
+          <CardHeader title="What traders use most" subtitle="Last 30 days" />
           <CardBody className="space-y-3">
             {stats.featureUsage.every((f) => f.count === 0) ? (
-              <EmptyState size="inline" icon={Activity} title="No activity yet" description="Sign-ins, trades and AI use will show here as traders use Kotka." />
+              <EmptyState size="inline" icon={Activity} title="No activity yet" description="Kotka AI, journal and checklist use will show here once traders start using them." />
             ) : (
               (() => {
                 const max = Math.max(...stats.featureUsage.map((f) => f.count), 1);

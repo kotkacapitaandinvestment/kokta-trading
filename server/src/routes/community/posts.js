@@ -21,6 +21,9 @@ const KINDS = ['post', 'market', 'idea', 'poll', 'question', 'news'];
 const TIMEFRAMES = ['1m', '5m', '15m', '30m', '1H', '4H', 'Daily', 'Weekly', 'Monthly'];
 const CHALLENGES = ['technical', 'fundamental', 'risk', 'timing', 'liquidity', 'invalidation'];
 const IDEA_STATUSES = ['open', 'updated', 'closed', 'invalidated'];
+// How a status change reads in followers' notifications.
+const STATUS_NEWS = { open: (m) => `reopened their ${m} idea`, updated: (m) => `posted an update on their ${m} idea`, closed: (m) => `closed their ${m} idea`, invalidated: (m) => `marked their ${m} idea as no longer valid` };
+const CHALLENGE_WORDS = { technical: 'chart reading', fundamental: 'fundamentals', risk: 'risk', timing: 'timing', liquidity: 'liquidity', invalidation: 'stop level' };
 const postLink = (p) => `/app/community/${p.kind === 'idea' ? 'ideas' : 'posts'}/${p.id}`;
 const KIND_NOUN = { idea: 'trade idea', achievement: 'achievement' };
 
@@ -30,13 +33,13 @@ function validateIdea(input, symbol) {
   const direction = i.direction === 'bearish' ? 'bearish' : i.direction === 'bullish' ? 'bullish' : null;
   const [entry, stop, target] = [num(i.entry), num(i.stop), num(i.target)];
   const thesis = str(i.thesis, 5000);
-  if (!symbol) return { error: 'Choose the instrument this idea is about.' };
+  if (!symbol) return { error: 'Choose the market this idea is about.' };
   if (!direction) return { error: 'Choose bullish or bearish.' };
   if (!TIMEFRAMES.includes(i.timeframe)) return { error: 'Choose a timeframe.' };
   if (![entry, stop, target].every((v) => Number.isFinite(v) && v > 0)) return { error: 'Entry, stop and target must be positive prices.' };
   if (direction === 'bullish' && !(stop < entry && entry < target)) return { error: 'For a bullish idea the stop must be below entry and the target above it.' };
   if (direction === 'bearish' && !(target < entry && entry < stop)) return { error: 'For a bearish idea the stop must be above entry and the target below it.' };
-  if (thesis.length < 40) return { error: 'Explain your thesis in at least a couple of sentences (40+ characters).' };
+  if (thesis.length < 40) return { error: 'Explain your idea in a couple of sentences (at least 40 characters).' };
   const riskReward = Math.round((Math.abs(target - entry) / Math.abs(entry - stop)) * 100) / 100;
   return { idea: { instrument: symbol, direction, timeframe: i.timeframe, entry, stop, target, riskReward, thesis } };
 }
@@ -83,8 +86,8 @@ postsRouter.post('/posts', requireProfile, asyncHandler(async (req, res) => {
   const kind = KINDS.includes(req.body?.kind) ? req.body.kind : 'post';
   const body = typeof req.body?.body === 'string' ? req.body.body.trim().slice(0, 5000) : '';
   const inst = req.body?.instrument ? instrument(req.body.instrument) : null;
-  if (req.body?.instrument && !inst) return res.status(400).json({ error: 'Unknown instrument.' });
-  if ((kind === 'market' || kind === 'idea') && !inst) return res.status(400).json({ error: 'Choose an instrument.' });
+  if (req.body?.instrument && !inst) return res.status(400).json({ error: 'We couldn’t find that market. Choose one from the list.' });
+  if ((kind === 'market' || kind === 'idea') && !inst) return res.status(400).json({ error: 'Choose a market.' });
   const topics = [...new Set((Array.isArray(req.body?.topics) ? req.body.topics : []).filter((t) => TOPICS.includes(t)))].slice(0, 3);
 
   let idea = null;
@@ -107,7 +110,7 @@ postsRouter.post('/posts', requireProfile, asyncHandler(async (req, res) => {
     if (!news) return res.status(400).json({ error: 'Choose the news item to discuss.' });
   }
   if (!body && kind !== 'poll' && kind !== 'idea') return res.status(400).json({ error: 'Write something first.' });
-  if (kind === 'question' && body.length < 15) return res.status(400).json({ error: 'Ask a full question (15+ characters).' });
+  if (kind === 'question' && body.length < 15) return res.status(400).json({ error: 'Ask a full question (at least 15 characters).' });
 
   const text = [body, idea?.thesis, poll?.question, ...(poll?.options ?? [])].filter(Boolean).join(' ');
   const screen = screenText(text, { staff: isStaff(req.me) });
@@ -153,7 +156,7 @@ postsRouter.post('/posts', requireProfile, asyncHandler(async (req, res) => {
       if (kind === 'idea') {
         const followers = await prisma.follow.findMany({ where: { targetType: 'user', targetId: req.me.id }, select: { followerId: true }, take: 2000 });
         for (const f of followers) {
-          if (!mentions.includes(f.followerId)) out.push({ userId: f.followerId, type: 'idea', actorId: req.me.id, title: `${req.me.name} published a ${idea.direction} thesis on ${inst.display}`, body: excerpt(idea.thesis, 120), link: postLink(post), groupKey: `idea:${req.me.id}` });
+          if (!mentions.includes(f.followerId)) out.push({ userId: f.followerId, type: 'idea', actorId: req.me.id, title: `${req.me.name} shared a ${idea.direction} idea on ${inst.display}`, body: excerpt(idea.thesis, 120), link: postLink(post), groupKey: `idea:${req.me.id}` });
         }
       }
       await notify(out);
@@ -166,7 +169,7 @@ postsRouter.post('/posts', requireProfile, asyncHandler(async (req, res) => {
 
 postsRouter.get('/posts/:id', asyncHandler(async (req, res) => {
   const post = await prisma.post.findUnique({ where: { id: req.params.id }, include: POST_INCLUDE });
-  if (!post || post.deletedAt) return res.status(404).json({ error: 'This post is not available.' });
+  if (!post || post.deletedAt) return res.status(404).json({ error: 'This post isn’t available. It may have been deleted.' });
   const [view] = await postViews([post], req.me.id);
   const followers = post.kind === 'idea' ? await prisma.follow.count({ where: { targetType: 'idea', targetId: post.id } }) : 0;
   res.json({ post: view, followers, canEdit: post.authorId === req.me.id, canModerate: isStaff(req.me) });
@@ -174,7 +177,7 @@ postsRouter.get('/posts/:id', asyncHandler(async (req, res) => {
 
 postsRouter.patch('/posts/:id', requireProfile, asyncHandler(async (req, res) => {
   const post = await prisma.post.findUnique({ where: { id: req.params.id } });
-  if (!post || post.deletedAt || post.removedAt) return res.status(404).json({ error: 'This post is not available.' });
+  if (!post || post.deletedAt || post.removedAt) return res.status(404).json({ error: 'This post isn’t available. It may have been deleted.' });
   if (post.authorId !== req.me.id) return res.status(403).json({ error: 'You can only edit your own posts.' });
   const body = typeof req.body?.body === 'string' ? req.body.body.trim().slice(0, 5000) : '';
   if (!body && !['poll', 'idea'].includes(post.kind)) return res.status(400).json({ error: 'A post cannot be empty.' });
@@ -187,7 +190,7 @@ postsRouter.patch('/posts/:id', requireProfile, asyncHandler(async (req, res) =>
 
 postsRouter.delete('/posts/:id', asyncHandler(async (req, res) => {
   const post = await prisma.post.findUnique({ where: { id: req.params.id } });
-  if (!post || post.deletedAt) return res.status(404).json({ error: 'This post is not available.' });
+  if (!post || post.deletedAt) return res.status(404).json({ error: 'This post isn’t available. It may have been deleted.' });
   const own = post.authorId === req.me.id;
   if (!own && !isStaff(req.me)) return res.status(403).json({ error: 'You can only delete your own posts.' });
   if (own) {
@@ -204,9 +207,9 @@ postsRouter.delete('/posts/:id', asyncHandler(async (req, res) => {
 
 postsRouter.post('/posts/:id/reactions', requireProfile, asyncHandler(async (req, res) => {
   const emoji = String(req.body?.emoji ?? 'like');
-  if (emoji !== 'like' && !REACTIONS.includes(emoji)) return res.status(400).json({ error: 'Unsupported reaction.' });
+  if (emoji !== 'like' && !REACTIONS.includes(emoji)) return res.status(400).json({ error: 'That reaction isn’t available.' });
   const post = await prisma.post.findUnique({ where: { id: req.params.id } });
-  if (!post || post.deletedAt || post.removedAt) return res.status(404).json({ error: 'This post is not available.' });
+  if (!post || post.deletedAt || post.removedAt) return res.status(404).json({ error: 'This post isn’t available. It may have been deleted.' });
   const key = { postId_userId_emoji: { postId: post.id, userId: req.me.id, emoji } };
   const existing = await prisma.postReaction.findUnique({ where: key });
   if (existing) {
@@ -223,10 +226,10 @@ postsRouter.post('/posts/:id/reactions', requireProfile, asyncHandler(async (req
 
 postsRouter.patch('/ideas/:postId/status', requireProfile, asyncHandler(async (req, res) => {
   const post = await prisma.post.findUnique({ where: { id: req.params.postId }, include: { idea: true } });
-  if (!post?.idea || post.deletedAt || post.removedAt) return res.status(404).json({ error: 'Trade idea not found.' });
+  if (!post?.idea || post.deletedAt || post.removedAt) return res.status(404).json({ error: 'We couldn’t find that trade idea. It may have been deleted.' });
   if (post.authorId !== req.me.id) return res.status(403).json({ error: 'Only the author can update this idea.' });
   const status = req.body?.status;
-  if (!IDEA_STATUSES.includes(status)) return res.status(400).json({ error: 'Invalid status.' });
+  if (!IDEA_STATUSES.includes(status)) return res.status(400).json({ error: 'Choose a status from the list.' });
   const note = str(req.body?.note, 1000) || null;
   if (status !== 'open' && !note) return res.status(400).json({ error: 'Add a short note explaining the update.' });
   const screen = screenText(note, { staff: isStaff(req.me) });
@@ -234,7 +237,7 @@ postsRouter.patch('/ideas/:postId/status', requireProfile, asyncHandler(async (r
   const history = [...(Array.isArray(post.idea.history) ? post.idea.history : []), { status, note, at: new Date().toISOString() }];
   await prisma.tradeIdea.update({ where: { id: post.idea.id }, data: { status, statusNote: note, statusChangedAt: new Date(), history } });
   const followers = await prisma.follow.findMany({ where: { targetType: 'idea', targetId: post.id }, select: { followerId: true } });
-  await notify(followers.map((f) => ({ userId: f.followerId, type: 'idea', actorId: req.me.id, title: `${req.me.name} marked their ${post.idea.instrument} idea as ${status}`, body: excerpt(note, 120), link: postLink(post), groupKey: `ideastatus:${post.id}` })));
+  await notify(followers.map((f) => ({ userId: f.followerId, type: 'idea', actorId: req.me.id, title: `${req.me.name} ${STATUS_NEWS[status](instrument(post.idea.instrument)?.display ?? post.idea.instrument)}`, body: excerpt(note, 120), link: postLink(post), groupKey: `ideastatus:${post.id}` })));
   const fresh = await prisma.post.findUnique({ where: { id: post.id }, include: POST_INCLUDE });
   const [view] = await postViews([fresh], req.me.id);
   res.json({ post: view });
@@ -242,14 +245,14 @@ postsRouter.patch('/ideas/:postId/status', requireProfile, asyncHandler(async (r
 
 postsRouter.post('/polls/:id/vote', requireProfile, asyncHandler(async (req, res) => {
   const poll = await prisma.poll.findUnique({ where: { id: req.params.id }, include: { options: true } });
-  if (!poll) return res.status(404).json({ error: 'Poll not found.' });
+  if (!poll) return res.status(404).json({ error: 'We couldn’t find that poll. It may have been deleted.' });
   if (poll.closesAt && poll.closesAt < new Date()) return res.status(400).json({ error: 'This poll has closed.' });
   const option = poll.options.find((o) => o.id === req.body?.optionId);
   if (!option) return res.status(400).json({ error: 'Choose one of the options.' });
   if (poll.messageId) {
     const msg = await prisma.message.findUnique({ where: { id: poll.messageId }, include: { conversation: true } });
     const { conversationAccess } = await import('../../lib/community/access.js');
-    if (!msg || !(await conversationAccess(msg.conversation, req.me)).canRead) return res.status(403).json({ error: 'You cannot vote in this poll.' });
+    if (!msg || !(await conversationAccess(msg.conversation, req.me)).canRead) return res.status(403).json({ error: 'Join this chat to vote in the poll.' });
   }
   await prisma.$transaction(async (tx) => {
     const prev = await tx.pollVote.findUnique({ where: { pollId_userId: { pollId: poll.id, userId: req.me.id } } });
@@ -304,20 +307,20 @@ postsRouter.get('/comments', asyncHandler(async (req, res) => {
 postsRouter.post('/comments', requireProfile, asyncHandler(async (req, res) => {
   const targetType = req.body?.targetType === 'news' ? 'news' : 'post';
   const target = await commentTarget(targetType, String(req.body?.targetId ?? ''));
-  if (!target) return res.status(404).json({ error: 'This item is not available.' });
+  if (!target) return res.status(404).json({ error: 'This isn’t available any more. It may have been deleted.' });
   const body = typeof req.body?.body === 'string' ? req.body.body.trim().slice(0, 3000) : '';
   if (!body) return res.status(400).json({ error: 'Write a comment first.' });
   let challengeCategory = null;
   if (req.body?.challengeCategory) {
     if (targetType !== 'post' || target.kind !== 'idea') return res.status(400).json({ error: 'Only trade ideas can be challenged.' });
     if (!CHALLENGES.includes(req.body.challengeCategory)) return res.status(400).json({ error: 'Choose what you are challenging.' });
-    if (body.length < 30) return res.status(400).json({ error: 'Explain the assumption you disagree with (30+ characters).' });
+    if (body.length < 30) return res.status(400).json({ error: 'Say what you disagree with and why (at least 30 characters).' });
     challengeCategory = req.body.challengeCategory;
   }
   let parent = null;
   if (req.body?.parentId) {
     parent = await prisma.comment.findFirst({ where: { id: String(req.body.parentId), targetType, targetId: target.id }, select: { id: true, authorId: true, parentId: true } });
-    if (!parent) return res.status(400).json({ error: 'The comment you replied to is not here.' });
+    if (!parent) return res.status(400).json({ error: 'The comment you’re replying to was deleted.' });
   }
   const screen = screenText(body, { staff: isStaff(req.me) });
   if (screen.blocked) return res.status(400).json({ error: screen.blocked, code: 'blocked_content' });
@@ -338,7 +341,7 @@ postsRouter.post('/comments', requireProfile, asyncHandler(async (req, res) => {
       if (targetType === 'post' && target.authorId !== req.me.id) {
         out.push(
           challengeCategory
-            ? { userId: target.authorId, type: 'challenge', actorId: req.me.id, title: `${req.me.name} challenged your thesis (${challengeCategory})`, body: excerpt(body, 120), link }
+            ? { userId: target.authorId, type: 'challenge', actorId: req.me.id, title: `${req.me.name} challenged the ${CHALLENGE_WORDS[challengeCategory] ?? 'reasoning'} in your trade idea`, body: excerpt(body, 120), link }
             : { userId: target.authorId, type: 'comment', actorId: req.me.id, title: `${req.me.name} commented on your ${target.kind === 'idea' ? 'trade idea' : 'post'}`, body: excerpt(body, 120), link, groupKey: `comment:${target.id}` },
         );
       }
@@ -355,7 +358,7 @@ postsRouter.post('/comments', requireProfile, asyncHandler(async (req, res) => {
 
 postsRouter.patch('/comments/:id', requireProfile, asyncHandler(async (req, res) => {
   const c = await prisma.comment.findUnique({ where: { id: req.params.id } });
-  if (!c || c.deletedAt || c.removedById) return res.status(404).json({ error: 'Comment not found.' });
+  if (!c || c.deletedAt || c.removedById) return res.status(404).json({ error: 'We couldn’t find that comment. It may have been deleted.' });
   if (c.authorId !== req.me.id) return res.status(403).json({ error: 'You can only edit your own comments.' });
   const body = typeof req.body?.body === 'string' ? req.body.body.trim().slice(0, 3000) : '';
   if (!body) return res.status(400).json({ error: 'A comment cannot be empty.' });
@@ -368,7 +371,7 @@ postsRouter.patch('/comments/:id', requireProfile, asyncHandler(async (req, res)
 
 postsRouter.delete('/comments/:id', asyncHandler(async (req, res) => {
   const c = await prisma.comment.findUnique({ where: { id: req.params.id } });
-  if (!c || c.deletedAt) return res.status(404).json({ error: 'Comment not found.' });
+  if (!c || c.deletedAt) return res.status(404).json({ error: 'We couldn’t find that comment. It may have been deleted.' });
   const own = c.authorId === req.me.id;
   if (!own && !isStaff(req.me)) return res.status(403).json({ error: 'You can only delete your own comments.' });
   if (own) await prisma.comment.update({ where: { id: c.id }, data: { deletedAt: new Date() } });

@@ -27,7 +27,7 @@ adminStatsRouter.get('/ai-usage', asyncHandler(async (req, res) => {
 
   const byModel = {};
   for (const l of logs30d) {
-    const key = `${l.source === 'nvidia' ? l.model : 'Not answered (AI unavailable or error)'}`;
+    const key = `${l.source === 'nvidia' ? l.model : 'Not answered (Kotka AI was unavailable)'}`;
     if (!byModel[key]) byModel[key] = { model: key, requests: 0, totalLatency: 0 };
     byModel[key].requests += 1;
     byModel[key].totalLatency += l.latencyMs;
@@ -118,7 +118,7 @@ adminStatsRouter.get('/overview', asyncHandler(async (req, res) => {
     const dayStart = startOfDay(daysAgo(i));
     const dayEnd = new Date(dayStart.getTime() + DAY_MS);
     const count = await prisma.user.count({ where: { lastLoginAt: { gte: dayStart, lt: dayEnd } } });
-    dailyActive.push({ day: dayStart.toISOString().slice(5, 10), dau: count });
+    dailyActive.push({ day: dayStart.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' }), dau: count });
   }
 
   const [pendingKyc, newSignups7d] = await Promise.all([
@@ -138,9 +138,9 @@ adminStatsRouter.get('/overview', asyncHandler(async (req, res) => {
     aiRequestsToday,
     dailyActive,
     featureUsage: [
-      { feature: 'Kotka AI', count: aiUsageCount30d },
-      { feature: 'Journal', count: journalEntries30d },
-      { feature: 'Checklist', count: checklistDays30d },
+      { feature: 'Kotka AI messages', count: aiUsageCount30d },
+      { feature: 'Journal entries', count: journalEntries30d },
+      { feature: 'Days with a checklist', count: checklistDays30d },
     ].sort((a, b) => b.count - a.count),
   });
 }));
@@ -148,12 +148,12 @@ adminStatsRouter.get('/overview', asyncHandler(async (req, res) => {
 // Live checks of everything Kotka depends on. Each check reports what it
 // actually observed; nothing is assumed healthy.
 const PROVIDERS = [
-  { key: 'nvidia', name: 'NVIDIA (Kotka AI)', role: 'AI chat, chart reading, research narratives, journal reviews' },
-  { key: 'massive', name: 'Massive', role: 'End-of-day prices and volatility' },
-  { key: 'fred', name: 'FRED', role: 'US data for research (works without a key)' },
-  { key: 'cronjob', name: 'cron-job.org', role: 'Hourly research refresh and AI model checks' },
-  { key: 'paystack', name: 'Paystack', role: 'Billing (not used while paid plans are off)' },
-  { key: 'finnhub', name: 'Finnhub', role: 'Not used' },
+  { key: 'nvidia', name: 'NVIDIA (Kotka AI)', role: 'Kotka AI chat, chart reading, research summaries and journal reviews' },
+  { key: 'massive', name: 'Massive', role: 'Daily closing prices for Community market rooms' },
+  { key: 'fred', name: 'FRED', role: 'US economic data for research (works without a key)' },
+  { key: 'cronjob', name: 'cron-job.org', role: 'Runs the hourly update: research, news, events, reminders and AI checks' },
+  { key: 'paystack', name: 'Paystack', role: 'Payments (not used while paid plans are off)' },
+  { key: 'finnhub', name: 'Finnhub', role: 'Market news headlines in Community' },
 ];
 
 adminStatsRouter.get('/system', asyncHandler(async (req, res) => {

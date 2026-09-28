@@ -4,7 +4,7 @@ import { requireAuth, requireRole } from '../middleware/auth.js';
 import { audit } from '../lib/audit.js';
 import { encryptSecret, decryptSecret, maskSecret } from '../lib/crypto.js';
 import { nvidiaChatCompletion } from '../lib/nvidia.js';
-import { connection, withModelFallback, effectiveModels, checkModelHealth, VETTED_MODELS } from '../lib/aiModels.js';
+import { connection, withModelFallback, effectiveModels, checkModelHealth, modelName, VETTED_MODELS } from '../lib/aiModels.js';
 import { loadSettings as loadResearchSettings } from '../lib/research/settings.js';
 import { paystackTestConnection } from '../lib/paystack.js';
 import { finnhubTestConnection } from '../lib/finnhub.js';
@@ -16,13 +16,15 @@ import { asyncHandler } from '../lib/asyncHandler.js';
 export const adminIntegrationsRouter = Router();
 adminIntegrationsRouter.use(requireAuth, requireRole('super_admin'));
 
+const SERVICE_NAME = { nvidia: 'NVIDIA', paystack: 'Paystack', finnhub: 'Finnhub', massive: 'Massive', fred: 'FRED', cronjob: 'cron-job.org' };
+
 const TEST_CONNECTIONS = {
   nvidia: async (row) => {
     const conn = connection(row);
     const chat = await withModelFallback('chat', row, (model, settings) =>
       nvidiaChatCompletion({ ...conn, model, messages: [{ role: 'user', content: 'Reply with the single word: pong' }], maxTokens: 10, topP: settings.topP, extraBody: settings.extraBody, timeoutMs: 30000 }),
     );
-    let message = `Chat model ${chat.model} replied: "${String(chat.result).trim()}"${chat.fellBackFrom.length ? ` (fell back from ${chat.fellBackFrom.join(', ')})` : ''}`;
+    let message = `Connected. Chat works (using ${modelName(chat.model)}${chat.fellBackFrom.length ? ', a backup, because the first choice didn’t respond' : ''}).`;
     try {
       const vision = await withModelFallback('vision', row, (model, settings) =>
         nvidiaChatCompletion({
@@ -35,9 +37,9 @@ const TEST_CONNECTIONS = {
           timeoutMs: 30000,
         }),
       );
-      message += ` · Vision model ${vision.model} replied: "${String(vision.result).trim()}"${vision.fellBackFrom.length ? ` (fell back from ${vision.fellBackFrom.join(', ')})` : ''}`;
-    } catch (err) {
-      message += ` · Vision check FAILED: ${err.message}`;
+      message += ` Chart reading works (using ${modelName(vision.model)}${vision.fellBackFrom.length ? ', a backup' : ''}).`;
+    } catch {
+      message += ' Chart reading didn’t respond. Kotka will keep trying other models.';
     }
     return message;
   },
@@ -80,7 +82,7 @@ adminIntegrationsRouter.put('/:provider', asyncHandler(async (req, res) => {
 
   const existing = await prisma.integration.findUnique({ where: { provider } });
   if (!secret && !existing) {
-    return res.status(400).json({ error: 'A secret key is required to create a new integration.' });
+    return res.status(400).json({ error: 'Paste the access key first.' });
   }
 
   const row = await prisma.integration.upsert({
@@ -119,15 +121,19 @@ adminIntegrationsRouter.post('/nvidia/health', asyncHandler(async (req, res) => 
 adminIntegrationsRouter.post('/:provider/test', asyncHandler(async (req, res) => {
   const { provider } = req.params;
   const row = await prisma.integration.findUnique({ where: { provider } });
-  if (!row || !row.secretCipher) return res.status(404).json({ error: 'Integration not configured.' });
+  if (!row || !row.secretCipher) return res.status(404).json({ error: 'Save a key before testing.' });
 
   const test = TEST_CONNECTIONS[provider];
-  if (!test) return res.status(400).json({ error: `No test available for provider "${provider}".` });
+  if (!test) return res.status(400).json({ error: 'This service can’t be tested from here.' });
 
   try {
     const sample = await test(row);
     res.json({ ok: true, sample });
   } catch (err) {
-    res.status(502).json({ ok: false, error: err.message });
+    // Provider errors are technical ("… API error (401): {…}"); say what to do instead.
+    const status = Number(String(err?.message).match(/\((\d{3})\)|HTTP (\d{3})/)?.slice(1).find(Boolean));
+    const name = SERVICE_NAME[provider] ?? 'the service';
+    const error = status === 401 || status === 403 ? `${name} refused the key. Check you copied the whole key, save it again and retry.` : `Couldn’t reach ${name} just now. Try again in a moment.`;
+    res.status(502).json({ ok: false, error });
   }
 }));

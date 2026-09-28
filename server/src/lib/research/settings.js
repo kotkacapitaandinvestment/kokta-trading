@@ -3,14 +3,14 @@ import { prisma } from '../prisma.js';
 import { SUPPORTED_CURRENCY_CODES, DEFAULT_PAIRS, parseSubject } from './currencies.js';
 
 export const SOURCE_KEYS = {
-  imf_weo: 'IMF World Economic Outlook (current + previous vintage)',
-  imf_cofer: 'IMF COFER (currency composition of reserves)',
-  fred: 'FRED: Federal Reserve Board, BLS and BEA series',
-  ecb: 'ECB Data Portal: policy rates, HICP, yields, CISS',
-  eurostat: 'Eurostat: euro area national accounts',
-  bis: 'BIS: policy rates, consumer prices, effective exchange rates',
-  statements: 'Central bank policy statements (Fed, ECB)',
-  calendars: 'Official calendars (FOMC, ECB, BLS, BEA, Eurostat)',
+  imf_weo: 'IMF economic forecasts (latest and previous edition)',
+  imf_cofer: 'IMF data on central bank currency reserves',
+  fred: 'US economic data (via FRED): rates, jobs, inflation, growth',
+  ecb: 'European Central Bank data: rates, inflation, bond yields, market stress',
+  eurostat: 'Eurostat: euro-area growth figures',
+  bis: 'Bank for International Settlements: rates, prices, currency values',
+  statements: 'Central bank policy statements (US Fed, ECB)',
+  calendars: 'Official release and meeting calendars (US and euro area)',
 };
 
 export const DEFAULT_SETTINGS = {

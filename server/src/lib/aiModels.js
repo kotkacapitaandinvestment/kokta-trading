@@ -28,6 +28,17 @@ export const MODEL_PROFILES = {
   'meta/llama-3.2-90b-vision-instruct': {},
 };
 
+// Readable names for admin messages (the client has the same list in src/lib/aiModelNames.js).
+const MODEL_NAMES = {
+  'nvidia/nemotron-3-super-120b-a12b': 'Nemotron Super',
+  'nvidia/nemotron-3-ultra-550b-a55b': 'Nemotron Ultra',
+  'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning': 'Nemotron Nano Vision',
+  'moonshotai/kimi-k3': 'Kimi K3',
+  'meta/llama-3.2-11b-vision-instruct': 'Llama Vision Small',
+  'meta/llama-3.2-90b-vision-instruct': 'Llama Vision Large',
+};
+export const modelName = (id) => MODEL_NAMES[id] ?? String(id ?? '').split('/').pop();
+
 // Preference order when the configured model is unavailable. Verified
 // 2026-09-26: chat models stream and call tools; vision models read images.
 export const VETTED_MODELS = {

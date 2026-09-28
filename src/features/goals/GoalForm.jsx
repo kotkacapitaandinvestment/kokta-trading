@@ -51,7 +51,7 @@ export default function GoalForm({ metrics, periods, today, currency = 'USD', in
 
         <div className="grid gap-3 sm:grid-cols-2">
           <label className="sm:col-span-2">
-            <span className="mb-1 block text-sm font-medium text-ink-700 dark:text-ink-200">Name</span>
+            <span className="mb-1 block text-sm font-medium text-ink-700 dark:text-ink-200">Goal name</span>
             <input value={form.title} onChange={set('title')} maxLength={80} className={input} />
           </label>
           <label>

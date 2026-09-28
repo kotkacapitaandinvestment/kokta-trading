@@ -40,23 +40,23 @@ export function sanitizeAppSettings(input, current) {
   const out = { ...current };
   for (const key of ['paidPlansEnabled', 'signupsOpen', 'kycRequired']) {
     if (input[key] !== undefined) {
-      if (typeof input[key] !== 'boolean') return { error: `${key} must be true or false.` };
+      if (typeof input[key] !== 'boolean') return { error: 'That setting must be on or off.' };
       out[key] = input[key];
     }
   }
   if (input.aiFairUseDailyLimit !== undefined) {
     const n = intIn(input.aiFairUseDailyLimit, 0, 10000);
-    if (n === undefined) return { error: 'Fair-use limit must be a whole number from 0 to 10000 (0 = no cap).' };
+    if (n === undefined) return { error: 'The daily Kotka AI limit must be a whole number from 0 to 10,000 (0 means no limit).' };
     out.aiFairUseDailyLimit = n;
   }
   if (input.aiDailyLimitFree !== undefined) {
     const n = intIn(input.aiDailyLimitFree, 0, 10000);
-    if (n === undefined) return { error: 'Free-plan AI limit must be a whole number from 0 to 10000.' };
+    if (n === undefined) return { error: 'The free-plan Kotka AI limit must be a whole number from 0 to 10,000.' };
     out.aiDailyLimitFree = n;
   }
   if (input.supportEmail !== undefined) {
     const email = typeof input.supportEmail === 'string' ? input.supportEmail.trim().toLowerCase() : '';
-    if (email && !EMAIL_RE.test(email)) return { error: 'Support email is not a valid address.' };
+    if (email && !EMAIL_RE.test(email)) return { error: 'That support email doesn’t look right. Check it and try again.' };
     out.supportEmail = email;
   }
   return { settings: out };

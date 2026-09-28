@@ -19,5 +19,5 @@ async function paystackRequest(secretKey, path, options = {}) {
 export async function paystackTestConnection(secretKey) {
   const data = await paystackRequest(secretKey, '/transaction/totals');
   const total = data?.data?.total_transactions ?? 0;
-  return `Connected — ${total} total transaction${total === 1 ? '' : 's'} on this account.`;
+  return `Connected. Paystack is responding (${total} transaction${total === 1 ? '' : 's'} on this account so far).`;
 }

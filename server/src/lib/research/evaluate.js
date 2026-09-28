@@ -653,7 +653,7 @@ export function evaluateCurrency(code, evidence, { asOf = new Date(), marketPric
   } else {
     const v = oStress.value;
     let score = v < 0.05 ? 1 : v < 0.15 ? 0 : v < 0.3 ? -1 : -2;
-    const parts = [`CISS systemic stress ${fmt(v, 3)} (${oStress.periodLabel}; 0 = no stress, 1 = extreme)`];
+    const parts = [`Financial stress index ${fmt(v, 3)} (${oStress.periodLabel}; 0 = no stress, 1 = extreme)`];
     const dm = oStress.previousValue !== null ? round(v - oStress.previousValue, 3) : null;
     if (dm !== null && dm >= 0.05) {
       score -= 1;
@@ -684,7 +684,7 @@ export function evaluateCurrency(code, evidence, { asOf = new Date(), marketPric
       score,
       classification: score >= 1 ? 'LOW STRESS' : score === 0 ? 'NORMAL' : score === -1 ? 'ELEVATED STRESS' : 'HIGH STRESS',
       rationale: `${parts.join('; ')}.`,
-      rules: ['CISS level: < 0.05 → +1, < 0.15 → 0, < 0.30 → −1, higher → −2.', 'CISS up ≥ 0.05 in a month: −1.', 'Euro area: Italy–Germany 10-year spread above 2.5 pts: −1.'],
+      rules: ['Stress index level: < 0.05 → +1, < 0.15 → 0, < 0.30 → −1, higher → −2.', 'Stress index up ≥ 0.05 in a month: −1.', 'Euro area: Italy–Germany 10-year spread above 2.5 pts: −1.'],
       evidence: [oStress, oStressAlt, spread !== null ? `${code}.sovereignSpread` : null],
     });
   }

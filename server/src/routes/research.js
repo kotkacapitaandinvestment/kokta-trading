@@ -91,7 +91,7 @@ researchRouter.get('/crypto/:symbol', asyncHandler(async (req, res) => {
   const access = await accessFor(req.userId, settings);
   if (!access.allowed) return res.status(403).json({ error: access.reason });
   const ctx = await cryptoContext(req.params.symbol);
-  if (!ctx) return res.status(404).json({ error: 'Unknown crypto pair.' });
+  if (!ctx) return res.status(404).json({ error: 'We don’t cover that crypto pair yet.' });
   res.json(ctx);
 }));
 
@@ -100,7 +100,7 @@ researchRouter.get('/:subject', asyncHandler(async (req, res) => {
   const access = await accessFor(req.userId, settings);
   if (!access.allowed) return res.status(403).json({ error: access.reason });
   const parsed = parseSubject(req.params.subject);
-  if (!parsed) return res.status(404).json({ error: 'Unknown currency or pair.' });
+  if (!parsed) return res.status(404).json({ error: 'We don’t cover that currency or pair yet.' });
   if (!subjectAllowed(parsed, settings) && !access.isAdmin) return res.status(404).json({ error: 'This instrument is not enabled for Fundamental Research.' });
 
   const [row, running, history] = await Promise.all([latestReport(parsed.kind, parsed.subject), activeRun(parsed.subject), reportHistory(parsed.kind, parsed.subject)]);
@@ -122,7 +122,7 @@ researchRouter.post('/:subject/refresh', asyncHandler(async (req, res) => {
   const access = await accessFor(req.userId, settings);
   if (!access.allowed) return res.status(403).json({ error: access.reason });
   const parsed = parseSubject(req.params.subject);
-  if (!parsed) return res.status(404).json({ error: 'Unknown currency or pair.' });
+  if (!parsed) return res.status(404).json({ error: 'We don’t cover that currency or pair yet.' });
   if (!subjectAllowed(parsed, settings) && !access.isAdmin) return res.status(404).json({ error: 'This instrument is not enabled for Fundamental Research.' });
 
   const force = !!req.body?.force && access.isAdmin;
@@ -163,6 +163,6 @@ researchRouter.get('/:subject/history', asyncHandler(async (req, res) => {
   const access = await accessFor(req.userId, settings);
   if (!access.allowed) return res.status(403).json({ error: access.reason });
   const parsed = parseSubject(req.params.subject);
-  if (!parsed) return res.status(404).json({ error: 'Unknown instrument.' });
+  if (!parsed) return res.status(404).json({ error: 'We don’t cover that market yet.' });
   res.json({ history: await reportHistory(parsed.kind, parsed.subject, 120) });
 }));

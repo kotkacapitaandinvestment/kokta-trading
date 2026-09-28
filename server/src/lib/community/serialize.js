@@ -39,7 +39,7 @@ export async function normalizeAttachments(userId, input) {
       }
       case 'market': {
         const snap = await marketSnapshot(a.symbol);
-        if (!snap) return { error: 'Unknown market.' };
+        if (!snap) return { error: 'We couldn’t find that market.' };
         out.push({ type: 'market', symbol: snap.symbol, snapshot: snap, attachedAt: new Date().toISOString() });
         break;
       }
@@ -63,7 +63,7 @@ export async function normalizeAttachments(userId, input) {
         break;
       }
       default:
-        return { error: 'Unsupported attachment.' };
+        return { error: 'That kind of file can’t be attached.' };
     }
   }
   return { attachments: out };

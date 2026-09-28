@@ -17,7 +17,7 @@ export function validateUsername(raw, { staff = false } = {}) {
   const username = typeof raw === 'string' ? raw.trim().replace(/^@/, '').toLowerCase() : '';
   if (!/^[a-z0-9_]{3,20}$/.test(username)) return { error: 'Use 3 to 20 characters: letters, numbers and underscores.' };
   if (/^_|_$|__/.test(username)) return { error: "Usernames can't start or end with an underscore, or repeat them." };
-  if (!staff && RESERVED_USERNAME.test(username)) return { error: 'That username is reserved.' };
+  if (!staff && RESERVED_USERNAME.test(username)) return { error: 'That username isn’t available. Try another.' };
   return { username };
 }
 

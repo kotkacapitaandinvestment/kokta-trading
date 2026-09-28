@@ -71,7 +71,7 @@ export default function MessageComposer({ conversationId, threadRootId = null, a
   if (access && !access.canSend) {
     return (
       <div className="flex items-center gap-2 border-t border-ink-100 px-4 py-3 text-sm text-ink-500 dark:border-ink-800 dark:text-ink-400">
-        <Lock className="h-4 w-4 shrink-0" /> {access.sendBlockedReason ?? 'You cannot send messages here.'}
+        <Lock className="h-4 w-4 shrink-0" /> {access.sendBlockedReason ?? 'You can’t send messages here right now.'}
       </div>
     );
   }
@@ -197,7 +197,7 @@ export default function MessageComposer({ conversationId, threadRootId = null, a
             className="block max-h-40 min-h-[40px] w-full resize-none overflow-hidden rounded-xl border border-ink-200 bg-ink-50/50 px-3 py-[9px] text-[15px] leading-5 text-ink-900 outline-none placeholder:text-ink-400 focus:border-accent-500 focus:bg-white dark:border-ink-700 dark:bg-ink-800 dark:text-ink-50"
           />
           {!body.trim() && !uploads.items.length && !market && !poll && !editing && supportsVoice() ? (
-            <button type="button" onClick={() => recorder.start().catch((err) => setState({ error: `Microphone unavailable: ${err.message}` }))} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-ink-500 hover:bg-ink-100 dark:text-ink-400 dark:hover:bg-ink-800" aria-label="Record voice message"><Mic className="h-4 w-4" /></button>
+            <button type="button" onClick={() => recorder.start().catch(() => setState({ error: 'Kotka can’t use your microphone. Allow it in your browser settings and try again.' }))} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-ink-500 hover:bg-ink-100 dark:text-ink-400 dark:hover:bg-ink-800" aria-label="Record voice message"><Mic className="h-4 w-4" /></button>
           ) : (
             <button type="button" onClick={() => send()} disabled={state?.busy || uploads.busy} className={clsx('flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-ink-900 text-white disabled:opacity-50 dark:bg-accent-500 dark:text-ink-950')} aria-label={editing ? 'Save edit' : 'Send'}>
               {state?.busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}

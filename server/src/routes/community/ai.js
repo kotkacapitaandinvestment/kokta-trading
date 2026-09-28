@@ -20,7 +20,7 @@ export const aiRouter = Router();
 function aiAction(handler) {
   return asyncHandler(async (req, res) => {
     const usage = await usageSnapshot(req.me.id);
-    if (limitReached(usage)) return res.status(429).json({ error: "You've reached today's Kotka AI limit. It resets at midnight UTC.", ...usage });
+    if (limitReached(usage)) return res.status(429).json({ error: "You’ve used today’s Kotka AI requests. More become available overnight.", ...usage });
     const started = Date.now();
     try {
       const out = await handler(req, res);
@@ -46,21 +46,21 @@ async function transcriptOf(messages) {
 aiRouter.post('/ai/summarize', requireProfile, aiAction(async (req, res) => {
   if (req.body?.postId) {
     const post = await prisma.post.findUnique({ where: { id: String(req.body.postId) }, include: { idea: true } });
-    if (!post || post.deletedAt || post.removedAt) return void res.status(404).json({ error: 'Post not found.' });
+    if (!post || post.deletedAt || post.removedAt) return void res.status(404).json({ error: 'We couldn’t find that post. It may have been deleted.' });
     const comments = await prisma.comment.findMany({ where: { targetType: 'post', targetId: post.id, deletedAt: null, removedById: null }, orderBy: { createdAt: 'asc' }, take: 200 });
-    if (comments.length < 3) return void res.status(400).json({ error: 'There is not enough discussion to summarise yet (3+ comments needed).' });
+    if (comments.length < 3) return void res.status(400).json({ error: 'There isn’t enough to summarise yet. Try again once there are at least 3 comments.' });
     const transcript = await transcriptOf([{ ...post, body: post.idea ? `${post.idea.direction} thesis: ${post.idea.thesis}` : post.body, kind: 'text' }, ...comments]);
     const key = `community:summary:post:${post.id}:${comments.at(-1).id}`;
     const { data, cached } = await cachedSource(key, 3600e3, () => summarizeDiscussion({ title: post.idea ? `${post.instrument} trade idea` : 'Post discussion', transcript, symbols: [post.instrument, ...instrumentsIn(post.body)].filter(Boolean) }));
     return { result: data, cached, charged: !cached };
   }
   const a = await conversationAccess(String(req.body?.conversationId ?? ''), req.me);
-  if (!a.conv || !a.canRead) return void res.status(403).json({ error: a.reason ?? 'Not found.' });
+  if (!a.conv || !a.canRead) return void res.status(403).json({ error: a.reason ?? 'We couldn’t find that. It may have been removed.' });
   const thread = req.body?.threadRootId ? String(req.body.threadRootId) : null;
   const where = { conversationId: a.conv.id, deletedAt: null, removedById: null, ...(thread ? { OR: [{ id: thread }, { threadRootId: thread }] } : { threadRootId: null }) };
   const recent = await prisma.message.findMany({ where, orderBy: { createdAt: 'desc' }, take: 150 });
   const messages = recent.reverse();
-  if (messages.filter((m) => m.body).length < 5) return void res.status(400).json({ error: 'There is not enough discussion to summarise yet (5+ messages needed).' });
+  if (messages.filter((m) => m.body).length < 5) return void res.status(400).json({ error: 'There isn’t enough to summarise yet. Try again once there are at least 5 messages.' });
   const transcript = await transcriptOf(messages);
   let symbols = a.conv.instrument ? [a.conv.instrument] : instrumentsIn(transcript.map((t) => t.text).join(' '));
   let title = a.conv.name ?? 'Conversation';
@@ -79,7 +79,7 @@ aiRouter.post('/ai/summarize', requireProfile, aiAction(async (req, res) => {
 
 aiRouter.post('/ai/challenge', requireProfile, aiAction(async (req, res) => {
   const post = await prisma.post.findUnique({ where: { id: String(req.body?.postId ?? '') }, include: { idea: true } });
-  if (!post?.idea || post.deletedAt || post.removedAt) return void res.status(404).json({ error: 'Trade idea not found.' });
+  if (!post?.idea || post.deletedAt || post.removedAt) return void res.status(404).json({ error: 'We couldn’t find that trade idea. It may have been deleted.' });
   const key = `community:challenge:${post.id}:${post.idea.statusChangedAt?.toISOString() ?? post.createdAt.toISOString()}`;
   const { data, cached } = await cachedSource(key, 6 * 3600e3, () => challengeThesis(post));
   return { result: data, cached, charged: !cached };
@@ -87,7 +87,7 @@ aiRouter.post('/ai/challenge', requireProfile, aiAction(async (req, res) => {
 
 aiRouter.post('/ai/explain-news', requireProfile, aiAction(async (req, res) => {
   const n = await prisma.newsItem.findUnique({ where: { id: String(req.body?.newsId ?? '') } });
-  if (!n) return void res.status(404).json({ error: 'News item not found.' });
+  if (!n) return void res.status(404).json({ error: 'We couldn’t find that news story. It may have been removed.' });
   if (n.explanation) return { result: n.explanation, cached: true, charged: false };
   const result = await explainNews(n);
   await prisma.newsItem.update({ where: { id: n.id }, data: { explanation: result, explanationModel: result.model, explainedAt: new Date() } });
@@ -98,18 +98,18 @@ aiRouter.post('/ai/explain-news', requireProfile, aiAction(async (req, res) => {
 aiRouter.post('/ai/analyze-chart', requireProfile, aiAction(async (req, res) => {
   const mediaId = String(req.body?.mediaId ?? '');
   const media = await prisma.media.findUnique({ where: { id: mediaId } });
-  if (!media || media.kind !== 'image') return void res.status(404).json({ error: 'Image not found.' });
+  if (!media || media.kind !== 'image') return void res.status(404).json({ error: 'We couldn’t find that image. It may have been deleted.' });
   let context = '';
   if (req.body?.messageId) {
     const m = await prisma.message.findUnique({ where: { id: String(req.body.messageId) }, include: { conversation: true } });
     const ok = m && (m.attachments ?? []).some((x) => x.mediaId === mediaId) && (await conversationAccess(m.conversation, req.me)).canRead;
-    if (!ok) return void res.status(403).json({ error: 'You cannot analyse this image.' });
+    if (!ok) return void res.status(403).json({ error: 'Kotka AI can only look at images you can see in this conversation or post.' });
     context = m.body;
   } else if (req.body?.postId) {
     const p = await prisma.post.findUnique({ where: { id: String(req.body.postId) } });
-    if (!p || p.deletedAt || p.removedAt || !(p.attachments ?? []).some((x) => x.mediaId === mediaId)) return void res.status(403).json({ error: 'You cannot analyse this image.' });
+    if (!p || p.deletedAt || p.removedAt || !(p.attachments ?? []).some((x) => x.mediaId === mediaId)) return void res.status(403).json({ error: 'Kotka AI can only look at images you can see in this conversation or post.' });
     context = p.body;
-  } else if (media.ownerId !== req.me.id) return void res.status(403).json({ error: 'You cannot analyse this image.' });
+  } else if (media.ownerId !== req.me.id) return void res.status(403).json({ error: 'Kotka AI can only look at images you can see in this conversation or post.' });
   const key = `community:chart:${media.id}`;
   const { data, cached } = await cachedSource(key, 7 * 24 * 3600e3, () => analyzeChart({ imageDataUrl: `data:${media.mime};base64,${Buffer.from(media.data).toString('base64')}`, context }));
   return { result: data, cached, charged: !cached };
@@ -122,16 +122,16 @@ aiRouter.post('/ai/fact-check', requireProfile, aiAction(async (req, res) => {
   let symbols = [];
   if (type === 'message') {
     const m = await prisma.message.findUnique({ where: { id }, include: { conversation: true } });
-    if (!m || m.deletedAt || m.removedById || !(await conversationAccess(m.conversation, req.me)).canRead) return void res.status(404).json({ error: 'Message not found.' });
+    if (!m || m.deletedAt || m.removedById || !(await conversationAccess(m.conversation, req.me)).canRead) return void res.status(404).json({ error: 'That message was deleted.' });
     text = m.body;
     symbols = [m.conversation.instrument, ...instrumentsIn(m.body)].filter(Boolean);
   } else if (type === 'post' || type === 'comment') {
     const item = type === 'post' ? await prisma.post.findUnique({ where: { id }, include: { idea: true } }) : await prisma.comment.findUnique({ where: { id } });
-    if (!item || item.deletedAt || item.removedAt || item.removedById) return void res.status(404).json({ error: 'Not found.' });
+    if (!item || item.deletedAt || item.removedAt || item.removedById) return void res.status(404).json({ error: 'We couldn’t find that. It may have been removed.' });
     text = [item.body, item.idea?.thesis].filter(Boolean).join('\n');
     symbols = [item.instrument, ...instrumentsIn(text)].filter(Boolean);
-  } else return void res.status(400).json({ error: 'Unsupported item.' });
-  if (text.trim().length < 20) return void res.status(400).json({ error: 'There is nothing factual to check in that.' });
+  } else return void res.status(400).json({ error: 'Kotka AI can’t do that for this item.' });
+  if (text.trim().length < 20) return void res.status(400).json({ error: 'There aren’t any facts in that for Kotka to check.' });
   const { data, cached } = await cachedSource(`community:factcheck:${type}:${id}:${text.length}`, 3600e3, () => factCheck({ text, symbols }));
   return { result: data, cached, charged: !cached };
 }));
@@ -139,7 +139,7 @@ aiRouter.post('/ai/fact-check', requireProfile, aiAction(async (req, res) => {
 // Market context: assembled from data only, no model call.
 aiRouter.get('/ai/context/:symbol', asyncHandler(async (req, res) => {
   const inst = instrument(req.params.symbol);
-  if (!inst) return res.status(404).json({ error: 'Unknown market.' });
+  if (!inst) return res.status(404).json({ error: 'We couldn’t find that market.' });
   const [data, research, sentiment, events] = await Promise.all([
     instrumentMarketData(inst.symbol, { fetch: false }),
     inst.research ? latestReportSummaries().then((m) => m.get(`pair:${inst.research}`) ?? null) : null,

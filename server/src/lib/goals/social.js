@@ -4,6 +4,7 @@
 
 import { prisma } from '../prisma.js';
 import { notify } from '../community/notify.js';
+import { mutedMessage } from '../community/access.js';
 import { buildCard, presetKeys, publicSnapshot } from './cards.js';
 
 // Worth a Community post on their own. Small steps (goal set, 3-day streak,
@@ -21,15 +22,15 @@ export async function postAchievement(userId, achievementId, { note = '' } = {})
     prisma.achievement.findFirst({ where: { id: achievementId, userId } }),
     prisma.user.findUnique({ where: { id: userId }, select: { username: true, communityMutedUntil: true } }),
   ]);
-  if (!a) return { error: 'Achievement not found.', status: 404 };
+  if (!a) return { error: 'We couldn’t find that achievement. Refresh your Goal Room.', status: 404 };
   if (!user?.username) return { error: 'Set up your Community profile (choose a username) before posting.', status: 400 };
-  if (user.communityMutedUntil && user.communityMutedUntil > new Date()) return { error: 'Your Community posting is paused.', status: 403 };
+  if (mutedMessage(user)) return { error: mutedMessage(user), status: 403 };
   if (a.postId) {
     const existing = await prisma.post.findUnique({ where: { id: a.postId } });
     if (existing && !existing.deletedAt && !existing.removedAt) return { post: existing, existing: true };
   }
   const card = await buildCard(userId, 'achievement', a.id, new Date().toISOString().slice(0, 10));
-  if (!card) return { error: 'Achievement not found.', status: 404 };
+  if (!card) return { error: 'We couldn’t find that achievement. Refresh your Goal Room.', status: 404 };
   const { snapshot } = publicSnapshot(card, presetKeys(card));
   const post = await prisma.post.create({
     data: { authorId: userId, kind: 'achievement', body: String(note ?? '').trim().slice(0, 1000), topics: ['goals'], attachments: [{ type: 'achievement', achievementId: a.id, snapshot }] },

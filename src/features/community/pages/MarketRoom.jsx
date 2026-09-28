@@ -4,7 +4,7 @@ import clsx from 'clsx';
 import { ArrowDownRight, ArrowUpRight, CalendarDays, ImageIcon, Info, Landmark, Lightbulb, Newspaper, Sparkles } from 'lucide-react';
 import { api } from '../../../lib/api';
 import { useRealtime, useChannels } from '../realtime';
-import { price, signedPct, timeAgo } from '../util';
+import { ago, price, signedPct, timeAgo, tradingDay } from '../util';
 import { askKotkaLink, aiMarketFor } from '../../../lib/askKotka';
 import { conditionWord } from '../../../lib/plain';
 import { FollowButton } from '../components/Buttons';
@@ -14,19 +14,21 @@ import PriceChart from '../components/PriceChart';
 import { NewsLine, EventLine } from '../components/FeedCards';
 import { UserName } from '../components/Identity';
 import ConversationChat from '../chat/ConversationChat';
-import { confirmDialog, promptDialog, toast } from '../../../lib/dialogs';
+import { toast } from '../../../lib/dialogs';
 import EmptyState from '../../../components/ui/EmptyState';
 
 const TABS = [
   ['overview', 'Overview'],
-  ['discussion', 'Discussion'],
-  ['ideas', 'Ideas'],
+  ['discussion', 'Chat'],
+  ['ideas', 'Trade ideas'],
   ['news', 'News'],
   ['charts', 'Charts'],
   ['events', 'Events'],
 ];
-const NA = <span className="text-xs font-semibold uppercase tracking-wide text-ink-400">Data not available</span>;
-const REASONS = { not_configured: 'Price data is not connected.', rate_limited: 'Loading from the provider; check back in a minute.', fetch_failed: 'The provider did not respond.', not_in_plan: null, insufficient_history: 'Not enough history yet.' };
+const NA = <span className="text-xs text-ink-400">No price yet</span>;
+const REASONS = { not_configured: 'Prices aren’t available right now. Check back soon.', rate_limited: 'Prices are on their way. Check back in a minute.', fetch_failed: 'Prices aren’t available right now. Check back soon.', not_in_plan: null, insufficient_history: 'Not enough price history yet.', not_loaded: 'Prices are on their way. Check back in a minute.' };
+const MOVE = { Normal: 'Usual', Elevated: 'Bigger than usual', High: 'Much bigger than usual' };
+const RANGE_SPOT = { 'upper third': 'Closed near the top of this range', 'middle third': 'Closed mid-range', 'lower third': 'Closed near the bottom of this range' };
 
 function Stat({ label, children, note }) {
   return (
@@ -60,8 +62,8 @@ function Sentiment({ symbol, sentiment, onChange }) {
     <section className="rounded-2xl border border-ink-100 bg-white p-5 dark:border-ink-800 dark:bg-ink-900">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h2 className="text-sm font-semibold text-ink-900 dark:text-ink-50">Community sentiment</h2>
-          <p className="text-[11px] text-ink-400">{sentiment.total ? `${sentiment.total} trader${sentiment.total === 1 ? '' : 's'} shared a view in the last ${sentiment.windowDays} days.` : 'No views shared in the last 7 days.'} Community sentiment is not a trading signal.</p>
+          <h2 className="text-sm font-semibold text-ink-900 dark:text-ink-50">Community mood</h2>
+          <p className="text-[11px] text-ink-400">{sentiment.total ? `${sentiment.total} trader${sentiment.total === 1 ? '' : 's'} shared a view in the last ${sentiment.windowDays} days.` : 'No views shared in the last 7 days.'} It’s opinion, not a trading signal.</p>
         </div>
       </div>
       <div className="mt-4 space-y-2">
@@ -69,7 +71,7 @@ function Sentiment({ symbol, sentiment, onChange }) {
           <div key={k} className="flex items-center gap-3 text-sm">
             <span className="w-16 text-ink-600 dark:text-ink-300">{label}</span>
             <span className="h-2 flex-1 overflow-hidden rounded-full bg-ink-100 dark:bg-ink-800"><span className={clsx('block h-full rounded-full', color)} style={{ width: `${pct ?? 0}%` }} /></span>
-            <span className="w-10 text-right font-mono text-xs tabular-nums text-ink-500">{pct == null ? 'n/a' : `${pct}%`}</span>
+            <span className="w-10 text-right font-mono text-xs tabular-nums text-ink-500">{pct == null ? '–' : `${pct}%`}</span>
           </div>
         ))}
       </div>
@@ -78,11 +80,11 @@ function Sentiment({ symbol, sentiment, onChange }) {
         {bars.map(([k, label]) => (
           <button key={k} type="button" disabled={busy} aria-pressed={sentiment.mine === k} onClick={() => vote(k)} className={clsx('rounded-lg border px-3 py-1 text-xs font-medium transition-colors', sentiment.mine === k ? 'border-accent-500 bg-accent-500/10 text-ink-900 dark:text-ink-50' : 'border-ink-200 text-ink-600 hover:border-ink-300 dark:border-ink-700 dark:text-ink-300')}>{label}</button>
         ))}
-        {sentiment.mine ? <span className="text-[11px] text-ink-400">Tap again to withdraw. Views expire after 7 days.</span> : null}
+        {sentiment.mine ? <span className="text-[11px] text-ink-400">Tap your view again to remove it. Views count for 7 days.</span> : null}
       </div>
       {sentiment.history?.length > 1 ? (
         <div className="mt-4 border-t border-ink-100 pt-3 dark:border-ink-800">
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-400">Share bullish over time</p>
+          <p className="text-[11px] font-semibold text-ink-500 dark:text-ink-400">How the mood changed</p>
           <ol className="mt-1.5 space-y-0.5 text-xs text-ink-600 dark:text-ink-300">
             {sentiment.history.slice(-6).map((h) => (
               <li key={h.at} className="flex justify-between"><span className="text-ink-400">{new Date(h.at).toLocaleString(undefined, { weekday: 'short', hour: '2-digit', minute: '2-digit' })}</span><span className="font-mono tabular-nums">{h.bullishPct}% bullish <span className="text-ink-400">of {h.total}</span></span></li>
@@ -108,18 +110,18 @@ function Overview({ room, setRoom }) {
     <div className="grid gap-4 xl:grid-cols-3">
       <div className="space-y-4 xl:col-span-2">
         <section className="grid grid-cols-2 gap-5 rounded-2xl border border-ink-100 bg-white p-5 dark:border-ink-800 dark:bg-ink-900 sm:grid-cols-3">
-          <Stat label="Last session range" note={d?.available ? `Session of ${d.closeDate}` : null}>{d?.available ? <span className="font-mono tabular-nums">{price(d.session.low, dec)} - {price(d.session.high, dec)}</span> : NA}</Stat>
-          <Stat label="Volatility (14-day ATR)" note={d?.available ? `${d.regime} for this market` : null}>{d?.available ? <span className="font-mono tabular-nums">{d.atrPct}% <span className="text-ink-400">({price(d.atr, dec)})</span></span> : NA}</Stat>
-          <Stat label="20-day range" note={d?.available ? `Close in the ${d.technical.rangeThird}` : null}>{d?.available ? <span className="font-mono tabular-nums">{price(d.range.low, dec)} - {price(d.range.high, dec)}</span> : NA}</Stat>
-          <Stat label="Technical context" note="From daily closes; not a signal">{d?.available ? <span>{d.technical.vsSma20 ? `${d.technical.vsSma20} 20-day avg` : ''}{d.technical.vsSma50 ? `, ${d.technical.vsSma50} 50-day avg` : ''}</span> : NA}</Stat>
-          <Stat label="Fundamental condition" note={room.fundamental.updatedAt ? `Kotka research, ${timeAgo(room.fundamental.updatedAt)} ago` : room.fundamental.reason}>
+          <Stat label="Last day’s range" note={d?.available ? tradingDay(d.closeDate) : null}>{d?.available ? <span className="font-mono tabular-nums">{price(d.session.low, dec)} - {price(d.session.high, dec)}</span> : NA}</Stat>
+          <Stat label="Typical daily move" note={d?.available ? `${MOVE[d.regime] ?? d.regime} for this market (last 14 days)` : null}>{d?.available ? <span className="font-mono tabular-nums">{d.atrPct}% <span className="text-ink-400">({price(d.atr, dec)})</span></span> : NA}</Stat>
+          <Stat label="20-day range" note={d?.available ? RANGE_SPOT[d.technical.rangeThird] ?? null : null}>{d?.available ? <span className="font-mono tabular-nums">{price(d.range.low, dec)} - {price(d.range.high, dec)}</span> : NA}</Stat>
+          <Stat label="Price vs its averages" note="From daily closing prices. Not a signal.">{d?.available ? <span>{d.technical.vsSma20 ? `${d.technical.vsSma20[0].toUpperCase()}${d.technical.vsSma20.slice(1)} its 20-day average` : ''}{d.technical.vsSma50 ? `, ${d.technical.vsSma50} its 50-day average` : ''}</span> : NA}</Stat>
+          <Stat label="Fundamentals" note={room.fundamental.updatedAt ? `Kotka research, updated ${ago(room.fundamental.updatedAt)}` : room.fundamental.reason}>
             {room.fundamental.score != null ? <Link to={`/app/market?instrument=${room.fundamental.subject}`} className="inline-flex items-center gap-1.5 hover:underline"><Landmark className="h-3.5 w-3.5 text-accent-600" /> <span className="font-mono font-semibold">{room.fundamental.score}/100</span> {conditionWord(room.fundamental.condition)}</Link> : NA}
           </Stat>
           <Stat label="Market status" note={room.status.note}>{room.status.label}{room.status.session ? <span className="text-ink-400"> · {room.status.session}</span> : null}</Stat>
         </section>
         {d?.available ? (
           <section className="rounded-2xl border border-ink-100 bg-white p-5 dark:border-ink-800 dark:bg-ink-900">
-            <h2 className="mb-3 text-sm font-semibold text-ink-900 dark:text-ink-50">Daily closes <span className="font-normal text-ink-400">({d.history.length} sessions, Massive)</span></h2>
+            <h2 className="mb-3 text-sm font-semibold text-ink-900 dark:text-ink-50">Daily closing prices <span className="font-normal text-ink-400">(last {d.history.length} trading days)</span></h2>
             <PriceChart history={d.history} decimals={dec} />
           </section>
         ) : null}
@@ -127,7 +129,7 @@ function Overview({ room, setRoom }) {
           <h2 className="border-b border-ink-100 px-5 py-3 text-sm font-semibold text-ink-900 dark:border-ink-800 dark:text-ink-50">Open trade ideas</h2>
           <div className="divide-y divide-ink-100 dark:divide-ink-800">
             {ideas?.map((p) => <PostCard key={p.id} post={p} />)}
-            {ideas && !ideas.length ? <EmptyState size="inline" icon={Lightbulb} title={`No open ideas on ${room.instrument.display}`} description="Publish yours from the Ideas tab." /> : null}
+            {ideas && !ideas.length ? <EmptyState size="inline" icon={Lightbulb} title={`No open ideas on ${room.instrument.display}`} description="Share yours from the Trade ideas tab." /> : null}
           </div>
         </section>
       </div>
@@ -137,14 +139,14 @@ function Overview({ room, setRoom }) {
           <h2 className="text-sm font-semibold text-ink-900 dark:text-ink-50">Upcoming events</h2>
           <div className="mt-1 divide-y divide-ink-100 dark:divide-ink-800">
             {room.events.map((e) => <EventLine key={e.id} event={e} compact />)}
-            {!room.events.length ? <p className="py-3 text-xs text-ink-400">No covered releases in the next two weeks for {room.instrument.currencies.join(' or ')}.</p> : null}
+            {!room.events.length ? <p className="py-3 text-xs text-ink-400">No major releases for {room.instrument.currencies.join(' or ')} in the next two weeks.</p> : null}
           </div>
         </section>
         <section className="overflow-hidden rounded-2xl border border-ink-100 bg-white dark:border-ink-800 dark:bg-ink-900">
           <h2 className="px-5 pt-4 text-sm font-semibold text-ink-900 dark:text-ink-50">News that matters here</h2>
           <div className="divide-y divide-ink-100 dark:divide-ink-800">
             {news?.slice(0, 4).map((n) => <NewsLine key={n.id} news={n} />)}
-            {news && !news.length ? <p className="px-5 py-4 text-xs text-ink-400">No related news stored yet.</p> : null}
+            {news && !news.length ? <p className="px-5 py-4 text-xs text-ink-400">No news on this market yet.</p> : null}
           </div>
         </section>
       </div>
@@ -160,7 +162,7 @@ function IdeasTab({ symbol }) {
       <div className="border-b border-ink-100 dark:border-ink-800"><Composer compact defaultKind="idea" lockKind defaultInstrument={symbol} onCreated={(p) => setIdeas((prev) => [p, ...(prev ?? [])])} /></div>
       <div className="divide-y divide-ink-100 dark:divide-ink-800">
         {ideas?.map((p) => <PostCard key={p.id} post={p} />)}
-        {ideas && !ideas.length ? <EmptyState size="section" icon={Lightbulb} title="No trade ideas yet" description="Be the first to publish a thesis on this market: entry, stop, target and why." /> : null}
+        {ideas && !ideas.length ? <EmptyState size="section" icon={Lightbulb} title="No trade ideas yet" description="Be the first to share one on this market: entry, stop loss, take profit and why." /> : null}
       </div>
     </div>
   );
@@ -171,7 +173,7 @@ function NewsTab({ symbol }) {
   useEffect(() => { api.get(`/community/news?instrument=${symbol}&limit=40`).then((r) => setNews(r.news)).catch(() => setNews([])); }, [symbol]);
   return (
     <div className="overflow-hidden rounded-2xl border border-ink-100 bg-white dark:border-ink-800 dark:bg-ink-900">
-      <p className="border-b border-ink-100 px-5 py-2.5 text-[11px] text-ink-400 dark:border-ink-800">Wire stories and official releases tagged to this market's economies and asset. Unrelated news is filtered out.</p>
+      <p className="border-b border-ink-100 px-5 py-2.5 text-[11px] text-ink-400 dark:border-ink-800">News and official releases that can move this market. Unrelated stories are left out.</p>
       <div className="divide-y divide-ink-100 dark:divide-ink-800">
         {news?.map((n) => <NewsLine key={n.id} news={n} />)}
         {news && !news.length ? <EmptyState size="section" icon={Newspaper} title="No news on this market yet" description="Stories and official releases about its economies appear here as they come out." /> : null}
@@ -187,13 +189,13 @@ function ChartsTab({ symbol }) {
     <div className="space-y-4">
       {data?.price ? (
         <section className="rounded-2xl border border-ink-100 bg-white p-5 dark:border-ink-800 dark:bg-ink-900">
-          <h2 className="mb-3 text-sm font-semibold text-ink-900 dark:text-ink-50">Daily closes</h2>
+          <h2 className="mb-3 text-sm font-semibold text-ink-900 dark:text-ink-50">Daily closing prices</h2>
           <PriceChart history={data.price.history} decimals={data.price.decimals} height={260} />
         </section>
       ) : null}
       <section className="rounded-2xl border border-ink-100 bg-white p-5 dark:border-ink-800 dark:bg-ink-900">
         <h2 className="text-sm font-semibold text-ink-900 dark:text-ink-50">Charts shared by traders</h2>
-        {data && !data.shots.length ? <EmptyState size="inline" icon={ImageIcon} title="No charts shared yet" description="Attach a chart in the discussion or a post and it will show here." /> : null}
+        {data && !data.shots.length ? <EmptyState size="inline" icon={ImageIcon} title="No charts shared yet" description="Attach a chart in the chat or a post and it will show here." /> : null}
         <div className="mt-3 grid grid-cols-2 gap-3 md:grid-cols-3">
           {data?.shots.map((s) => (
             <figure key={`${s.sourceId}-${s.url}`} className="overflow-hidden rounded-xl border border-ink-100 dark:border-ink-800">
@@ -254,7 +256,7 @@ export default function MarketRoom() {
                   <span className="font-mono text-2xl font-semibold tabular-nums text-ink-900 dark:text-ink-50">{price(d.close, room.instrument.decimals)}</span>
                   <span className={clsx('inline-flex items-center gap-0.5 font-mono text-sm tabular-nums sm:flex sm:justify-end', up ? 'text-profit-600 dark:text-profit-400' : d.changePct < 0 ? 'text-loss-500' : 'text-ink-400')}>{up ? <ArrowUpRight className="h-4 w-4" /> : d.changePct < 0 ? <ArrowDownRight className="h-4 w-4" /> : null}{signedPct(d.changePct)}</span>
                 </p>
-                <p className="text-[11px] text-ink-400">Daily close {d.closeDate}{d.stale ? ' (latest available)' : ''} · end-of-day, not live</p>
+                <p className="text-[11px] text-ink-400">Closing price, {tradingDay(d.closeDate)}{d.stale ? ' (latest we have)' : ''} · not live</p>
               </>
             ) : (
               <div className="sm:max-w-xs">
@@ -267,10 +269,10 @@ export default function MarketRoom() {
         </div>
         <div className={clsx('mt-4 flex-wrap items-center gap-x-6 gap-y-2 border-t border-ink-100 pt-3 text-xs text-ink-500 dark:border-ink-800 dark:text-ink-400', tab === 'overview' ? 'flex' : 'hidden sm:flex')}>
           <span><span className={clsx('mr-1.5 inline-block h-2 w-2 rounded-full', room.status.open ? 'bg-profit-500' : 'bg-ink-300')} />{room.status.label}{room.status.session ? ` · ${room.status.session}` : ''}</span>
-          <span>{d?.available ? `${d.regime} volatility (${d.atrPct}% ATR)` : 'Volatility: n/a'}</span>
+          <span>{d?.available ? `Typical daily move ${d.atrPct}% (${(MOVE[d.regime] ?? d.regime).toLowerCase()})` : 'Typical daily move: –'}</span>
           <span>{room.fundamental.score != null ? `Fundamentals ${room.fundamental.score}/100, ${conditionWord(room.fundamental.condition).toLowerCase()}` : 'Fundamentals: not researched yet'}</span>
-          <span>{room.sentiment.total ? `Community ${room.sentiment.bullishPct}% bullish · ${room.sentiment.neutralPct}% neutral · ${room.sentiment.bearishPct}% bearish` : 'Community sentiment: no views yet'}</span>
-          <span>{room.room.participants24h ? `${room.room.participants24h} trader${room.room.participants24h === 1 ? '' : 's'} discussing today` : 'Room quiet today'}</span>
+          <span>{room.sentiment.total ? `Community ${room.sentiment.bullishPct}% bullish · ${room.sentiment.neutralPct}% neutral · ${room.sentiment.bearishPct}% bearish` : 'Community mood: no views yet'}</span>
+          <span>{room.room.participants24h ? `${room.room.participants24h} trader${room.room.participants24h === 1 ? '' : 's'} chatting today` : 'Quiet today'}</span>
           <Link to={askKotkaLink(`Give me context on ${room.instrument.display} right now: structure, volatility, fundamentals, sentiment and upcoming events.`, aiMarketFor(room.instrument.market))} className="ml-auto inline-flex items-center gap-1 font-medium text-accent-700 hover:underline dark:text-accent-300"><Sparkles className="h-3.5 w-3.5" /> Ask Kotka</Link>
         </div>
       </header>
@@ -291,7 +293,7 @@ export default function MarketRoom() {
       {tab === 'news' ? <NewsTab symbol={room.instrument.symbol} /> : null}
       {tab === 'charts' ? <ChartsTab symbol={room.instrument.symbol} /> : null}
       {tab === 'events' ? <EventsTab symbol={room.instrument.symbol} /> : null}
-      <p className="flex items-center gap-1.5 text-[11px] text-ink-400"><Info className="h-3 w-3" /> Discussion and ideas are traders' opinions. Prices are end-of-day closes, not live quotes.</p>
+      <p className="flex items-center gap-1.5 text-[11px] text-ink-400"><Info className="h-3 w-3" /> Chat and trade ideas are traders’ opinions. Prices are daily closing prices, not live quotes.</p>
     </div>
   );
 }

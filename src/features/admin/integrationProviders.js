@@ -54,7 +54,7 @@ export const INTEGRATION_PROVIDERS = [
     name: 'Paystack',
     category: 'Payments',
     icon: CreditCard,
-    description: 'Takes payments for Pro and Institutional plans.',
+    description: 'Takes payments for Premium once paid plans launch.',
     fallbackNote: 'Without it, traders can’t upgrade or pay, and billing options stay hidden.',
     fields: [
       { key: 'secret', label: 'Secret key', type: 'password', placeholder: 'Starts with sk_live_ (or sk_test_ for testing)', hint: 'Paystack dashboard → Settings → API keys.' },

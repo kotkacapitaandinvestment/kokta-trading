@@ -13,7 +13,7 @@ export const INSTRUMENT_OPTIONS = [
 ];
 export const display = (s) => (s && /^[A-Z]{6}$/.test(s) ? `${s.slice(0, 3)}/${s.slice(3)}` : s);
 
-export function InstrumentSelect({ value, onChange, required, className, placeholder = 'Instrument' }) {
+export function InstrumentSelect({ value, onChange, required, className, placeholder = 'Market' }) {
   return (
     <select value={value ?? ''} onChange={(e) => onChange(e.target.value || null)} required={required} className={clsx('h-9 rounded-lg border border-ink-200 bg-white px-2.5 text-sm text-ink-800 dark:border-ink-700 dark:bg-ink-800 dark:text-ink-100', className)}>
       <option value="">{placeholder}</option>
@@ -69,7 +69,7 @@ export function UploadPreviews({ uploads }) {
           <img src={it.preview} alt="" className={clsx('h-16 w-16 rounded-lg object-cover', it.error && 'opacity-40')} />
           {it.busy ? <Loader2 className="absolute inset-0 m-auto h-4 w-4 animate-spin text-white" /> : null}
           <button type="button" onClick={() => uploads.remove(it.key)} className="absolute -right-1.5 -top-1.5 rounded-full bg-ink-900 p-0.5 text-white" aria-label="Remove image"><X className="h-3 w-3" /></button>
-          {it.error ? <span className="absolute inset-x-0 bottom-0 truncate bg-loss-500 px-1 text-[9px] text-white" title={it.error}>failed</span> : null}
+          {it.error ? <span className="absolute inset-x-0 bottom-0 truncate bg-loss-500 px-1 text-[9px] text-white" title={`${it.error} Tap × and try again.`}>Didn’t upload</span> : null}
         </div>
       ))}
     </div>

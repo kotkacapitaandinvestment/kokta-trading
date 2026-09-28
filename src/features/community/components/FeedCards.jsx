@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom';
 import clsx from 'clsx';
 import { ArrowDownRight, ArrowUpRight, CalendarClock, Landmark, Newspaper, Radio } from 'lucide-react';
-import { price, signedPct, timeAgo } from '../util';
+import { price, signedPct, timeAgo, tradingDay } from '../util';
 import { conditionWord } from '../../../lib/plain';
 
 export function EventLine({ event, compact = false }) {
@@ -64,7 +64,7 @@ export function MoveLine({ move, reason }) {
         <span className="block text-sm text-ink-900 dark:text-ink-50">
           <span className="font-mono font-semibold">{move.display}</span> closed <span className={clsx('font-mono font-semibold', up ? 'text-profit-600 dark:text-profit-400' : 'text-loss-500')}>{signedPct(move.changePct)}</span> at <span className="font-mono">{price(move.close, move.decimals)}</span>
         </span>
-        <span className="text-[11px] text-ink-400">Daily close {move.closeDate}{move.unusual ? ` · larger than its 14-day average range (${move.atrPct}%)` : ''}</span>
+        <span className="text-[11px] text-ink-400">Closing price, {tradingDay(move.closeDate)}{move.unusual ? ` · a bigger move than usual (typical day: ${move.atrPct}%)` : ''}</span>
       </span>
     </Link>
   );

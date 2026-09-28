@@ -127,7 +127,7 @@ journalRouter.post('/:id/review', asyncHandler(async (req, res) => {
   if (!entry || entry.userId !== req.userId) return res.status(404).json({ error: 'Journal entry not found.' });
 
   const usage = await usageSnapshot(req.userId);
-  if (limitReached(usage)) return res.status(429).json({ error: "You've reached today's Kotka AI limit. It resets at midnight UTC.", ...usage });
+  if (limitReached(usage)) return res.status(429).json({ error: "You’ve used today’s Kotka AI requests. More become available overnight.", ...usage });
 
   const integration = await prisma.integration.findUnique({ where: { provider: 'nvidia' } });
   if (!integration?.enabled || !integration.secretCipher) return res.status(503).json({ error: 'Kotka AI is not connected right now.' });

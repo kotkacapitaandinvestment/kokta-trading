@@ -161,7 +161,7 @@ function factorInvalidation(ev, key, catalysts) {
       return `A current-account move of 1 percentage point of GDP or more between last year and the next projection year would shift the external score (currently ${sign(f.score)}).`;
     case 'financial_stability': {
       const s = ev.observations[`${ev.code}.stress`];
-      return s ? `If systemic stress (CISS ${fmt(s.value, 3)}) rises above 0.05 the score drops to 0; above 0.15 it turns negative — a sharp rise within a month (≥ 0.05) also subtracts a notch.` : null;
+      return s ? `If the financial stress index (now ${fmt(s.value, 3)}) rises above 0.05 the score drops to 0; above 0.15 it turns negative — a sharp rise within a month (≥ 0.05) also subtracts a notch.` : null;
     }
     case 'reserves':
       return `A change of 0.5 percentage points or more in ${ev.code}'s share of global central-bank reserves over a year would move this factor.`;

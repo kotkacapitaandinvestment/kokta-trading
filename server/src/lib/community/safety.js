@@ -23,14 +23,15 @@ const CREDENTIALS = /\b(send|share|give|tell)\s+(me\s+)?(your\s+)?(password|logi
 const IMPERSONATION = /\b(i\s+am|i'm|im|this\s+is|we\s+are|from)\s+(the\s+|a\s+|an\s+)?(kotka)\s+(team|admin|support|staff|moderator|official)\b|\bofficial\s+kotka\b/i;
 const SHORTENERS = /^(bit\.ly|tinyurl\.com|t\.co|goo\.gl|ow\.ly|is\.gd|buff\.ly|rb\.gy|cutt\.ly|shorturl\.at|tiny\.cc)$/i;
 
+// One sentence per flag, shown to readers under the content.
 export const FLAG_LABELS = {
-  guaranteed_returns: 'claims guaranteed or risk-free returns',
-  account_management: 'offers to manage accounts or trade for others',
-  off_platform: 'asks to move the conversation off Kotka',
-  signal_selling: 'advertises paid signals or groups',
-  phone_number: 'contains a phone number',
-  suspicious_link: 'contains a shortened or look-alike link',
-  payment_request: 'asks for a payment or shares a wallet address',
+  guaranteed_returns: 'It promises guaranteed or risk-free profits. No one can promise that.',
+  account_management: 'It offers to manage your account or trade for you.',
+  off_platform: 'It asks you to continue the conversation outside Kotka.',
+  signal_selling: 'It advertises paid signals or groups.',
+  phone_number: 'It includes a phone number.',
+  suspicious_link: 'It has a shortened or look-alike link. Check where a link goes before you tap it.',
+  payment_request: 'It asks for money or shares a wallet address.',
 };
 
 function linkFlags(text) {
@@ -47,9 +48,9 @@ function linkFlags(text) {
 export function screenText(text, { staff = false } = {}) {
   const t = String(text ?? '');
   if (!t.trim()) return { blocked: null, flags: [] };
-  if (!staff && IMPERSONATION.test(t)) return { blocked: 'Only Kotka staff accounts can speak for Kotka. Please rephrase.', flags: [] };
-  if (CREDENTIALS.test(t)) return { blocked: 'Asking for passwords, logins or security codes is not allowed on Kotka.', flags: [] };
-  if (PAYMENT.test(t) && WALLET.test(t)) return { blocked: 'Payment requests with wallet addresses are not allowed on Kotka.', flags: [] };
+  if (!staff && IMPERSONATION.test(t)) return { blocked: 'Only Kotka staff can speak for Kotka. Please reword your message.', flags: [] };
+  if (CREDENTIALS.test(t)) return { blocked: 'For everyone’s safety, Kotka doesn’t allow asking for passwords, logins or security codes. Please edit your message.', flags: [] };
+  if (PAYMENT.test(t) && WALLET.test(t)) return { blocked: 'For everyone’s safety, Kotka doesn’t allow asking for payment to a wallet address. Please edit your message.', flags: [] };
   const flags = new Set(linkFlags(t));
   for (const rule of RULES) {
     const m = t.match(rule.re);

@@ -3,11 +3,11 @@ import { Link } from 'react-router-dom';
 import clsx from 'clsx';
 import { ArrowDownRight, ArrowUpRight, CalendarDays, ExternalLink, Newspaper, X } from 'lucide-react';
 import { api } from '../../../lib/api';
-import { price, signedPct, timeAgo } from '../util';
+import { price, signedPct, timeAgo, tradingDay } from '../util';
 import { UserName } from './Identity';
 import IdeaBlock from './IdeaBlock';
 import AchievementPost from '../../goals/AchievementPost';
-import { confirmDialog, promptDialog, toast } from '../../../lib/dialogs';
+import { toast } from '../../../lib/dialogs';
 
 export function MarketSnapshot({ snapshot, compact = false }) {
   if (!snapshot) return null;
@@ -16,7 +16,7 @@ export function MarketSnapshot({ snapshot, compact = false }) {
     <Link to={`/app/community/markets/${snapshot.symbol}`} className="group flex items-center justify-between gap-4 rounded-xl border border-ink-100 bg-ink-50/60 px-3.5 py-2.5 transition-colors hover:border-accent-300 dark:border-ink-800 dark:bg-ink-900/60 dark:hover:border-accent-700">
       <span className="min-w-0">
         <span className="block font-mono text-sm font-semibold text-ink-900 dark:text-ink-50">{snapshot.display}</span>
-        {snapshot.available ? <span className="text-[11px] text-ink-400">Close on {snapshot.closeDate} · {snapshot.regime} volatility</span> : <span className="text-[11px] text-ink-400">Price data not available</span>}
+        {snapshot.available ? <span className="text-[11px] text-ink-400">Closing price, {tradingDay(snapshot.closeDate)}{snapshot.regime && snapshot.regime !== 'Normal' ? ' · moving more than usual' : ''}</span> : <span className="text-[11px] text-ink-400">No price yet</span>}
       </span>
       {snapshot.available ? (
         <span className="text-right">
@@ -101,7 +101,7 @@ export default function Attachments({ items, compact = false, onAnalyze }) {
               </button>
               {onAnalyze ? (
                 <button type="button" onClick={() => onAnalyze(img.mediaId)} className="absolute bottom-2 right-2 rounded-lg bg-ink-950/80 px-2 py-1 text-[11px] font-medium text-accent-300 opacity-0 backdrop-blur transition-opacity hover:bg-ink-950 focus:opacity-100 group-hover:opacity-100">
-                  Analyze chart with Kotka
+                  Analyse chart with Kotka
                 </button>
               ) : null}
             </div>
@@ -113,7 +113,7 @@ export default function Attachments({ items, compact = false, onAnalyze }) {
         if (a.type === 'market') return <MarketSnapshot key={`m${i}`} snapshot={a.snapshot} compact={compact} />;
         if (a.type === 'poll') return a.unavailable ? null : <PollView key={a.poll.id} poll={a.poll} />;
         if (a.type === 'achievement') return <AchievementPost key={a.achievementId} snap={a.snapshot} />;
-        if (a.unavailable) return <p key={i} className="rounded-xl border border-dashed border-ink-200 px-3 py-2 text-xs text-ink-400 dark:border-ink-700">This {a.type} is no longer available.</p>;
+        if (a.unavailable) return <p key={i} className="rounded-xl border border-dashed border-ink-200 px-3 py-2 text-xs text-ink-400 dark:border-ink-700">This {{ post: 'post', news: 'news story', event: 'event', image: 'image' }[a.type] ?? 'item'} is no longer available.</p>;
         if (a.type === 'post')
           return (
             <Link key={a.postId} to={`/app/community/${a.kind === 'idea' ? 'ideas' : 'posts'}/${a.postId}`} className="block rounded-xl border border-ink-100 p-3 transition-colors hover:border-accent-300 dark:border-ink-800 dark:hover:border-accent-700">
@@ -137,7 +137,7 @@ export default function Attachments({ items, compact = false, onAnalyze }) {
               <CalendarDays className="mt-0.5 h-4 w-4 shrink-0 text-accent-600 dark:text-accent-400" />
               <span className="min-w-0">
                 <span className="text-sm font-medium text-ink-900 dark:text-ink-50">{a.title}</span>
-                <span className="block text-[11px] text-ink-400">{a.currency} · {a.importance} · {new Date(a.scheduledAt).toLocaleString(undefined, { weekday: 'short', day: 'numeric', month: 'short', ...(a.dateOnly ? {} : { hour: '2-digit', minute: '2-digit' }) })}</span>
+                <span className="block text-[11px] text-ink-400">{a.currency} · {a.importance} importance · {new Date(a.scheduledAt).toLocaleString(undefined, { weekday: 'short', day: 'numeric', month: 'short', ...(a.dateOnly ? {} : { hour: '2-digit', minute: '2-digit' }) })}</span>
               </span>
             </Link>
           );

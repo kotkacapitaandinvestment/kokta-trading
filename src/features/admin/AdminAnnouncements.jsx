@@ -7,10 +7,12 @@ import Modal from '../../components/ui/Modal';
 import Input, { Select } from '../../components/ui/Input';
 import AdminTable from './components/AdminTable';
 import { useAdminCrud } from '../../lib/useAdminCrud';
-import { confirmDialog, promptDialog, toast } from '../../lib/dialogs';
+import { confirmDialog, toast } from '../../lib/dialogs';
 
 const statusTone = { published: 'profit', draft: 'neutral' };
 const AUDIENCES = ['All users', 'Traders', 'Premium'];
+// Stored values stay as they are; this is how they read.
+const AUDIENCE_LABEL = { 'All users': 'Everyone', Traders: 'Free traders only', Premium: 'Premium traders only' };
 const EMPTY = { title: '', body: '', audience: 'All users' };
 
 export default function AdminAnnouncements() {
@@ -51,7 +53,7 @@ export default function AdminAnnouncements() {
         </div>
       ),
     },
-    { key: 'audience', label: 'Audience' },
+    { key: 'audience', label: 'Audience', csv: (r) => AUDIENCE_LABEL[r.audience] ?? r.audience, render: (r) => AUDIENCE_LABEL[r.audience] ?? r.audience },
     { key: 'publishedAt', label: 'Published', render: (r) => (r.publishedAt ? new Date(r.publishedAt).toLocaleDateString() : 'Not yet') },
     { key: 'status', label: 'Status', render: (r) => <Badge tone={statusTone[r.status]}>{{ draft: 'Draft', published: 'Published' }[r.status] ?? r.status}</Badge> },
     {
@@ -60,9 +62,9 @@ export default function AdminAnnouncements() {
       render: (r) => (
         <div className="flex justify-end gap-1.5">
           {r.status === 'published' ? (
-            <Button size="sm" variant="ghost" icon={Undo2} onClick={() => guard(() => update(r.id, { status: 'draft' }))}>Unpublish</Button>
+            <Button size="sm" variant="ghost" icon={Undo2} title="Hide it from traders. Notifications already sent stay on their devices." onClick={() => guard(async () => { await update(r.id, { status: 'draft' }); toast('Hidden from traders. Notifications already sent stay on their devices.'); })}>Unpublish</Button>
           ) : (
-            <Button size="sm" variant="secondary" icon={Send} onClick={() => guard(() => update(r.id, { status: 'published' }))}>Publish</Button>
+            <Button size="sm" variant="secondary" icon={Send} onClick={async () => (await confirmDialog({ title: `Publish “${r.title}”?`, message: `${AUDIENCE_LABEL[r.audience] ?? r.audience} will see it right away, and people with notifications on get one now.`, confirmLabel: 'Publish' })) && guard(() => update(r.id, { status: 'published' }))}>Publish</Button>
           )}
           <Button size="sm" variant="ghost" icon={Trash2} onClick={async () => (await confirmDialog({ title: `Delete “${r.title}”?`, message: 'Traders will no longer see it. This can’t be undone.', confirmLabel: 'Delete', danger: true })) && guard(() => remove(r.id))}>
             Delete
@@ -103,10 +105,10 @@ export default function AdminAnnouncements() {
           </label>
           <Select name="audience" label="Audience" value={form.audience} onChange={(e) => setForm((f) => ({ ...f, audience: e.target.value }))}>
             {AUDIENCES.map((a) => (
-              <option key={a}>{a}</option>
+              <option key={a} value={a}>{AUDIENCE_LABEL[a]}</option>
             ))}
           </Select>
-          <p className="text-xs text-ink-400">Saved as a draft. Publish it from the list when it is ready.</p>
+          <p className="text-xs text-ink-400">Saved as a draft. Publish it from the list when it’s ready.</p>
           <div className="flex justify-end gap-2 pt-2">
             <Button type="button" variant="ghost" onClick={() => setShowForm(false)}>Cancel</Button>
             <Button type="submit" disabled={saving}>{saving ? 'Saving…' : 'Save draft'}</Button>

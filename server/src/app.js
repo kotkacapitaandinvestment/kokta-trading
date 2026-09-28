@@ -67,6 +67,8 @@ app.use('/api/admin/research', adminResearchRouter);
 app.use('/api/admin/community', adminCommunityRouter);
 
 app.use((err, req, res, next) => {
+  // Errors marked `expose` carry a message written for people (and a status).
+  if (err?.expose) return res.status(err.status ?? 400).json({ error: err.message });
   console.error(err);
   res.status(500).json({ error: 'Internal server error' });
 });

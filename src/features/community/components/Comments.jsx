@@ -12,17 +12,18 @@ import Menu from './Menu';
 import ReportDialog from './ReportDialog';
 import { MentionTextarea } from './inputs';
 import AiPanel, { useAiAction } from './AiPanel';
-import { confirmDialog, promptDialog, toast } from '../../../lib/dialogs';
+import { confirmDialog, toast } from '../../../lib/dialogs';
 import EmptyState from '../../../components/ui/EmptyState';
 
 const CATEGORIES = [
-  ['technical', 'Technical'],
-  ['fundamental', 'Fundamental'],
+  ['technical', 'Chart reading'],
+  ['fundamental', 'Fundamentals'],
   ['risk', 'Risk'],
   ['timing', 'Timing'],
   ['liquidity', 'Liquidity'],
-  ['invalidation', 'Invalidation'],
+  ['invalidation', 'Stop level'],
 ];
+const CATEGORY_LABEL = Object.fromEntries(CATEGORIES);
 
 function CommentForm({ targetType, targetId, parentId, challenge, onPosted, onCancel, autoFocus }) {
   const [body, setBody] = useState('');
@@ -44,15 +45,15 @@ function CommentForm({ targetType, targetId, parentId, challenge, onPosted, onCa
     <form onSubmit={submit} className="space-y-2">
       {challenge ? (
         <div>
-          <p className="mb-1.5 text-xs font-medium text-ink-700 dark:text-ink-200">What assumption do you disagree with?</p>
-          <div className="flex flex-wrap gap-1" role="radiogroup" aria-label="Challenge category">
+          <p className="mb-1.5 text-xs font-medium text-ink-700 dark:text-ink-200">Which part do you disagree with?</p>
+          <div className="flex flex-wrap gap-1" role="radiogroup" aria-label="Which part you disagree with">
             {CATEGORIES.map(([v, l]) => (
               <button key={v} type="button" role="radio" aria-checked={category === v} onClick={() => setCategory(v)} className={clsx('rounded-md px-2 py-1 text-xs font-medium', category === v ? 'bg-ink-900 text-white dark:bg-accent-500 dark:text-ink-950' : 'bg-ink-50 text-ink-600 hover:bg-ink-100 dark:bg-ink-800 dark:text-ink-300')}>{l}</button>
             ))}
           </div>
         </div>
       ) : null}
-      <MentionTextarea value={body} onChange={setBody} rows={challenge ? 3 : 2} maxLength={3000} autoFocus={autoFocus} placeholder={challenge ? 'Explain the assumption and why you disagree. Debate the idea, not the person.' : parentId ? 'Reply…' : 'Add a comment…'} className="w-full rounded-xl border border-ink-200 bg-white p-3 text-sm text-ink-900 outline-none focus:border-accent-500 dark:border-ink-700 dark:bg-ink-900 dark:text-ink-50" />
+      <MentionTextarea value={body} onChange={setBody} rows={challenge ? 3 : 2} maxLength={3000} autoFocus={autoFocus} placeholder={challenge ? 'Say what you see differently and why. Debate the idea, not the person.' : parentId ? 'Reply…' : 'Add a comment…'} className="w-full rounded-xl border border-ink-200 bg-white p-3 text-sm text-ink-900 outline-none focus:border-accent-500 dark:border-ink-700 dark:bg-ink-900 dark:text-ink-50" />
       {state?.error ? <p role="alert" className="text-xs text-loss-500">{state.error}</p> : null}
       <div className="flex justify-end gap-2">
         {onCancel ? <Button type="button" size="sm" variant="ghost" onClick={onCancel}>Cancel</Button> : null}
@@ -91,7 +92,7 @@ function CommentItem({ c, replies, onReply, onChanged, depth = 0 }) {
             <div className="flex flex-wrap items-center gap-x-2 text-sm">
               <UserName user={c.author} showHandle={false} />
               <span className="text-xs text-ink-400">{timeAgo(c.createdAt)}{c.editedAt ? ' · edited' : ''}</span>
-              {c.challengeCategory ? <span className="inline-flex items-center gap-1 rounded bg-accent-500/15 px-1.5 py-px text-[10px] font-semibold uppercase text-accent-800 dark:text-accent-300"><ShieldCheck className="h-3 w-3" /> Challenge: {c.challengeCategory}</span> : null}
+              {c.challengeCategory ? <span className="inline-flex items-center gap-1 rounded bg-accent-500/15 px-1.5 py-px text-[11px] font-semibold text-accent-800 dark:text-accent-300"><ShieldCheck className="h-3 w-3" /> Challenge · {CATEGORY_LABEL[c.challengeCategory] ?? 'Other'}</span> : null}
             </div>
             {!c.deleted && !c.removed ? (
               <Menu
@@ -159,7 +160,7 @@ export default function Comments({ targetType, targetId, canChallenge = false, s
       {canChallenge ? (
         <div className="flex gap-1 rounded-lg bg-ink-50 p-1 text-xs dark:bg-ink-800" role="tablist">
           <button type="button" role="tab" aria-selected={mode === 'comment'} onClick={() => setMode('comment')} className={clsx('flex-1 rounded-md py-1.5 font-medium', mode === 'comment' ? 'bg-white shadow-sm dark:bg-ink-700 dark:text-ink-50' : 'text-ink-500')}>Comment</button>
-          <button type="button" role="tab" aria-selected={mode === 'challenge'} onClick={() => setMode('challenge')} className={clsx('flex flex-1 items-center justify-center gap-1 rounded-md py-1.5 font-medium', mode === 'challenge' ? 'bg-white shadow-sm dark:bg-ink-700 dark:text-ink-50' : 'text-ink-500')}><ShieldCheck className="h-3.5 w-3.5" /> Challenge thesis</button>
+          <button type="button" role="tab" aria-selected={mode === 'challenge'} onClick={() => setMode('challenge')} className={clsx('flex flex-1 items-center justify-center gap-1 rounded-md py-1.5 font-medium', mode === 'challenge' ? 'bg-white shadow-sm dark:bg-ink-700 dark:text-ink-50' : 'text-ink-500')}><ShieldCheck className="h-3.5 w-3.5" /> Challenge the idea</button>
         </div>
       ) : null}
       <CommentForm key={mode} targetType={targetType} targetId={targetId} challenge={mode === 'challenge'} onPosted={upsert} autoFocus={startChallenge} />

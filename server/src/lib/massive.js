@@ -13,7 +13,7 @@ export async function massiveTestConnection(apiKey) {
   const data = await massiveGet(apiKey, '/v2/aggs/ticker/C:EURUSD/prev');
   const bar = data?.results?.[0];
   if (!bar) throw new Error('Unexpected response from Massive.');
-  return `Connected — EUR/USD previous close: ${bar.c}`;
+  return `Connected. Massive is responding (EUR/USD last closed at ${bar.c}).`;
 }
 
 // Generic historical bar fetch. Returns raw {t,o,h,l,c,v} bar objects.

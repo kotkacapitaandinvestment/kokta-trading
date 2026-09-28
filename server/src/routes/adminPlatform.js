@@ -15,7 +15,7 @@ adminPlatformRouter.get('/settings', asyncHandler(async (req, res) => {
 }));
 
 adminPlatformRouter.put('/settings', asyncHandler(async (req, res) => {
-  if (req.user.role !== 'super_admin') return res.status(403).json({ error: 'Only a Super Admin can change platform settings.' });
+  if (req.user.role !== 'super_admin') return res.status(403).json({ error: 'Only a super admin can change platform settings.' });
   const current = await loadAppSettings();
   const { settings, error } = sanitizeAppSettings(req.body ?? {}, current);
   if (error) return res.status(400).json({ error });

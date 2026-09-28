@@ -17,9 +17,9 @@ import EmptyState from '../../components/ui/EmptyState';
 const TYPE_ICON = { goal_created: 'target', goal_locked: 'lock', goal_reached: 'trophy', goal_completed: 'trophy', streak: 'flame', discipline_streak: 'shield', badge: 'medal', checkins: 'calendar', learning: 'book', backtests: 'history', monthly_review: 'calendar', monthly_champion: 'award', most_improved: 'trending' };
 const STATUS = {
   draft: ['Draft', 'bg-ink-100 text-ink-600 dark:bg-ink-800 dark:text-ink-300'],
-  active: ['Locked', 'bg-ink-900 text-white dark:bg-ink-700'],
-  achieved: ['Reached', 'bg-accent-500 text-ink-950'],
-  completed: ['Achieved', 'bg-accent-500 text-ink-950'],
+  active: ['In progress', 'bg-ink-900 text-white dark:bg-ink-700'],
+  achieved: ['Target hit', 'bg-accent-500 text-ink-950'],
+  completed: ['Complete', 'bg-accent-500 text-ink-950'],
   missed: ['Missed', 'bg-ink-100 text-ink-500 dark:bg-ink-800 dark:text-ink-400'],
   abandoned: ['Abandoned', 'bg-ink-100 text-ink-400 dark:bg-ink-800 dark:text-ink-500'],
 };
@@ -63,7 +63,7 @@ function GoalCard({ goal, currency, achievements, onAction, onShare }) {
           <div className="flex flex-wrap items-center gap-1.5">
             <span className={clsx('rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide', tone)}>{label}</span>
             <span className="text-[11px] text-ink-400">{goal.metricLabel}</span>
-            {profit ? <span className="inline-flex items-center gap-1 text-[11px] text-ink-400"><Lock className="h-3 w-3" /> private</span> : null}
+            {profit ? <span className="inline-flex items-center gap-1 text-[11px] text-ink-400"><Lock className="h-3 w-3" /> Private</span> : null}
           </div>
           <h3 className="mt-1.5 text-base font-semibold text-ink-900 dark:text-ink-50">{goal.title}</h3>
           <p className="text-xs text-ink-500 dark:text-ink-400">{profit ? `Net profit of ${money(goal.target, currency)} in ${goal.periodDays} days` : goal.describe} · {goal.status === 'draft' ? `starts ${formatDay(goal.startDate, { day: 'numeric', month: 'short' })}` : `${formatDay(goal.startDate, { day: 'numeric', month: 'short' })} to ${formatDay(goal.endDate, { day: 'numeric', month: 'short' })}`}</p>
@@ -72,7 +72,7 @@ function GoalCard({ goal, currency, achievements, onAction, onShare }) {
           items={[
             goal.status === 'draft' ? { label: 'Edit', icon: PenLine, onClick: () => onAction('edit', goal) } : null,
             goal.status === 'draft' ? { label: 'Delete draft', icon: Trash2, danger: true, onClick: () => onAction('delete', goal) } : null,
-            goal.status !== 'draft' ? { label: 'Goal journey', icon: Route, onClick: () => onShare('journey', goal.id) } : null,
+            goal.status !== 'draft' ? { label: 'Progress story', icon: Route, onClick: () => onShare('journey', goal.id) } : null,
             running ? { label: 'Abandon goal', icon: Flag, danger: true, onClick: () => onAction('abandon', goal) } : null,
           ]}
         />
@@ -100,7 +100,7 @@ function GoalCard({ goal, currency, achievements, onAction, onShare }) {
       <div className="mt-4 flex flex-wrap gap-2">
         {goal.status === 'draft' ? <Button size="sm" icon={Lock} onClick={() => onAction('lock', goal)}>Lock goal</Button> : null}
         {shareable && goal.status !== 'draft' ? <Button size="sm" variant={['achieved', 'completed'].includes(goal.status) ? 'primary' : 'secondary'} icon={Share2} onClick={() => onShare('achievement', shareable.id)}>{['achieved', 'completed'].includes(goal.status) ? 'Share achievement' : 'Share goal'}</Button> : null}
-        {goal.status !== 'draft' ? <Button size="sm" variant="ghost" icon={Route} onClick={() => onShare('journey', goal.id)}>Journey</Button> : null}
+        {goal.status !== 'draft' ? <Button size="sm" variant="ghost" icon={Route} onClick={() => onShare('journey', goal.id)}>Progress story</Button> : null}
       </div>
     </article>
   );
@@ -262,7 +262,7 @@ export default function GoalRoom() {
         <Tile label="Current streak" value={s.currentStreak} sub={`Longest ${s.longestStreak} days`} info="Consecutive trading days with a check-in. Weekends never break it; a weekend check-in adds to it." />
         <Tile label="Discipline" value={s.adherence30 == null ? '–' : `${s.adherence30}%`} sub={s.adherence30 == null ? 'Check in to start' : 'Last 30 days'} info="Share of check-ins where you either stayed out, or traded and followed your plan, respected risk and avoided revenge trading." />
         <Tile label="Check-ins" value={s.totalCheckins} sub={`${s.learning} learning · ${s.backtests} backtests`} />
-        <Tile label="Goals achieved" value={s.goalsCompleted} sub={`${s.badges.length} badge${s.badges.length === 1 ? '' : 's'}`} />
+        <Tile label="Goals completed" value={s.goalsCompleted} sub={`${s.badges.length} badge${s.badges.length === 1 ? '' : 's'}`} />
       </div>
 
       <div className="grid gap-6 lg:grid-cols-3">
@@ -385,7 +385,7 @@ export default function GoalRoom() {
               </label>
             ))}
             <p className="mt-4 border-t border-ink-100 pt-3 text-[11px] leading-relaxed text-ink-400 dark:border-ink-800">
-              Everything here is <span className="font-medium text-ink-600 dark:text-ink-300">self-reported</span>: it comes from your check-ins, goals and journal. A result can only show as Verified once a broker account connection confirms it, and none is connected yet. See what other traders are working on in <Link to="/app/community/goals" className="underline">Community, Goals</Link>.
+              Everything here is <span className="font-medium text-ink-600 dark:text-ink-300">self-reported</span>: it comes from your check-ins, goals and journal. Broker-verified results are coming soon. See what other traders are working on in <Link to="/app/community/goals" className="underline">Community, Goals</Link>.
             </p>
           </section>
         </aside>

@@ -11,7 +11,7 @@ import EmptyState from '../../../components/ui/EmptyState';
 const TYPES = [
   [null, 'All'],
   ['post', 'Posts'],
-  ['idea', 'Ideas'],
+  ['idea', 'Trade ideas'],
   ['news', 'News'],
   ['message', 'Messages'],
   ['event', 'Events'],

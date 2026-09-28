@@ -19,7 +19,7 @@ export default function PublicAchievement() {
     fetch(`/api/public/achievements/${encodeURIComponent(slug)}`)
       .then(async (r) => {
         const j = await r.json().catch(() => ({}));
-        if (!r.ok) throw new Error(j.error ?? 'This achievement link is not available.');
+        if (!r.ok) throw new Error(r.status === 404 ? 'This link was removed or has expired.' : 'We couldn’t load this achievement. Please try again later.');
         setData(j);
       })
       .catch((err) => setError(err.message));
@@ -33,7 +33,7 @@ export default function PublicAchievement() {
   const hero = snap?.fields?.find((f) => f.kind === 'hero');
   const facts = snap
     ? [
-        ...(hero ? [{ icon: Trophy, label: hero.label, value: `${hero.value}${hero.unit ? ` ${hero.unit.toLowerCase()}` : ''}` }] : []),
+        ...(hero ? [{ icon: Trophy, label: hero.label, value: `${hero.value}${hero.unit && /^\d+$/.test(hero.value) ? ` ${hero.unit.toLowerCase()}` : ''}` }] : []),
         ...(snap.fields.find((f) => f.kind === 'badges')?.value ?? []).map((b) => ({ icon: BadgeCheck, label: 'Badge', value: b })),
         ...(['streak', 'monthStreak'].map(stat).filter(Boolean).map((f) => ({ icon: Flame, label: f.label, value: f.value }))),
         ...(['discipline', 'goalDiscipline', 'monthDiscipline'].map(stat).filter(Boolean).map((f) => ({ icon: Target, label: f.label, value: f.value }))),

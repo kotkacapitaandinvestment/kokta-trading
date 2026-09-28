@@ -41,10 +41,10 @@ adminUsersRouter.patch('/:id', asyncHandler(async (req, res) => {
     return res.status(403).json({ error: 'You cannot change your own role or status.' });
   }
   if (role !== undefined) {
-    if (actor.role !== 'super_admin') return res.status(403).json({ error: 'Only a Super Admin can change roles.' });
-    if (!ROLES.includes(role)) return res.status(400).json({ error: 'Invalid role.' });
+    if (actor.role !== 'super_admin') return res.status(403).json({ error: 'Only a super admin can change roles.' });
+    if (!ROLES.includes(role)) return res.status(400).json({ error: 'Choose a role from the list.' });
   }
-  if (status !== undefined && !STATUSES.includes(status)) return res.status(400).json({ error: 'Invalid status.' });
+  if (status !== undefined && !STATUSES.includes(status)) return res.status(400).json({ error: 'Choose a status from the list.' });
   if (RANK[target.role] >= RANK[actor.role] && actor.role !== 'super_admin') {
     return res.status(403).json({ error: 'You cannot modify an account with an equal or higher role.' });
   }

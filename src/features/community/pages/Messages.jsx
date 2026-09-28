@@ -7,14 +7,16 @@ import Modal from '../../../components/ui/Modal';
 import Button from '../../../components/ui/Button';
 import { useRealtime } from '../realtime';
 import { useCommunity } from '../CommunityContext';
-import { timeAgo } from '../util';
+import { ago, timeAgo } from '../util';
 import { Avatar, UserName } from '../components/Identity';
 import ReportDialog from '../components/ReportDialog';
 import PushNudge from '../../../components/PushNudge';
 import Hint from '../../../components/ui/Hint';
 import ConversationChat from '../chat/ConversationChat';
-import { confirmDialog, promptDialog, toast } from '../../../lib/dialogs';
+import { confirmDialog, toast } from '../../../lib/dialogs';
 import EmptyState from '../../../components/ui/EmptyState';
+
+const ROLE_LABEL = { owner: 'Owner', admin: 'Admin', moderator: 'Moderator', member: 'Member' };
 
 const FILTERS = [
   ['all', 'All'],
@@ -77,7 +79,7 @@ function NewChat({ onClose }) {
     }
   };
   return (
-    <Modal open onClose={onClose} title="New conversation">
+    <Modal open onClose={onClose} title="New chat">
       <div className="space-y-4">
         <div className="flex gap-1 rounded-lg bg-ink-50 p-1 text-xs dark:bg-ink-800">
           {[['dm', 'Direct message'], ['group', 'Private group'], ['community', 'Community']].map(([v, l]) => <button key={v} type="button" onClick={() => { setMode(v); setPicked(v === 'dm' ? picked.slice(0, 1) : picked); }} className={clsx('flex-1 rounded-md py-1.5 font-medium', mode === v ? 'bg-white shadow-sm dark:bg-ink-700 dark:text-ink-50' : 'text-ink-500')}>{l}</button>)}
@@ -91,10 +93,10 @@ function NewChat({ onClose }) {
             <input value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} maxLength={300} placeholder="What is it for? (optional)" className="h-10 w-full rounded-lg border border-ink-200 bg-white px-3 text-sm dark:border-ink-700 dark:bg-ink-800 dark:text-ink-50" />
             <div className="grid grid-cols-2 gap-2">
               {mode === 'community' ? (
-                <select value={form.visibility} onChange={(e) => setForm({ ...form, visibility: e.target.value })} className="h-9 rounded-lg border border-ink-200 bg-white px-2 text-sm dark:border-ink-700 dark:bg-ink-800" aria-label="Visibility">
+                <select value={form.visibility} onChange={(e) => setForm({ ...form, visibility: e.target.value })} className="h-9 rounded-lg border border-ink-200 bg-white px-2 text-sm dark:border-ink-700 dark:bg-ink-800" aria-label="Who can join">
                   <option value="public">Public: anyone can join</option>
-                  <option value="private">Private: listed, join by approval</option>
-                  <option value="invite_only">Invite only: unlisted</option>
+                  <option value="private">Private: anyone can find it and ask to join</option>
+                  <option value="invite_only">Invite only: hidden, join with a link</option>
                 </select>
               ) : <p className="self-center text-xs text-ink-400">Private groups are invite-only.</p>}
               <select value={form.sendPolicy} onChange={(e) => setForm({ ...form, sendPolicy: e.target.value })} className="h-9 rounded-lg border border-ink-200 bg-white px-2 text-sm dark:border-ink-700 dark:bg-ink-800" aria-label="Who can send">
@@ -136,7 +138,7 @@ function Directory({ onClose }) {
   return (
     <Modal open onClose={onClose} title="Communities" width="max-w-xl">
       <input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search communities" className="mb-3 h-10 w-full rounded-lg border border-ink-200 bg-white px-3 text-sm dark:border-ink-700 dark:bg-ink-800 dark:text-ink-50" />
-      {list && !list.length ? <EmptyState size="inline" icon={Users} title="No communities yet" description="Create one from New conversation and invite traders who share your markets." /> : null}
+      {list && !list.length ? <EmptyState size="inline" icon={Users} title="No communities yet" description="Create one from New chat and invite traders who share your markets." /> : null}
       <ul className="divide-y divide-ink-100 dark:divide-ink-800">
         {list?.map((c) => (
           <li key={c.id} className="flex items-center gap-3 py-3">
@@ -144,7 +146,7 @@ function Directory({ onClose }) {
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-semibold text-ink-900 dark:text-ink-50">{c.name} {c.featured ? <span className="ml-1 text-[10px] font-medium text-accent-700 dark:text-accent-300">Featured</span> : null}</p>
               <p className="truncate text-xs text-ink-500 dark:text-ink-400">{c.description ?? ''}</p>
-              <p className="text-[11px] text-ink-400">{c.memberCount} member{c.memberCount === 1 ? '' : 's'} · {c.visibility === 'public' ? 'Public' : 'Private, approval required'}</p>
+              <p className="text-[11px] text-ink-400">{c.memberCount} member{c.memberCount === 1 ? '' : 's'} · {c.visibility === 'public' ? 'Public: anyone can join' : 'Private: ask to join'}</p>
             </div>
             {c.membership === 'active' ? <Button size="sm" variant="secondary" onClick={() => { navigate(`/app/community/messages/${c.id}`); onClose(); }}>Open</Button> : c.membership === 'pending' ? <span className="text-xs text-ink-400">Requested</span> : <Button size="sm" onClick={() => join(c)}>{c.visibility === 'public' ? 'Join' : 'Request'}</Button>}
           </li>
@@ -184,7 +186,7 @@ function SettingsPanel({ details, reload, onClose }) {
           <Avatar user={other} size={48} showOnline />
           <div className="min-w-0">
             <UserName user={other} className="text-sm" />
-            <p className="text-xs text-ink-400">{other.online ? 'Online' : other.lastSeenAt ? `Last seen ${timeAgo(other.lastSeenAt)} ago` : 'Offline'}</p>
+            <p className="text-xs text-ink-400">{other.online ? 'Online' : other.lastSeenAt ? `Last seen ${ago(other.lastSeenAt)}` : 'Offline'}</p>
           </div>
         </div>
       ) : null}
@@ -201,7 +203,7 @@ function SettingsPanel({ details, reload, onClose }) {
       ) : c.description ? <p className="mt-3 text-sm text-ink-600 dark:text-ink-300">{c.description}</p> : null}
       {inviteUrl ? (
         <div className="mt-5">
-          <p className="text-xs font-semibold uppercase tracking-wide text-ink-400">Invite link</p>
+          <p className="text-xs font-semibold text-ink-500 dark:text-ink-400">Invite link</p>
           <div className="mt-1.5 flex gap-1.5">
             <input readOnly value={inviteUrl} className="h-8 min-w-0 flex-1 rounded-lg border border-ink-200 bg-ink-50 px-2 text-xs dark:border-ink-700 dark:bg-ink-800" />
             <button type="button" onClick={() => navigator.clipboard?.writeText(inviteUrl)} className="rounded-lg border border-ink-200 px-2 dark:border-ink-700" aria-label="Copy invite link"><Copy className="h-3.5 w-3.5" /></button>
@@ -212,19 +214,19 @@ function SettingsPanel({ details, reload, onClose }) {
       {c.kind !== 'dm' ? (
         <div className="mt-5">
           <div className="flex items-center justify-between">
-            <p className="text-xs font-semibold uppercase tracking-wide text-ink-400">Members ({details.members.filter((m) => m.status === 'active').length})</p>
+            <p className="text-xs font-semibold text-ink-500 dark:text-ink-400">Members ({details.members.filter((m) => m.status === 'active').length})</p>
             {a.canManage ? <button type="button" onClick={() => setAdding(true)} className="inline-flex items-center gap-1 text-xs font-medium text-accent-700 dark:text-accent-300"><UserPlus className="h-3.5 w-3.5" /> Add</button> : null}
           </div>
           <ul className="mt-2 space-y-1.5">
             {details.members.map((m) => (
               <li key={m.id} className="flex items-center gap-2">
                 <Avatar user={m} size={28} showOnline />
-                <span className="min-w-0 flex-1"><UserName user={m} className="text-sm" showHandle={false} /><span className="block text-[11px] capitalize text-ink-400">{m.status === 'pending' ? 'Requested to join' : m.role}</span></span>
+                <span className="min-w-0 flex-1"><UserName user={m} className="text-sm" showHandle={false} /><span className="block text-[11px] text-ink-400">{m.status === 'pending' ? 'Asked to join' : ROLE_LABEL[m.role] ?? 'Member'}</span></span>
                 {a.canManage && m.id !== profile?.id && m.role !== 'owner' ? (
                   m.status === 'pending' ? (
                     <Button size="sm" variant="secondary" onClick={() => act(() => api.patch(`/community/conversations/${c.id}/members/${m.id}`, { approve: true }))}>Approve</Button>
                   ) : (
-                    <select value={m.role} onChange={(e) => (e.target.value === 'remove' ? confirmDialog({ title: `Remove ${m.name}?`, message: 'They’ll leave this conversation and stop getting its messages.', confirmLabel: 'Remove', danger: true }).then((yes) => yes && act(() => api.delete(`/community/conversations/${c.id}/members/${m.id}`))) : act(() => api.patch(`/community/conversations/${c.id}/members/${m.id}`, { role: e.target.value })))} className="h-7 rounded-md border border-ink-200 bg-white px-1 text-[11px] dark:border-ink-700 dark:bg-ink-800" aria-label={`Role for ${m.name}`}>
+                    <select value={m.role} onChange={(e) => (e.target.value === 'remove' ? confirmDialog({ title: `Remove ${m.name}?`, message: 'They’ll leave this chat and stop getting its messages.', confirmLabel: 'Remove', danger: true }).then((yes) => yes && act(() => api.delete(`/community/conversations/${c.id}/members/${m.id}`))) : act(() => api.patch(`/community/conversations/${c.id}/members/${m.id}`, { role: e.target.value })))} className="h-7 rounded-md border border-ink-200 bg-white px-1 text-[11px] dark:border-ink-700 dark:bg-ink-800" aria-label={`Role for ${m.name}`}>
                       <option value="member">Member</option>
                       <option value="moderator">Moderator</option>
                       <option value="admin">Admin</option>
@@ -242,16 +244,16 @@ function SettingsPanel({ details, reload, onClose }) {
         {!c.muted ? <button type="button" onClick={() => act(() => api.patch(`/community/conversations/${c.id}/me`, { mute: 'always' }))} className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-sm text-ink-700 hover:bg-ink-50 dark:text-ink-200 dark:hover:bg-ink-800"><BellOff className="h-4 w-4" /> Mute until I turn it back on</button> : null}
         <button type="button" onClick={() => act(async () => { await api.patch(`/community/conversations/${c.id}/me`, { archived: !c.archived }); navigate('/app/community/messages'); })} className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-sm text-ink-700 hover:bg-ink-50 dark:text-ink-200 dark:hover:bg-ink-800"><Archive className="h-4 w-4" /> {c.archived ? 'Unarchive' : 'Archive'}</button>
         {other ? <button type="button" onClick={async () => { if (await confirmDialog({ title: `Block ${other.name}?`, message: 'You won’t see each other’s posts or messages, and they can’t message you. You can undo this in Settings.', confirmLabel: 'Block', danger: true })) { await api.post(`/community/users/${other.id}/block`, {}); reload(); } }} className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-sm text-loss-600 hover:bg-loss-50 dark:text-loss-400 dark:hover:bg-loss-500/10"><ShieldAlert className="h-4 w-4" /> Block {other.name}</button> : null}
-        <button type="button" onClick={() => setReport(true)} className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-sm text-loss-600 hover:bg-loss-50 dark:text-loss-400 dark:hover:bg-loss-500/10"><Flag className="h-4 w-4" /> Report {other ? other.name : 'this conversation'}</button>
-        {c.kind !== 'dm' ? <button type="button" onClick={async () => (await confirmDialog({ title: 'Leave this conversation?', message: 'You’ll stop getting its messages. You can rejoin if it’s open, or ask to be added back.', confirmLabel: 'Leave', danger: true })) && act(async () => { await api.delete(`/community/conversations/${c.id}/members/${profile.id}`); navigate('/app/community/messages'); })} className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-sm text-loss-600 hover:bg-loss-50 dark:text-loss-400 dark:hover:bg-loss-500/10"><LogOut className="h-4 w-4" /> Leave</button> : null}
+        <button type="button" onClick={() => setReport(true)} className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-sm text-loss-600 hover:bg-loss-50 dark:text-loss-400 dark:hover:bg-loss-500/10"><Flag className="h-4 w-4" /> Report {other ? other.name : 'this chat'}</button>
+        {c.kind !== 'dm' ? <button type="button" onClick={async () => (await confirmDialog({ title: 'Leave this chat?', message: 'You’ll stop getting its messages. You can rejoin if it’s open, or ask to be added back.', confirmLabel: 'Leave', danger: true })) && act(async () => { await api.delete(`/community/conversations/${c.id}/members/${profile.id}`); navigate('/app/community/messages'); })} className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-sm text-loss-600 hover:bg-loss-50 dark:text-loss-400 dark:hover:bg-loss-500/10"><LogOut className="h-4 w-4" /> Leave</button> : null}
       </div>
       {adding ? (
         <Modal open onClose={() => setAdding(false)} title="Add members">
           <PeoplePicker selected={picked} onChange={setPicked} />
-          <div className="mt-4 flex justify-end gap-2"><Button variant="ghost" onClick={() => setAdding(false)}>Cancel</Button><Button disabled={!picked.length} onClick={() => act(async () => { const r = await api.post(`/community/conversations/${c.id}/members`, { userIds: picked.map((u) => u.id) }); if (r.skipped) toast(`${r.skipped} couldn't be added because of their message settings.`, { tone: 'info' }); setAdding(false); setPicked([]); })}>Add</Button></div>
+          <div className="mt-4 flex justify-end gap-2"><Button variant="ghost" onClick={() => setAdding(false)}>Cancel</Button><Button disabled={!picked.length} onClick={() => act(async () => { const r = await api.post(`/community/conversations/${c.id}/members`, { userIds: picked.map((u) => u.id) }); if (r.skipped) toast(`${r.skipped} ${r.skipped === 1 ? 'trader couldn’t be added because of their' : 'traders couldn’t be added because of their'} message settings.`, { tone: 'info' }); setAdding(false); setPicked([]); })}>Add</Button></div>
         </Modal>
       ) : null}
-      {report ? <ReportDialog target={other ? { type: 'user', id: other.id, label: other.name } : { type: 'conversation', id: c.id, label: 'conversation' }} onClose={() => setReport(false)} /> : null}
+      {report ? <ReportDialog target={other ? { type: 'user', id: other.id, label: other.name } : { type: 'conversation', id: c.id, label: 'chat' }} onClose={() => setReport(false)} /> : null}
     </aside>
   );
 }
@@ -264,11 +266,11 @@ function ConversationHeader({ details, reload, onBack }) {
   return (
     <>
       <div className="flex items-center gap-3 border-b border-ink-100 px-4 py-3 dark:border-ink-800">
-        <button type="button" onClick={onBack} className="rounded-lg p-1 text-ink-500 lg:hidden" aria-label="Back to conversations"><ArrowLeft className="h-5 w-5" /></button>
+        <button type="button" onClick={onBack} className="rounded-lg p-1 text-ink-500 lg:hidden" aria-label="Back to chats"><ArrowLeft className="h-5 w-5" /></button>
         <Avatar user={other ?? { initials: (c.name ?? '?').slice(0, 2).toUpperCase(), avatarUrl: c.imageUrl }} size={38} showOnline={!!other} />
         <div className="min-w-0 flex-1">
           {other ? <UserName user={other} className="text-sm" /> : <p className="truncate text-sm font-semibold text-ink-900 dark:text-ink-50">{c.name}</p>}
-          <p className="truncate text-xs text-ink-400">{other ? (other.online ? 'Online' : other.lastSeenAt ? `Last seen ${timeAgo(other.lastSeenAt)} ago` : 'Offline') : `${c.memberCount} member${c.memberCount === 1 ? '' : 's'}${c.kind === 'community' ? ` · ${c.visibility === 'public' ? 'Public community' : 'Private community'}` : ' · Private group'}`}</p>
+          <p className="truncate text-xs text-ink-400">{other ? (other.online ? 'Online' : other.lastSeenAt ? `Last seen ${ago(other.lastSeenAt)}` : 'Offline') : `${c.memberCount} member${c.memberCount === 1 ? '' : 's'}${c.kind === 'community' ? ` · ${c.visibility === 'public' ? 'Public community' : 'Private community'}` : ' · Private group'}`}</p>
         </div>
         <button type="button" onClick={() => setSettings((s) => !s)} className="rounded-lg p-2 text-ink-500 hover:bg-ink-100 dark:hover:bg-ink-800" aria-label="Conversation settings"><Settings className="h-4 w-4" /></button>
       </div>
@@ -317,7 +319,7 @@ export default function Messages() {
           <h1 className="text-sm font-semibold text-ink-900 dark:text-ink-50">Messages</h1>
           <div className="flex gap-1">
             <button type="button" onClick={() => setShowDir(true)} className="rounded-lg p-1.5 text-ink-500 hover:bg-ink-100 dark:hover:bg-ink-800" aria-label="Browse communities" title="Browse communities"><Compass className="h-4 w-4" /></button>
-            <button type="button" onClick={() => setShowNew(true)} className="rounded-lg bg-ink-900 p-1.5 text-white dark:bg-accent-500 dark:text-ink-950" aria-label="New conversation" title="New conversation"><Plus className="h-4 w-4" /></button>
+            <button type="button" onClick={() => setShowNew(true)} className="rounded-lg bg-ink-900 p-1.5 text-white dark:bg-accent-500 dark:text-ink-950" aria-label="New chat" title="New chat"><Plus className="h-4 w-4" /></button>
           </div>
         </div>
         <PushNudge className="mx-3 mb-2 border-dashed">Know when someone messages you, even with Kotka closed.</PushNudge>
@@ -329,9 +331,9 @@ export default function Messages() {
           {list && !list.length ? (
             <li>
               {filter === 'archived' ? (
-                <EmptyState size="inline" icon={Archive} title="No archived conversations" description="Conversations you archive are kept here." />
+                <EmptyState size="inline" icon={Archive} title="No archived chats" description="Chats you archive are kept here." />
               ) : (
-                <EmptyState size="inline" icon={MessagesSquare} title="No conversations yet" description="Message a trader, start a private group or join a community." action={<button type="button" onClick={() => setShowNew(true)} className="rounded-lg bg-ink-900 px-3 py-1.5 text-xs font-medium text-white dark:bg-accent-500 dark:text-ink-950">Start a conversation</button>} />
+                <EmptyState size="inline" icon={MessagesSquare} title="No chats yet" description="Message a trader, start a private group or join a community." action={<button type="button" onClick={() => setShowNew(true)} className="rounded-lg bg-ink-900 px-3 py-1.5 text-xs font-medium text-white dark:bg-accent-500 dark:text-ink-950">Start a conversation</button>} />
               )}
             </li>
           ) : null}
@@ -362,8 +364,8 @@ export default function Messages() {
         ) : (
           <div className="flex flex-1 flex-col items-center justify-center p-10 text-center">
             <p className="text-sm font-medium text-ink-700 dark:text-ink-200">Private messages, groups and communities</p>
-            <p className="mt-1 max-w-sm text-xs text-ink-400">Start a conversation with a trader, create a private group, or join a community around a market or session.</p>
-            <div className="mt-4 flex gap-2"><Button size="sm" onClick={() => setShowNew(true)} icon={Plus}>New conversation</Button><Button size="sm" variant="secondary" onClick={() => setShowDir(true)} icon={Compass}>Browse communities</Button></div>
+            <p className="mt-1 max-w-sm text-xs text-ink-400">Message a trader, create a private group, or join a community around a market or session.</p>
+            <div className="mt-4 flex gap-2"><Button size="sm" onClick={() => setShowNew(true)} icon={Plus}>New chat</Button><Button size="sm" variant="secondary" onClick={() => setShowDir(true)} icon={Compass}>Browse communities</Button></div>
           </div>
         )}
       </div>

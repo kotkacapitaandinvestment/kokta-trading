@@ -21,14 +21,16 @@ function downloadCsv(columns, rows, filename) {
   URL.revokeObjectURL(url);
 }
 
-export default function AdminTable({ columns, rows, searchKeys, exportable = true, exportName = 'kotka-export', emptyLabel = 'No records found' }) {
+export default function AdminTable({ columns, rows, searchKeys, exportable = true, exportName = 'kotka-export', emptyLabel = 'Nothing here yet' }) {
   const [query, setQuery] = useState('');
 
   const filtered = useMemo(() => {
     if (!query) return rows;
     const q = query.toLowerCase();
-    return rows.filter((r) => (searchKeys ?? Object.keys(r)).some((k) => String(r[k] ?? '').toLowerCase().includes(q)));
-  }, [rows, query, searchKeys]);
+    // Match what people see (column labels such as "Super Admin"), not only raw values.
+    const labelled = columns.filter((c) => typeof c.csv === 'function');
+    return rows.filter((r) => (searchKeys ?? Object.keys(r)).some((k) => String(r[k] ?? '').toLowerCase().includes(q)) || labelled.some((c) => String(c.csv(r) ?? '').toLowerCase().includes(q)));
+  }, [rows, query, searchKeys, columns]);
 
   return (
     <Card>
@@ -44,20 +46,20 @@ export default function AdminTable({ columns, rows, searchKeys, exportable = tru
         </div>
         {exportable ? (
           <Button variant="secondary" size="sm" icon={Download} disabled={!filtered.length} onClick={() => downloadCsv(columns, filtered, exportName)}>
-            Export CSV
+            Download spreadsheet
           </Button>
         ) : null}
       </div>
 
       {filtered.length === 0 ? (
         <div className="p-6">
-          <EmptyState title={emptyLabel} />
+          <EmptyState size="inline" title={rows.length && query ? `Nothing matches “${query}”` : emptyLabel} description={rows.length && query ? 'Try a different name, email or word.' : undefined} />
         </div>
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full min-w-[640px] text-sm">
             <thead>
-              <tr className="border-b border-ink-100 text-left text-xs uppercase tracking-wide text-ink-400 dark:border-ink-800">
+              <tr className="border-b border-ink-100 text-left text-xs text-ink-400 dark:border-ink-800">
                 {columns.map((c) => (
                   <th key={c.key} className="px-5 py-3 font-medium">{c.label}</th>
                 ))}

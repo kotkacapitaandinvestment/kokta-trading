@@ -1,8 +1,8 @@
 import { ShieldCheck } from 'lucide-react';
 
 const RULES = [
-  ['Debate ideas, not people', 'Challenge the thesis, the data or the risk. Personal attacks, harassment and bullying are removed.'],
-  ['No scams or fake offers', 'No investment schemes, "account management", fund-passing services or requests for money. Kotka never asks you to pay or send crypto in Community.'],
+  ['Debate ideas, not people', 'Challenge the reasoning, the data or the risk. Personal attacks, harassment and bullying are removed.'],
+  ['No scams or fake offers', 'No investment schemes, "account management", offers to pass prop-firm challenges for you or requests for money. Kotka never asks you to pay or send crypto in Community.'],
   ['No guaranteed-return claims', 'Nobody knows the future. Posts promising certain profits, "100% win rates" or risk-free returns are removed.'],
   ['No impersonation', 'Only accounts with the Kotka team badge speak for Kotka. Pretending to be staff, a broker or another trader leads to a ban.'],
   ['No market manipulation', 'No coordinated pumping, spreading false information to move prices, or undisclosed promotion.'],

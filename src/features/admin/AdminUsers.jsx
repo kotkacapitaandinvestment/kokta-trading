@@ -8,13 +8,23 @@ import AdminTable from './components/AdminTable';
 import { api } from '../../lib/api';
 import { useAuth } from '../../context/AuthContext';
 import { useAppConfig } from '../../context/AppConfigContext';
-import { confirmDialog, promptDialog, toast } from '../../lib/dialogs';
+import { confirmDialog } from '../../lib/dialogs';
 
 const statusTone = { active: 'profit', suspended: 'warning', banned: 'loss' };
 const kycTone = { approved: 'profit', pending: 'warning', rejected: 'loss', none: 'neutral' };
 const kycLabel = { approved: 'Verified', pending: 'In review', rejected: 'Needs changes', none: 'Not submitted' };
-const ROLE_LABEL = { trader: 'Trader', premium: 'Premium', admin: 'Admin', super_admin: 'Super Admin' };
-const RANK = { trader: 0, premium: 0, admin: 1, super_admin: 2 };
+const ROLE_LABEL = { trader: 'Trader', premium: 'Premium', moderator: 'Moderator', admin: 'Admin', super_admin: 'Super Admin' };
+const RANK = { trader: 0, premium: 0, moderator: 0.5, admin: 1, super_admin: 2 };
+// What each role can do, shown when a Super Admin changes someone's role.
+const ROLE_MEANS = {
+  trader: 'Traders use Kotka with the standard limits.',
+  premium: 'Premium traders get Premium features and limits, free of charge.',
+  moderator: 'Moderators can review reports and remove posts in Community.',
+  admin: 'Admins can manage users, verifications, Community and announcements.',
+  super_admin: 'Super Admins can do everything, including roles, connected services and platform settings.',
+};
+const STATUS_LABEL = { active: 'Active', suspended: 'Suspended', banned: 'Banned' };
+const day = (iso) => (iso ? new Date(`${iso}T12:00:00Z`).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : null);
 
 export default function AdminUsers() {
   const { user: me } = useAuth();
@@ -68,13 +78,14 @@ export default function AdminUsers() {
     {
       key: 'role',
       label: 'Role',
+      csv: (u) => ROLE_LABEL[u.role] ?? u.role,
       render: (u) =>
         isSuper && u.id !== me?.id ? (
           <select
             aria-label={`Role for ${u.email}`}
             value={u.role}
             disabled={busyId === u.id}
-            onChange={(e) => updateUser(u, { role: e.target.value }, `Change ${u.email} to ${ROLE_LABEL[e.target.value]}?`)}
+            onChange={(e) => updateUser(u, { role: e.target.value }, `Make ${u.email} ${/^[AEIOU]/.test(ROLE_LABEL[e.target.value]) ? 'an' : 'a'} ${ROLE_LABEL[e.target.value]}? ${ROLE_MEANS[e.target.value]}`)}
             className="h-8 rounded-lg border border-ink-200 bg-white px-2 text-xs text-ink-800 dark:border-ink-700 dark:bg-ink-800 dark:text-ink-100"
           >
             {Object.entries(ROLE_LABEL).map(([value, label]) => (
@@ -90,11 +101,11 @@ export default function AdminUsers() {
       key: 'kycStatus',
       label: 'Verification',
       csv: (u) => kycLabel[u.kycStatus],
-      render: (u) => (RANK[u.role] > 0 ? <span className="text-xs text-ink-400">Exempt</span> : <Badge tone={kycTone[u.kycStatus]}>{kycLabel[u.kycStatus]}</Badge>),
+      render: (u) => (RANK[u.role] > 0 ? <span className="text-xs text-ink-400">Not needed (staff)</span> : <Badge tone={kycTone[u.kycStatus]}>{kycLabel[u.kycStatus]}</Badge>),
     },
-    { key: 'status', label: 'Status', render: (u) => <Badge tone={statusTone[u.status]}>{{ active: 'Active', suspended: 'Suspended', banned: 'Banned' }[u.status] ?? u.status}</Badge> },
-    { key: 'joined', label: 'Joined' },
-    { key: 'lastActive', label: 'Last sign-in', render: (u) => u.lastActive ?? 'Never' },
+    { key: 'status', label: 'Status', csv: (u) => STATUS_LABEL[u.status] ?? u.status, render: (u) => <Badge tone={statusTone[u.status]}>{STATUS_LABEL[u.status] ?? u.status}</Badge> },
+    { key: 'joined', label: 'Joined', csv: (u) => day(u.joined), render: (u) => <span className="whitespace-nowrap">{day(u.joined)}</span> },
+    { key: 'lastActive', label: 'Last sign-in', csv: (u) => day(u.lastActive) ?? 'Never', render: (u) => <span className="whitespace-nowrap">{day(u.lastActive) ?? 'Never'}</span> },
     {
       key: 'actions',
       label: 'Actions',
@@ -108,12 +119,12 @@ export default function AdminUsers() {
                 Reinstate
               </Button>
             ) : (
-              <Button size="sm" variant="secondary" disabled={busyId === u.id} onClick={() => updateUser(u, { status: 'suspended' }, `Suspend ${u.email}? They are signed out immediately.`)}>
+              <Button size="sm" variant="secondary" disabled={busyId === u.id} onClick={() => updateUser(u, { status: 'suspended' }, `Suspend ${u.email}? A temporary pause: they’re signed out within a minute and can’t sign in until you reinstate them.`)}>
                 Suspend
               </Button>
             )}
             {u.status !== 'banned' ? (
-              <Button size="sm" variant="ghost" disabled={busyId === u.id} onClick={() => updateUser(u, { status: 'banned' }, `Ban ${u.email}? They are signed out and cannot sign back in.`)}>
+              <Button size="sm" variant="ghost" disabled={busyId === u.id} onClick={() => updateUser(u, { status: 'banned' }, `Ban ${u.email}? Their account is closed: they’re signed out within a minute and asked to contact support. You can still reinstate them later.`)}>
                 Ban
               </Button>
             ) : null}
@@ -129,7 +140,7 @@ export default function AdminUsers() {
       <PageHeader
         eyebrow="Admin"
         title="Users"
-        description="Every account on the platform. Suspending or banning signs the person out within a minute."
+        description="Every account on Kotka. Suspending or banning someone signs them out within a minute."
         actions={
           <Button as={Link} to="/admin/verifications" variant="secondary" size="sm">
             Review verifications
@@ -147,7 +158,7 @@ export default function AdminUsers() {
         rows={users}
         searchKeys={['name', 'email', 'role', 'status', 'kycStatus']}
         exportName="kotka-users"
-        emptyLabel={loading ? 'Loading users…' : 'No users found'}
+        emptyLabel={loading ? 'Loading users…' : 'No accounts yet'}
       />
     </div>
   );

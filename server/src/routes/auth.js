@@ -78,7 +78,7 @@ authRouter.post('/login', asyncHandler(async (req, res) => {
   if (!valid) {
     await recordAttempt(req, 'login', email, false);
     auditLater(req, 'auth.sign_in_failed', { targetType: user ? 'user' : null, targetId: user?.id ?? null, actor: { id: user?.id ?? null, email }, detail: { reason: user ? 'Wrong password' : 'No account with this email' } });
-    return res.status(401).json({ error: 'Invalid email or password.' });
+    return res.status(401).json({ error: 'That email and password don’t match. Check them and try again.' });
   }
 
   if (user.status !== 'active') {

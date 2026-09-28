@@ -19,7 +19,9 @@ export function isPublicConversation(c) {
 
 export function mutedMessage(me) {
   if (me.communityMutedUntil && new Date(me.communityMutedUntil) > new Date()) {
-    return `A moderator has paused your posting until ${new Date(me.communityMutedUntil).toUTCString().replace(' GMT', ' UTC')}.`;
+    const until = new Date(me.communityMutedUntil);
+    const when = `${until.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' })} at ${until.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: 'UTC' })} UTC`;
+    return `A moderator paused your posting until ${when}. You can still read and react.`;
   }
   return null;
 }
@@ -30,7 +32,7 @@ export async function conversationAccess(conversationOrId, me) {
     typeof conversationOrId === 'string'
       ? await prisma.conversation.findUnique({ where: { id: conversationOrId } })
       : conversationOrId;
-  if (!conv) return { conv: null, canRead: false, canSend: false, reason: 'Conversation not found.' };
+  if (!conv) return { conv: null, canRead: false, canSend: false, reason: 'This chat was deleted, or you’re no longer in it.' };
   const [member, dmOther] = await Promise.all([
     prisma.conversationMember.findUnique({ where: { conversationId_userId: { conversationId: conv.id, userId: me.id } } }),
     conv.kind === 'dm' ? prisma.conversationMember.findFirst({ where: { conversationId: conv.id, userId: { not: me.id } }, select: { userId: true } }) : null,
@@ -44,10 +46,10 @@ export async function conversationAccess(conversationOrId, me) {
   const canManage = (activeMember && MANAGER_ROLES.includes(member.role)) || (staff && pub && conv.kind !== 'dm');
 
   let canSend = canRead;
-  let reason = canRead ? null : 'You are not a member of this conversation.';
+  let reason = canRead ? null : 'Join this chat to read and reply.';
   const muted = mutedMessage(me);
   if (canSend && muted) [canSend, reason] = [false, muted];
-  if (canSend && conv.archivedAt) [canSend, reason] = [false, 'This conversation is archived.'];
+  if (canSend && conv.archivedAt) [canSend, reason] = [false, 'This chat is closed to new messages.'];
   if (canSend && conv.sendPolicy === 'admins' && !canModerate) [canSend, reason] = [false, 'Only admins can send messages here.'];
   if (canSend && conv.kind === 'dm') {
     const other = dmOther;

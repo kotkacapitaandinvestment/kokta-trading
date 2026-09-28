@@ -43,7 +43,7 @@ adminKycRouter.get('/:id', asyncHandler(async (req, res) => {
 adminKycRouter.post('/:id/decision', asyncHandler(async (req, res) => {
   const decision = req.body?.decision;
   const note = typeof req.body?.note === 'string' ? req.body.note.trim().slice(0, 500) : '';
-  if (!['approved', 'rejected'].includes(decision)) return res.status(400).json({ error: 'Decision must be approved or rejected.' });
+  if (!['approved', 'rejected'].includes(decision)) return res.status(400).json({ error: 'Choose Approve or Request changes.' });
   if (decision === 'rejected' && !note) return res.status(400).json({ error: 'Tell the trader what to fix. The note is shown to them.' });
 
   const profile = await prisma.kycProfile.findUnique({ where: { id: req.params.id }, include: { user: { select: userSelect } } });

@@ -151,7 +151,7 @@ goalsRouter.post('/goals', asyncHandler(async (req, res) => {
 goalsRouter.patch('/goals/:id', asyncHandler(async (req, res) => {
   const today = localDate(req.body?.today);
   const existing = await prisma.goal.findFirst({ where: { id: req.params.id, userId: req.userId } });
-  if (!existing) return res.status(404).json({ error: 'Goal not found.' });
+  if (!existing) return res.status(404).json({ error: 'We couldn’t find that goal. It may have been deleted. Refresh your Goal Room.' });
   if (existing.status !== 'draft') return res.status(400).json({ error: 'A locked goal can’t be changed. That’s the point of locking it.' });
   const { goal, error } = validateGoal(req.body ?? {}, today, { existing });
   if (error) return res.status(400).json({ error });
@@ -162,7 +162,7 @@ goalsRouter.patch('/goals/:id', asyncHandler(async (req, res) => {
 goalsRouter.post('/goals/:id/lock', asyncHandler(async (req, res) => {
   const today = localDate(req.body?.today);
   const g = await prisma.goal.findFirst({ where: { id: req.params.id, userId: req.userId } });
-  if (!g) return res.status(404).json({ error: 'Goal not found.' });
+  if (!g) return res.status(404).json({ error: 'We couldn’t find that goal. It may have been deleted. Refresh your Goal Room.' });
   if (g.status !== 'draft') return res.status(400).json({ error: 'This goal is already locked.' });
   // The period starts when the goal is locked, never in the past.
   const startDate = g.startDate < today ? today : g.startDate;
@@ -178,8 +178,8 @@ goalsRouter.post('/goals/:id/lock', asyncHandler(async (req, res) => {
 
 goalsRouter.post('/goals/:id/abandon', asyncHandler(async (req, res) => {
   const g = await prisma.goal.findFirst({ where: { id: req.params.id, userId: req.userId } });
-  if (!g) return res.status(404).json({ error: 'Goal not found.' });
-  if (!['active', 'achieved'].includes(g.status)) return res.status(400).json({ error: 'Only a running goal can be abandoned.' });
+  if (!g) return res.status(404).json({ error: 'We couldn’t find that goal. It may have been deleted. Refresh your Goal Room.' });
+  if (!['active', 'achieved'].includes(g.status)) return res.status(400).json({ error: 'Only a goal in progress can be abandoned.' });
   await prisma.goal.update({ where: { id: g.id }, data: { status: 'abandoned', closedAt: new Date() } });
   auditLater(req, 'goals.goal_abandoned', { targetType: 'goal', targetId: g.id, detail: { title: g.title } });
   res.json(await overview(req.userId, localDate(req.body?.today)));
@@ -187,7 +187,7 @@ goalsRouter.post('/goals/:id/abandon', asyncHandler(async (req, res) => {
 
 goalsRouter.delete('/goals/:id', asyncHandler(async (req, res) => {
   const g = await prisma.goal.findFirst({ where: { id: req.params.id, userId: req.userId } });
-  if (!g) return res.status(404).json({ error: 'Goal not found.' });
+  if (!g) return res.status(404).json({ error: 'We couldn’t find that goal. It may have been deleted. Refresh your Goal Room.' });
   if (g.status !== 'draft') return res.status(400).json({ error: 'Locked goals stay on your record. You can abandon a running goal instead.' });
   await prisma.achievement.deleteMany({ where: { userId: req.userId, goalId: g.id } });
   await prisma.goal.delete({ where: { id: g.id } });
@@ -198,7 +198,7 @@ goalsRouter.delete('/goals/:id', asyncHandler(async (req, res) => {
 // ── achievements ───────────────────────────────────────────────────────────
 goalsRouter.patch('/achievements/:id', asyncHandler(async (req, res) => {
   const a = await prisma.achievement.findFirst({ where: { id: req.params.id, userId: req.userId } });
-  if (!a) return res.status(404).json({ error: 'Achievement not found.' });
+  if (!a) return res.status(404).json({ error: 'We couldn’t find that achievement. Refresh your Goal Room.' });
   if (typeof req.body?.pinned === 'boolean') {
     if (req.body.pinned && !a.pinned && (await prisma.achievement.count({ where: { userId: req.userId, pinned: true } })) >= 3) return res.status(400).json({ error: 'You can pin up to 3 achievements. Unpin one first.' });
     await prisma.achievement.update({ where: { id: a.id }, data: { pinned: req.body.pinned } });
@@ -222,19 +222,19 @@ goalsRouter.post('/achievements/:id/post', asyncHandler(async (req, res) => {
 const SOURCES = ['achievement', 'checkin', 'monthly', 'journey'];
 
 goalsRouter.get('/cards/:source/:sourceId', asyncHandler(async (req, res) => {
-  if (!SOURCES.includes(req.params.source)) return res.status(404).json({ error: 'Nothing to share here.' });
+  if (!SOURCES.includes(req.params.source)) return res.status(404).json({ error: 'We couldn’t make that card. Refresh and try again.' });
   const card = await buildCard(req.userId, req.params.source, req.params.sourceId, localDate(req.query.today));
-  if (!card) return res.status(404).json({ error: 'Nothing to share here.' });
+  if (!card) return res.status(404).json({ error: 'We couldn’t make that card. Refresh and try again.' });
   res.json({ card, preset: presetKeys(card) });
 }));
 
 goalsRouter.post('/shares', asyncHandler(async (req, res) => {
   const b = req.body ?? {};
-  if (!SOURCES.includes(b.source)) return res.status(400).json({ error: 'Nothing to share here.' });
+  if (!SOURCES.includes(b.source)) return res.status(400).json({ error: 'We couldn’t make that card. Refresh and try again.' });
   const limited = await overLimit('share', req.userId);
   if (limited) return res.status(429).json({ error: limited });
   const card = await buildCard(req.userId, b.source, String(b.sourceId ?? ''), localDate(b.today));
-  if (!card) return res.status(404).json({ error: 'Nothing to share here.' });
+  if (!card) return res.status(404).json({ error: 'We couldn’t make that card. Refresh and try again.' });
   const { snapshot, fields, error } = publicSnapshot(card, Array.isArray(b.fields) ? b.fields.map(String) : presetKeys(card), { sensitiveAck: b.sensitiveAck === true });
   if (error) return res.status(400).json({ error, code: 'sensitive_ack' });
   let imageId = null;
@@ -256,7 +256,7 @@ goalsRouter.get('/shares', asyncHandler(async (req, res) => {
 
 goalsRouter.delete('/shares/:id', asyncHandler(async (req, res) => {
   const s = await prisma.achievementShare.findFirst({ where: { id: req.params.id, userId: req.userId } });
-  if (!s) return res.status(404).json({ error: 'Link not found.' });
+  if (!s) return res.status(404).json({ error: 'That link was already removed.' });
   await prisma.achievementShare.update({ where: { id: s.id }, data: { revokedAt: new Date() } });
   auditLater(req, 'goals.public_link_removed', { targetType: 'share', targetId: s.id, detail: { headline: s.snapshot?.headline } });
   if (s.imageId) await prisma.media.deleteMany({ where: { id: s.imageId, ownerId: req.userId } });
@@ -279,7 +279,7 @@ goalsRouter.get('/community/recognitions', asyncHandler(async (req, res) => {
 
 // ── monthly review, journey, preferences ───────────────────────────────────
 goalsRouter.get('/monthly/:month', asyncHandler(async (req, res) => {
-  if (!/^\d{4}-\d{2}$/.test(req.params.month)) return res.status(400).json({ error: 'Month must be YYYY-MM.' });
+  if (!/^\d{4}-\d{2}$/.test(req.params.month)) return res.status(400).json({ error: 'Choose a month from the list.' });
   const ctx = await loadContext(req.userId);
   res.json({ review: monthStats(ctx, req.params.month, localDate(req.query.today)) });
 }));

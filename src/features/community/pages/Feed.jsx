@@ -17,7 +17,7 @@ const MODES = [
 const TYPES = [
   ['all', 'All'],
   ['markets', 'Markets'],
-  ['ideas', 'Ideas'],
+  ['ideas', 'Trade ideas'],
   ['news', 'News'],
   ['events', 'Events'],
   ['posts', 'Posts'],

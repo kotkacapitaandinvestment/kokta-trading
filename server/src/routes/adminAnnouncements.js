@@ -30,7 +30,7 @@ function clean(body, { partial = false } = {}) {
     else out.audience = body.audience;
   }
   if (body.status !== undefined) {
-    if (!['draft', 'published'].includes(body.status)) errors.push('Status must be draft or published.');
+    if (!['draft', 'published'].includes(body.status)) errors.push('Choose Draft or Published.');
     else {
       out.status = body.status;
       out.publishedAt = body.status === 'published' ? new Date() : null;

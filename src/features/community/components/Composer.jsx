@@ -5,11 +5,12 @@ import { api } from '../../../lib/api';
 import Button from '../../../components/ui/Button';
 import { useCommunity } from '../CommunityContext';
 import { Avatar } from './Identity';
+import { TIMEFRAME_LABEL } from './IdeaBlock';
 import { InstrumentSelect, ImagePicker, UploadPreviews, useImageUploads, MentionTextarea } from './inputs';
 
 const TYPES = [
   { kind: 'post', label: 'Post', icon: MessageSquare },
-  { kind: 'market', label: 'Market', icon: LineChart },
+  { kind: 'market', label: 'Market update', icon: LineChart },
   { kind: 'idea', label: 'Trade idea', icon: TrendingUp },
   { kind: 'poll', label: 'Poll', icon: BarChart3 },
   { kind: 'question', label: 'Question', icon: HelpCircle },
@@ -71,7 +72,7 @@ export default function Composer({ onCreated, defaultKind = 'post', defaultInstr
     return (
       <button type="button" onClick={() => setOpen(true)} className="flex w-full items-center gap-3 px-5 py-4 text-left text-sm text-ink-400 hover:bg-ink-50/60 dark:hover:bg-ink-800/30">
         <Avatar user={profile} size={36} />
-        {kind === 'idea' ? 'Publish a trade idea…' : 'Share a view, a chart or a question…'}
+        {kind === 'idea' ? 'Share a trade idea…' : 'Share a view, a chart or a question…'}
         <Plus className="ml-auto h-4 w-4" />
       </button>
     );
@@ -101,7 +102,7 @@ export default function Composer({ onCreated, defaultKind = 'post', defaultInstr
               ))}
             </div>
             <select value={idea.timeframe} onChange={(e) => setIdea({ ...idea, timeframe: e.target.value })} className="h-9 rounded-lg border border-ink-200 bg-white px-2 text-sm dark:border-ink-700 dark:bg-ink-800 dark:text-ink-100" aria-label="Timeframe">
-              {TIMEFRAMES.map((t) => <option key={t}>{t}</option>)}
+              {TIMEFRAMES.map((t) => <option key={t} value={t}>{TIMEFRAME_LABEL[t]} chart</option>)}
             </select>
           </div>
           <div className="grid grid-cols-3 gap-2">
@@ -112,12 +113,12 @@ export default function Composer({ onCreated, defaultKind = 'post', defaultInstr
               </label>
             ))}
           </div>
-          <p className="text-xs text-ink-500">Reward-to-risk: <span className="font-mono font-semibold text-ink-800 dark:text-ink-100">{rr ? `${rr}:1` : 'n/a'}</span></p>
+          <p className="text-xs text-ink-500">Reward-to-risk: <span className="font-mono font-semibold text-ink-800 dark:text-ink-100">{rr ? `${rr}:1` : '–'}</span></p>
           <label className="block">
-            <span className="mb-1 block text-[11px] font-medium text-ink-500">Thesis: why, and what would prove you wrong</span>
+            <span className="mb-1 block text-[11px] font-medium text-ink-500">Your reasoning: why, and what would prove you wrong</span>
             <textarea value={idea.thesis} onChange={(e) => setIdea({ ...idea, thesis: e.target.value })} rows={4} maxLength={5000} required className="w-full rounded-lg border border-ink-200 bg-white p-3 text-sm dark:border-ink-700 dark:bg-ink-800 dark:text-ink-50" />
           </label>
-          <p className="text-[11px] text-ink-400">Trade ideas are market theses for discussion. They are not signals, and Kotka does not verify them.</p>
+          <p className="text-[11px] text-ink-400">Trade ideas are shared for discussion. They aren’t signals, and Kotka doesn’t check them.</p>
         </div>
       ) : null}
 
@@ -162,7 +163,7 @@ export default function Composer({ onCreated, defaultKind = 'post', defaultInstr
         </details>
         <div className="ml-auto flex items-center gap-2">
           {compact ? <Button type="button" variant="ghost" size="sm" onClick={() => { reset(); setOpen(false); }}>Cancel</Button> : null}
-          <Button type="submit" size="sm" disabled={state?.busy || uploads.busy}>{state?.busy ? 'Posting…' : kind === 'idea' ? 'Publish idea' : 'Post'}</Button>
+          <Button type="submit" size="sm" disabled={state?.busy || uploads.busy}>{state?.busy ? 'Posting…' : kind === 'idea' ? 'Share idea' : 'Post'}</Button>
         </div>
       </div>
       {state?.error ? <p role="alert" className="flex items-center gap-1.5 text-xs text-loss-500"><AlertCircle className="h-3.5 w-3.5" /> {state.error}</p> : null}

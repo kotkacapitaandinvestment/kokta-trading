@@ -1,7 +1,7 @@
 // Post view models and the Community feed.
 //
 // The feed is deliberately explainable: every item carries the reason it is
-// shown ("You follow EUR/USD", "From @amara, whom you follow", "Trending").
+// shown ("You follow EUR/USD", "You follow @amara", "Trending").
 // Ranking = relevance weight x recency decay, plus engagement for trending.
 
 import { prisma } from '../prisma.js';
@@ -60,7 +60,7 @@ export async function postViews(posts, viewerId) {
 }
 
 export function newsView(n) {
-  return { id: n.id, headline: n.headline, summary: n.summary, url: n.url, imageUrl: n.imageUrl, provider: n.provider, source: n.source, official: n.official, publishedAt: n.publishedAt, currencies: n.currencies, instruments: n.instruments, topics: n.topics, commentCount: n.commentCount, explained: !!n.explanation };
+  return { id: n.id, headline: n.headline, summary: n.summary, url: n.url, imageUrl: n.imageUrl, provider: n.provider === 'Finnhub' ? 'News wire' : n.provider, source: n.source, official: n.official, publishedAt: n.publishedAt, currencies: n.currencies, instruments: n.instruments, topics: n.topics, commentCount: n.commentCount, explained: !!n.explanation };
 }
 
 export function eventView(e, now = new Date()) {
@@ -163,7 +163,7 @@ export async function buildFeed(me, { mode = 'foryou', type = 'all', before = nu
       wantNews && mode === 'latest' ? prisma.newsItem.findMany({ where: before ? { publishedAt: { lt: new Date(before) } } : {}, orderBy: { publishedAt: 'desc' }, take: Math.ceil(limit / 2) }) : [],
     ]);
     const views = await postViews(posts, me.id);
-    for (const v of views) items.push({ key: `post:${v.id}`, type: 'post', at: v.createdAt, reason: mode === 'following' ? `From @${v.author?.username}, whom you follow` : null, post: v });
+    for (const v of views) items.push({ key: `post:${v.id}`, type: 'post', at: v.createdAt, reason: mode === 'following' ? `You follow @${v.author?.username}` : null, post: v });
     for (const n of news) items.push({ key: `news:${n.id}`, type: 'news', at: n.publishedAt, reason: n.official ? 'Official release' : null, news: newsView(n) });
     items.sort((a, b) => new Date(b.at) - new Date(a.at));
     const page = items.slice(0, limit);
@@ -201,7 +201,7 @@ export async function buildFeed(me, { mode = 'foryou', type = 'all', before = nu
   const views = new Map((await postViews(scored.map((s) => s.p), me.id)).map((v) => [v.id, v]));
   for (const s of scored) {
     const v = views.get(s.p.id);
-    items.push({ key: `post:${v.id}`, type: 'post', at: v.createdAt, score: s.score, reason: s.reason === 'from-followed' ? `From @${v.author?.username}, whom you follow` : s.reason, post: v });
+    items.push({ key: `post:${v.id}`, type: 'post', at: v.createdAt, score: s.score, reason: s.reason === 'from-followed' ? `You follow @${v.author?.username}` : s.reason, post: v });
   }
 
   if (mode === 'foryou') {

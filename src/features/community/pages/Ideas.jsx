@@ -26,14 +26,14 @@ export default function Ideas() {
     <div className="overflow-hidden rounded-2xl border border-ink-100 bg-white dark:border-ink-800 dark:bg-ink-900">
       <div className="border-b border-ink-100 px-5 py-4 dark:border-ink-800">
         <h1 className="text-lg font-semibold tracking-tight text-ink-900 dark:text-ink-50">Trade ideas</h1>
-        <p className="mt-0.5 text-xs text-ink-500 dark:text-ink-400">Structured theses from traders, open to comment and challenge. These are views to debate, not signals, and Kotka does not vet them.</p>
-        <Hint id="ideas-challenge" className="mt-3">Disagree with a thesis? Use Challenge on it and name the weak assumption. Challenges are tagged, so the author can answer each one.</Hint>
+        <p className="mt-0.5 text-xs text-ink-500 dark:text-ink-400">Traders’ ideas with an entry, stop loss and take profit, open to comments and challenges. They’re views to debate, not signals, and Kotka doesn’t check them.</p>
+        <Hint id="ideas-challenge" className="mt-3">Disagree with an idea? Tap Challenge and say which part you think is wrong. Challenges are labelled, so the author can answer each one.</Hint>
       </div>
       <div className="border-b border-ink-100 dark:border-ink-800"><Composer compact defaultKind="idea" lockKind onCreated={(p) => setIdeas((prev) => [p, ...(prev ?? [])])} /></div>
       <div className="flex flex-wrap items-center gap-1.5 border-b border-ink-100 px-4 py-2.5 dark:border-ink-800">
         <InstrumentSelect value={filters.instrument} onChange={(v) => setFilters((f) => ({ ...f, instrument: v }))} placeholder="All markets" className="h-8 text-xs" />
         <span className="mx-1 h-4 w-px bg-ink-200 dark:bg-ink-700" />
-        {chip('status', 'active', 'Active')}{chip('status', 'open', 'Open')}{chip('status', 'updated', 'Updated')}{chip('status', 'closed', 'Closed')}{chip('status', 'invalidated', 'Invalidated')}
+        {chip('status', 'active', 'Live')}{chip('status', 'closed', 'Closed')}{chip('status', 'invalidated', 'No longer valid')}
         <span className="mx-1 h-4 w-px bg-ink-200 dark:bg-ink-700" />
         {chip('direction', 'bullish', 'Bullish')}{chip('direction', 'bearish', 'Bearish')}
         <span className="mx-1 h-4 w-px bg-ink-200 dark:bg-ink-700" />
@@ -41,7 +41,7 @@ export default function Ideas() {
       </div>
       <div className="divide-y divide-ink-100 dark:divide-ink-800">
         {!ideas ? <div className="m-5 h-32 animate-pulse rounded-xl bg-ink-50 dark:bg-ink-800" /> : null}
-        {ideas && !ideas.length ? <EmptyState size="section" icon={Lightbulb} title="No trade ideas here yet" description="Try other filters, or publish yours above: entry, stop, target and the thesis behind it." /> : null}
+        {ideas && !ideas.length ? <EmptyState size="section" icon={Lightbulb} title="No trade ideas here yet" description="Try other filters, or share yours above: entry, stop loss, take profit and your reasoning." /> : null}
         {ideas?.map((p) => <PostCard key={p.id} post={p} />)}
       </div>
       {next ? <button type="button" onClick={() => load(next.before)} className="w-full border-t border-ink-100 py-3 text-xs font-medium text-accent-700 dark:border-ink-800 dark:text-accent-300">Load more</button> : null}

@@ -50,7 +50,7 @@ export function CheckInStrip({ recent, today }) {
           const c = by.get(d);
           const weekend = [0, 6].includes(new Date(`${d}T12:00:00`).getDay());
           const disciplined = c && (!c.traded || (c.planFollowed && c.riskRespected && c.noRevengeTrading));
-          return <span key={d} title={`${d}${c ? (disciplined ? ': checked in, plan kept' : ': checked in') : weekend ? ': weekend' : ': no check-in'}`} className={clsx('aspect-square rounded-[4px]', c ? (disciplined ? 'bg-accent-500' : 'bg-accent-800/70 dark:bg-accent-700/70') : weekend ? 'bg-ink-50 dark:bg-ink-800/40' : 'border border-ink-200 dark:border-ink-700', d === today && 'ring-2 ring-ink-900/70 ring-offset-1 dark:ring-white/70 dark:ring-offset-ink-900')} />;
+          return <span key={d} title={`${new Date(`${d}T12:00:00`).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' })}${c ? (disciplined ? ': checked in, plan kept' : ': checked in') : weekend ? ': weekend' : ': no check-in'}`} className={clsx('aspect-square rounded-[4px]', c ? (disciplined ? 'bg-accent-500' : 'bg-accent-800/70 dark:bg-accent-700/70') : weekend ? 'bg-ink-50 dark:bg-ink-800/40' : 'border border-ink-200 dark:border-ink-700', d === today && 'ring-2 ring-ink-900/70 ring-offset-1 dark:ring-white/70 dark:ring-offset-ink-900')} />;
         })}
       </div>
       <div className="mt-1 grid grid-cols-[repeat(21,minmax(0,1fr))] gap-1 text-center font-mono text-[9px] text-ink-400">

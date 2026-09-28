@@ -61,7 +61,7 @@ export default function AchievementPost({ snap, className }) {
         </p>
       ) : null}
       <p className="mt-3 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-t border-accent-400/20 pt-2 text-[10px] uppercase tracking-[0.16em] text-accent-100/45">
-        <span>{snap.motto ?? 'Discipline > reckless risk'}</span>
+        <span>{snap.motto ?? 'Discipline over reckless risk'}</span>
         <span className="font-mono normal-case tracking-normal">{snap.date ? formatDay(snap.date, { day: 'numeric', month: 'short', year: 'numeric' }) : ''}</span>
       </p>
     </div>

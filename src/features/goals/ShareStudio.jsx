@@ -9,6 +9,8 @@ import { FORMATS, localToday, presetKeys, snapshotFor } from './card';
 
 // ── image export ───────────────────────────────────────────────────────────
 let fontCSS = null;
+const CANT_RENDER = 'Your browser couldn’t create the image. Try Download, or open Kotka in another browser.';
+
 const exportOpts = async (node) => {
   fontCSS ??= await getFontEmbedCSS(node).catch(() => '');
   return { pixelRatio: 1, cacheBust: false, fontEmbedCSS: fontCSS, style: { position: 'static', left: '0', top: '0', transform: 'none', margin: '0' } };
@@ -18,7 +20,7 @@ async function renderPng(node) {
   const opts = await exportOpts(node);
   await toBlob(node, opts).catch(() => null);
   const blob = await toBlob(node, opts);
-  if (!blob) throw new Error('The image could not be created in this browser.');
+  if (!blob) throw new Error(CANT_RENDER);
   return blob;
 }
 async function renderOgJpeg(node) {
@@ -106,7 +108,8 @@ export default function ShareStudio({ source, sourceId, onClose }) {
     try {
       await fn();
     } catch (err) {
-      if (err?.name !== 'AbortError') flash(err.message || 'That did not work. Try Download instead.', 'error');
+      // Server errors are already written for people; browser API errors are not.
+      if (err?.name !== 'AbortError') flash(err?.status != null || err?.message === CANT_RENDER ? err.message : 'That didn’t work. Try Download instead.', 'error');
     } finally {
       setBusy(null);
     }
@@ -188,7 +191,7 @@ export default function ShareStudio({ source, sourceId, onClose }) {
           <div className="flex flex-col items-center gap-3">
             <CardPreview snap={snap} format={format} maxWidth={Math.min(420, typeof window !== 'undefined' ? window.innerWidth - 72 : 420)} maxHeight={520} />
             <p className="max-w-sm text-center text-[11px] leading-relaxed text-ink-400">
-              {snap.verification === 'verified' ? 'Verified by a connected broker account.' : 'Self-reported: built from your own Kotka check-ins, goals and journal. Kotka marks a result Verified only after a broker connection confirms it, and none is connected.'}
+              {snap.verification === 'verified' ? 'Verified by a connected broker account.' : 'Self-reported: built from your own Kotka check-ins, goals and journal. Broker-verified results are coming soon.'}
             </p>
           </div>
 

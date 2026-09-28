@@ -36,7 +36,7 @@ function ageFrom(dob) {
 function Field({ label, children, mono }) {
   return (
     <div>
-      <dt className="text-[11px] uppercase tracking-wide text-ink-400">{label}</dt>
+      <dt className="text-[11px] text-ink-400">{label}</dt>
       <dd className={clsx('mt-0.5 text-sm text-ink-800 dark:text-ink-100', mono && 'font-mono tabular-nums')}>{children || 'Not given'}</dd>
     </div>
   );
@@ -102,19 +102,19 @@ function Detail({ id, onDecided }) {
           </div>
         </dl>
       ) : (
-        <p className="mt-6 text-sm text-loss-500">These details could not be decrypted. The encryption key may have changed.</p>
+        <p className="mt-6 text-sm text-loss-500">We can’t open these details. Use Request changes to ask the trader to submit them again.</p>
       )}
 
       {kyc.reviewedAt ? (
         <p className="mt-5 text-xs text-ink-400">
-          {statusLabel[kyc.status]} {new Date(kyc.reviewedAt).toLocaleString()}
+          {{ approved: 'Verified', rejected: 'Sent back' }[kyc.status] ?? statusLabel[kyc.status]} on {new Date(kyc.reviewedAt).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}
           {kyc.reviewer ? ` by ${kyc.reviewer.name}` : ''}
           {kyc.reviewNote ? <span className="mt-1 block text-ink-500 dark:text-ink-300">Note to trader: {kyc.reviewNote}</span> : null}
         </p>
       ) : null}
 
       <p className="mt-5 flex items-center gap-1.5 text-[11px] text-ink-400">
-        <Eye className="h-3 w-3" /> Opening this record was written to the audit log.
+        <Eye className="h-3 w-3" /> Kotka noted in the Audit Log that you opened this.
       </p>
 
       {error ? <p role="alert" className="mt-4 text-sm text-loss-500">{error}</p> : null}
@@ -152,6 +152,7 @@ function Detail({ id, onDecided }) {
       ) : (
         <div className="mt-6 border-t border-ink-100 pt-5 dark:border-ink-800">
           <Button size="sm" variant="ghost" onClick={() => setRejecting(true)}>Revoke and request changes</Button>
+          <p className="mt-1.5 text-xs text-ink-400">Their access is paused until they submit their details again.</p>
         </div>
       )}
     </div>
@@ -279,7 +280,7 @@ export default function AdminVerifications() {
             <Detail id={selected} onDecided={onDecided} />
           ) : (
             <div className="p-6">
-              <EmptyState icon={Eye} title="Select a submission" description="Personal details are only decrypted when you open a record, and each view is logged." />
+              <EmptyState icon={Eye} title="Select a submission" description="Personal details stay hidden until you open a record, and each view is noted in the Audit Log." />
             </div>
           )}
         </Card>

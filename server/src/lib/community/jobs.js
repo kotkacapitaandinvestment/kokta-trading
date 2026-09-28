@@ -32,7 +32,7 @@ async function eventReminders() {
     const ids = new Set((await prisma.follow.findMany({ where: { targetType: 'event', targetId: e.id }, select: { followerId: true } })).map((f) => f.followerId));
     if (e.importance === 'High') for (const f of await marketFollowers(e.instruments)) ids.add(f.followerId);
     const mins = Math.max(1, Math.round((new Date(e.scheduledAt).getTime() - now) / 60000));
-    const items = [...ids].filter((id) => !done.has(id)).map((userId) => ({ userId, type: 'event', title: `${e.title} in ${mins} minutes`, body: `${e.currency} · ${e.importance} importance. The event room is open.`, link: `/app/community/events/${e.id}`, groupKey: key }));
+    const items = [...ids].filter((id) => !done.has(id)).map((userId) => ({ userId, type: 'event', title: `${e.title} starts in ${mins} minute${mins === 1 ? '' : 's'}`, body: `${e.currency} · ${e.importance} importance. The event chat is open.`, link: `/app/community/events/${e.id}`, groupKey: key }));
     await notify(items);
     sent += items.length;
   }
@@ -48,7 +48,7 @@ async function marketMoveAlerts() {
     const key = `move:${inst.symbol}:${d.closeDate}`;
     const done = await alreadyNotified(key);
     const followers = (await marketFollowers([inst.symbol])).map((f) => f.followerId).filter((id) => !done.has(id));
-    await notify(followers.map((userId) => ({ userId, type: 'market', title: `${inst.display} closed ${d.changePct > 0 ? '+' : ''}${d.changePct}% on ${d.closeDate}`, body: `Larger than its 14-day average range (${d.atrPct}%).`, link: `/app/community/markets/${inst.symbol}`, groupKey: key })));
+    await notify(followers.map((userId) => ({ userId, type: 'market', title: `${inst.display} closed ${d.changePct > 0 ? 'up' : 'down'} ${Math.abs(d.changePct)}% on ${new Date(`${d.closeDate}T12:00:00Z`).toLocaleDateString('en-GB', { weekday: 'long', timeZone: 'UTC' })}`, body: `A bigger move than usual. On a typical day it moves about ${d.atrPct}%.`, link: `/app/community/markets/${inst.symbol}`, groupKey: key })));
     sent += followers.length;
   }
   return sent;

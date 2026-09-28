@@ -136,8 +136,8 @@ export async function fetchBeaReleases() {
 }
 
 const EUROSTAT_EVENTS = [
-  { match: /^Flash estimate inflation euro area/i, event: 'Euro area HICP flash estimate', category: 'inflation', importance: 'High' },
-  { match: /^Inflation \(HICP\)/i, event: 'Euro area HICP (final)', category: 'inflation', importance: 'Medium' },
+  { match: /^Flash estimate inflation euro area/i, event: 'Euro area inflation (flash estimate)', category: 'inflation', importance: 'High' },
+  { match: /^Inflation \(HICP\)/i, event: 'Euro area inflation (final)', category: 'inflation', importance: 'Medium' },
   { match: /^(Preliminary flash estimate GDP|Flash estimate GDP)/i, event: 'Euro area GDP flash estimate', category: 'growth', importance: 'High' },
   { match: /^GDP main aggregates/i, event: 'Euro area GDP and employment (update)', category: 'growth', importance: 'Medium' },
   { match: /^Unemployment$/i, event: 'Euro area unemployment', category: 'labour', importance: 'Medium' },

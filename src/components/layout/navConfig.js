@@ -54,6 +54,6 @@ export const adminNav = [
   { to: '/admin/billing', label: 'Plans & Billing', icon: CreditCard },
   { to: '/admin/system-health', label: 'System Status', icon: Activity },
   { to: '/admin/audit-logs', label: 'Audit Log', icon: ShieldCheck },
-  { to: '/admin/integrations', label: 'Integrations', icon: Plug, superAdminOnly: true },
+  { to: '/admin/integrations', label: 'Connected services', icon: Plug, superAdminOnly: true },
   { to: '/admin/settings', label: 'Platform Settings', icon: SlidersHorizontal, superAdminOnly: true },
 ];

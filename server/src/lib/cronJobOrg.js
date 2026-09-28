@@ -10,18 +10,18 @@ import { cachedSource } from './research/cache.js';
 const API = 'https://api.cron-job.org';
 export const CRON_PATH = '/api/research/cron';
 
-// Wording from the JobStatus table in the cron-job.org API docs.
+// The JobStatus codes from the cron-job.org API docs, in plain words.
 export const JOB_STATUS = {
-  0: 'Not executed yet',
-  1: 'OK',
-  2: 'Failed (DNS error)',
-  3: 'Failed (could not connect to host)',
-  4: 'Failed (HTTP error)',
-  5: 'Failed (timeout)',
-  6: 'Failed (too much response data)',
-  7: 'Failed (invalid URL)',
-  8: 'Failed (internal errors)',
-  9: 'Failed (unknown reason)',
+  0: 'Hasn’t run yet',
+  1: 'Worked',
+  2: 'Couldn’t find Kotka’s address',
+  3: 'Couldn’t reach Kotka',
+  4: 'Kotka returned an error',
+  5: 'Took too long',
+  6: 'Kotka sent back too much data',
+  7: 'The link is invalid',
+  8: 'cron-job.org had a problem',
+  9: 'Failed for an unknown reason',
 };
 
 // { configured, apiKey }: configured means an enabled integration row exists,
@@ -58,7 +58,7 @@ async function call(apiKey, method, path, body) {
 export async function cronJobOrgTestConnection(apiKey) {
   const data = await call(apiKey, 'GET', '/jobs');
   const kotka = (data.jobs ?? []).filter((j) => j.url.includes(CRON_PATH));
-  return `Connected — ${data.jobs?.length ?? 0} job(s) in the account${kotka.length ? `, Kotka job #${kotka.map((j) => j.jobId).join(', #')}` : ''}.`;
+  return kotka.length ? 'Connected. Kotka’s hourly update is set up in this account.' : 'Connected. The hourly update isn’t set up yet: create it in Fundamental Research.';
 }
 
 function jobDefinition({ url, token }) {
@@ -95,7 +95,7 @@ export async function syncCronJob({ apiKey, jobId, url, token }) {
     return { jobId: existing.jobId, created: false };
   }
   if (!url || !/^https:\/\//.test(url) || /localhost|127\.0\.0\.1/.test(url)) {
-    throw new Error('No cron-job.org job exists yet and no public https URL is known to create one. Set PUBLIC_APP_URL or rotate from the live site.');
+    throw new Error('Do this from the live Kotka site, not a test copy, so cron-job.org gets the right address.');
   }
   const created = await call(apiKey, 'PUT', '/jobs', { job: jobDefinition({ url, token }) });
   return { jobId: created.jobId, created: true };
@@ -108,7 +108,8 @@ export async function getCronJobStatus(apiKey, jobId) {
     jobId: d.jobId,
     enabled: d.enabled,
     url: d.url,
-    lastStatus: JOB_STATUS[d.lastStatus] ?? `Status ${d.lastStatus}`,
+    lastStatus: JOB_STATUS[d.lastStatus] ?? 'Unknown result',
+    lastStatusCode: d.lastStatus,
     lastStatusOk: d.lastStatus === 1,
     lastExecution: at(d.lastExecution),
     lastDurationMs: d.lastDuration ?? null,
@@ -121,7 +122,7 @@ export async function getCronJobStatus(apiKey, jobId) {
 export async function cronJobView(settings, { fresh = false } = {}) {
   const { configured, apiKey } = await getCronJobOrgKey();
   if (!configured) return { managed: false };
-  if (!apiKey) return { managed: true, jobId: settings.cron?.jobId ?? null, error: 'The cron-job.org API key in Integrations is empty or unreadable.' };
+  if (!apiKey) return { managed: true, jobId: settings.cron?.jobId ?? null, error: 'Kotka couldn’t use the cron-job.org key in Connected services. Check it there.' };
   if (!settings.cron?.jobId) return { managed: true, jobId: null };
   try {
     const { data } = await cachedSource(`cronjob:status:${settings.cron.jobId}`, 15 * 60 * 1000, () => getCronJobStatus(apiKey, settings.cron.jobId), { bypass: fresh });

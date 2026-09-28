@@ -31,7 +31,7 @@ export async function fredTestConnection(apiKey) {
   const data = await fetchJson(`https://api.stlouisfed.org/fred/series?series_id=DFEDTARU&api_key=${apiKey}&file_type=json`, { timeoutMs: 15000, retries: 0 });
   const s = data?.seriess?.[0];
   if (!s) throw new Error(data?.error_message || 'Unexpected response from FRED.');
-  return `Connected — ${s.title} (last updated ${s.last_updated})`;
+  return 'Connected. US economic data from FRED is loading normally.';
 }
 
 // ── ECB Data Portal ───────────────────────────────────────────────────────

@@ -31,7 +31,7 @@ export default function ReportDialog({ target, onClose }) {
     }
   };
   return (
-    <Modal open onClose={onClose} title={`Report ${target.label ?? target.type}`}>
+    <Modal open onClose={onClose} title={target.type === 'user' ? `Report ${target.label}` : `Report this ${target.label ?? target.type}`}>
       {state?.done ? (
         <div className="space-y-4">
           <p className="text-sm text-ink-600 dark:text-ink-300">{state.done}</p>

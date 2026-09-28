@@ -15,9 +15,9 @@ import Menu from './Menu';
 import { SaveButton } from './Buttons';
 import ReportDialog from './ReportDialog';
 import AiPanel, { useAiAction } from './AiPanel';
-import { confirmDialog, promptDialog, toast } from '../../../lib/dialogs';
+import { confirmDialog, toast } from '../../../lib/dialogs';
 
-const KIND_LABEL = { idea: 'Trade idea', question: 'Question', poll: 'Poll', market: 'Market post', news: 'News discussion', achievement: 'Achievement' };
+const KIND_LABEL = { idea: 'Trade idea', question: 'Question', poll: 'Poll', market: 'Market update', news: 'News discussion', achievement: 'Achievement' };
 // Achievements get their own reactions: support, not likes.
 const CHEERS = [['👏', 'Celebrate'], ['🔥', 'React'], ['💪', 'Encourage']];
 
@@ -42,8 +42,8 @@ export function ShareDialog({ post, onClose }) {
           <Copy className="h-4 w-4" /> Copy link
         </button>
         <div>
-          <p className="mb-2 text-xs font-medium text-ink-500">Send in a conversation</p>
-          {!convs ? <p className="text-sm text-ink-400">Loading…</p> : !convs.length ? <p className="text-sm text-ink-400">No conversations yet. Start one from a trader's profile.</p> : null}
+          <p className="mb-2 text-xs font-medium text-ink-500">Send in a chat</p>
+          {!convs ? <p className="text-sm text-ink-400">Loading…</p> : !convs.length ? <p className="text-sm text-ink-400">No chats yet. Start one from a trader’s profile.</p> : null}
           <ul className="max-h-64 space-y-1 overflow-y-auto">
             {convs?.map((c) => (
               <li key={c.id}>
@@ -170,7 +170,7 @@ export default function PostCard({ post: initial, reason, full = false, onChange
             </div>
           ) : body ? (
             <div className={clsx('mt-2 text-[15px] leading-relaxed text-ink-800 dark:text-ink-100', !expanded && long && 'line-clamp-6')}>
-              {post.kind === 'idea' ? <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-ink-400">Thesis</p> : null}
+              {post.kind === 'idea' ? <p className="mb-1 text-[11px] font-semibold text-ink-500 dark:text-ink-400">Reasoning</p> : null}
               <RichText text={body} />
             </div>
           ) : null}
@@ -225,11 +225,11 @@ export default function PostCard({ post: initial, reason, full = false, onChange
               align="left"
               buttonClassName="text-accent-600 dark:text-accent-400"
               items={[
-                post.kind === 'idea' ? { label: 'Challenge this thesis', icon: ShieldCheck, onClick: () => ai.run('challenge', '/community/ai/challenge', { postId: post.id }) } : null,
-                post.commentCount >= 3 ? { label: 'Summarize discussion', icon: Sparkles, onClick: () => ai.run('summary', '/community/ai/summarize', { postId: post.id }) } : null,
+                post.kind === 'idea' ? { label: 'Stress-test this idea', icon: ShieldCheck, onClick: () => ai.run('challenge', '/community/ai/challenge', { postId: post.id }) } : null,
+                post.commentCount >= 3 ? { label: 'Summarise discussion', icon: Sparkles, onClick: () => ai.run('summary', '/community/ai/summarize', { postId: post.id }) } : null,
                 { label: 'Fact check', icon: HelpCircle, onClick: () => ai.run('factcheck', '/community/ai/fact-check', { targetType: 'post', targetId: post.id }) },
-                images[0] ? { label: 'Analyze chart', icon: Sparkles, onClick: () => ai.run('chart', '/community/ai/analyze-chart', { mediaId: images[0].mediaId, postId: post.id }) } : null,
-                { label: 'Ask Kotka about this', icon: Sparkles, onClick: () => navigate(`/app/ai?prompt=${encodeURIComponent(`About this ${KIND_LABEL[post.kind]?.toLowerCase() ?? 'post'} by @${post.author?.username}${post.instrument ? ` on ${post.instrument.display}` : ''}: "${(body ?? '').slice(0, 600)}"`)}`) },
+                images[0] ? { label: 'Analyse chart', icon: Sparkles, onClick: () => ai.run('chart', '/community/ai/analyze-chart', { mediaId: images[0].mediaId, postId: post.id }) } : null,
+                { label: 'Ask Kotka about this', icon: Sparkles, onClick: () => navigate(`/app/ai?prompt=${encodeURIComponent(`About this ${KIND_LABEL[post.kind]?.toLowerCase() ?? 'post'}${post.author?.username ? ` by @${post.author.username}` : ''}${post.instrument ? ` on ${post.instrument.display}` : ''}: "${(body ?? '').slice(0, 600)}"`)}`) },
               ]}
             />
           </div>

@@ -8,7 +8,7 @@ import RichText from '../components/RichText';
 import Attachments from '../components/Attachments';
 import SafetyWarning from '../components/SafetyWarning';
 import Menu from '../components/Menu';
-import { confirmDialog, promptDialog, toast } from '../../../lib/dialogs';
+import { confirmDialog, toast } from '../../../lib/dialogs';
 
 function Receipt({ message, receipt }) {
   // Only for your own messages in DMs and groups.
@@ -109,7 +109,7 @@ function MessageItem({ m, meId, variant, grouped, canModerate, receipt, focused,
           { label: 'Save', icon: Bookmark, onClick: () => api.post('/community/saved', { itemType: 'message', itemId: m.id }).then(() => toast('Saved. Find it under Saved in Community.')).catch((err) => toast(err.message, { tone: 'error' })) },
           canModerate || variant === 'dm' ? { label: m.pinnedAt ? 'Unpin' : 'Pin', icon: m.pinnedAt ? PinOff : Pin, onClick: pin } : null,
           m.body && m.body.length > 20 ? { label: 'Fact check with Kotka', icon: HelpCircle, onClick: () => onAi('factcheck', '/community/ai/fact-check', { targetType: 'message', targetId: m.id }) } : null,
-          image ? { label: 'Analyze chart', icon: Sparkles, onClick: () => onAi('chart', '/community/ai/analyze-chart', { mediaId: image.mediaId, messageId: m.id }) } : null,
+          image ? { label: 'Analyse chart', icon: Sparkles, onClick: () => onAi('chart', '/community/ai/analyze-chart', { mediaId: image.mediaId, messageId: m.id }) } : null,
           !own ? { label: 'Report', icon: Flag, onClick: () => onReport(m) } : null,
           !own && m.author?.id ? { label: 'Mute trader', icon: VolumeX, onClick: () => relation('mute') } : null,
           !own && m.author?.id ? { label: 'Block trader', icon: Ban, danger: true, onClick: () => relation('block') } : null,

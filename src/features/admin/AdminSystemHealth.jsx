@@ -6,6 +6,7 @@ import PageHeader from '../../components/ui/PageHeader';
 import Card, { CardHeader, CardBody } from '../../components/ui/Card';
 import Button from '../../components/ui/Button';
 import { api } from '../../lib/api';
+import { modelName, MODEL_STATE } from '../../lib/aiModelNames';
 
 const STATE = {
   ok: { icon: CheckCircle2, tone: 'text-profit-600 dark:text-profit-400', label: 'Working' },
@@ -65,7 +66,7 @@ export default function AdminSystemHealth() {
       <PageHeader
         eyebrow="Admin"
         title="System Status"
-        description="Live checks of the database, AI models, scheduled jobs and connected services. Nothing here is assumed; each line is what the check just saw."
+        description="Live checks of Kotka’s data storage, Kotka AI, the hourly update and connected services. Each line shows what the check just found."
         actions={
           <Button variant="secondary" size="sm" icon={RefreshCw} disabled={loading} onClick={load}>
             {loading ? 'Checking…' : 'Check again'}
@@ -78,16 +79,16 @@ export default function AdminSystemHealth() {
       ) : (
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
           <Card>
-            <CardHeader title="Core" subtitle={`Checked at ${new Date(d.checkedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`} />
+            <CardHeader title="Kotka" subtitle={`Checked at ${new Date(d.checkedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`} />
             <CardBody className="divide-y divide-ink-100 dark:divide-ink-800">
-              <Row state={d.database.ok ? 'ok' : 'down'} title="Database" detail={d.database.ok ? 'Saving and loading data normally.' : 'Kotka can’t reach its database right now. Most pages won’t load until this recovers.'} meta={d.database.ok ? `${d.database.latencyMs} ms` : null} />
+              <Row state={d.database.ok ? 'ok' : 'down'} title="Data storage" detail={d.database.ok ? 'Saving and loading data normally.' : 'Kotka can’t reach its database right now. Most pages won’t load until this recovers.'} meta={d.database.ok ? (d.database.latencyMs < 500 ? 'Responding quickly' : 'Responding slowly') : null} />
               <Row
                 state={aiState}
-                title="Kotka AI models"
+                title="Kotka AI"
                 detail={
                   d.ai.configured
-                    ? `Chat: ${d.ai.active.chat ?? 'none available'} · Vision: ${d.ai.active.vision ?? 'none'} · Research: ${d.ai.active.narrative ?? 'none'}${d.ai.unhealthy.length ? `. Skipped after failing checks: ${d.ai.unhealthy.map((u) => `${u.model.split('/').pop()} (${u.status})`).join(', ')}.` : '.'}`
-                    : 'Kotka AI is off because its NVIDIA key isn’t set up. Add it in Integrations.'
+                    ? `${[['Chat', d.ai.active.chat], ['chart reading', d.ai.active.vision], ['research summaries', d.ai.active.narrative]].map(([what, m]) => `${what} ${m ? `working (${modelName(m)})` : 'not available'}`).join(' · ')}.${d.ai.unhealthy.length ? ` Kotka stopped using ${d.ai.unhealthy.length === 1 ? 'one backup model' : `${d.ai.unhealthy.length} backup models`}: ${d.ai.unhealthy.map((u) => `${modelName(u.model)} (${(MODEL_STATE[u.status] ?? u.status).toLowerCase()})`).join(', ')}.` : ''}`
+                    : 'Kotka AI is off because its NVIDIA key isn’t set up. Add it in Connected services.'
                 }
                 meta={d.ai.configured ? `checked ${ago(d.ai.checkedAt)}` : null}
               />
@@ -98,9 +99,9 @@ export default function AdminSystemHealth() {
                   !cron?.managed
                     ? 'Not set up. Research only refreshes when someone opens an out-of-date report. Set it up in Admin → Fundamental Research.'
                     : cron.error
-                      ? 'Couldn’t check the schedule on cron-job.org just now. If this persists, check its key in Integrations.'
+                      ? 'Couldn’t check the schedule on cron-job.org just now. If this persists, check its key in Connected services.'
                       : cron.status
-                        ? `Last update ${String(cron.status.lastStatus).toLowerCase() === 'ok' || cron.status.lastStatusOk ? 'went through' : `reported: ${cron.status.lastStatus}`}${cron.status.nextExecution ? `. Next at ${new Date(cron.status.nextExecution).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}` : ''}.`
+                        ? `${cron.status.lastStatusOk ? 'Last update went through' : cron.status.lastStatusCode === 0 ? 'Hasn’t run yet' : `Last update didn’t work: ${String(cron.status.lastStatus).toLowerCase()}`}${cron.status.nextExecution ? `. Next at ${new Date(cron.status.nextExecution).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}` : ''}.`
                         : 'The key is saved but the schedule isn’t created yet. Create an update link in Admin → Fundamental Research.'
                 }
                 meta={cron?.status?.lastExecution ? ago(cron.status.lastExecution) : null}
@@ -119,7 +120,7 @@ export default function AdminSystemHealth() {
           </Card>
 
           <Card>
-            <CardHeader title="Connected services" subtitle={<Link to="/admin/integrations" className="text-accent-600 hover:underline dark:text-accent-400">Manage in Integrations</Link>} />
+            <CardHeader title="Connected services" subtitle={<Link to="/admin/integrations" className="text-accent-600 hover:underline dark:text-accent-400">Manage in Connected services</Link>} />
             <CardBody className="divide-y divide-ink-100 dark:divide-ink-800">
               {d.integrations.map((i) => (
                 <Row
@@ -138,7 +139,7 @@ export default function AdminSystemHealth() {
             <CardBody className="grid grid-cols-1 gap-4 sm:grid-cols-3">
               {[
                 { label: 'New sign-ups', value: d.security.signups24h },
-                { label: 'Failed sign-ins', value: d.security.failedLogins24h, hint: 'Lockout after 8 per email in 15 min' },
+                { label: 'Failed sign-ins', value: d.security.failedLogins24h, hint: 'An account locks for 15 minutes after 8 wrong passwords' },
                 { label: 'Verifications waiting', value: d.security.pendingKyc, to: '/admin/verifications' },
               ].map((s) => (
                 <div key={s.label} className="rounded-xl bg-ink-50 px-4 py-3 dark:bg-ink-800/60">

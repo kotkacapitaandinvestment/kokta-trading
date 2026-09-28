@@ -18,28 +18,28 @@ async function validTarget(type, id, me) {
     case 'user': {
       if (id === me.id) return { error: "You can't follow yourself." };
       const u = await prisma.user.findUnique({ where: { id }, select: { id: true, status: true } });
-      return u && u.status === 'active' ? { id } : { error: 'Trader not found.' };
+      return u && u.status === 'active' ? { id } : { error: 'We couldn’t find that trader. Their account may have been closed.' };
     }
     case 'market':
-      return instrument(id) ? { id: instrument(id).symbol } : { error: 'Unknown market.' };
+      return instrument(id) ? { id: instrument(id).symbol } : { error: 'We couldn’t find that market.' };
     case 'topic':
-      return TOPICS.includes(id) ? { id } : { error: 'Unknown topic.' };
+      return TOPICS.includes(id) ? { id } : { error: 'We couldn’t find that topic.' };
     case 'idea': {
       const p = await prisma.post.findFirst({ where: { id, kind: 'idea', deletedAt: null, removedAt: null }, select: { id: true } });
-      return p ? { id } : { error: 'Trade idea not found.' };
+      return p ? { id } : { error: 'We couldn’t find that trade idea. It may have been deleted.' };
     }
     case 'event': {
       const e = await prisma.marketEvent.findUnique({ where: { id }, select: { id: true } });
-      return e ? { id } : { error: 'Event not found.' };
+      return e ? { id } : { error: 'We couldn’t find that event. It may have been cancelled.' };
     }
     default:
-      return { error: 'Unsupported follow type.' };
+      return { error: 'You can’t follow that.' };
   }
 }
 
 socialRouter.post('/follow', requireProfile, asyncHandler(async (req, res) => {
   const type = String(req.body?.targetType ?? '');
-  if (!FOLLOW_TYPES.includes(type)) return res.status(400).json({ error: 'Unsupported follow type.' });
+  if (!FOLLOW_TYPES.includes(type)) return res.status(400).json({ error: 'You can’t follow that.' });
   const t = await validTarget(type, String(req.body?.targetId ?? ''), req.me);
   if (t.error) return res.status(400).json({ error: t.error });
   const existing = await prisma.follow.findUnique({ where: { followerId_targetType_targetId: { followerId: req.me.id, targetType: type, targetId: t.id } } });
@@ -82,7 +82,7 @@ socialRouter.get('/following', asyncHandler(async (req, res) => {
 socialRouter.post('/saved', requireProfile, asyncHandler(async (req, res) => {
   const itemType = String(req.body?.itemType ?? '');
   const itemId = String(req.body?.itemId ?? '');
-  if (!SAVE_TYPES.includes(itemType) || !itemId) return res.status(400).json({ error: 'Unsupported item.' });
+  if (!SAVE_TYPES.includes(itemType) || !itemId) return res.status(400).json({ error: 'That can’t be saved.' });
   await prisma.savedItem.upsert({ where: { userId_itemType_itemId: { userId: req.me.id, itemType, itemId } }, update: {}, create: { userId: req.me.id, itemType, itemId } });
   res.json({ saved: true });
 }));
@@ -97,7 +97,7 @@ for (const kind of ['block', 'mute']) {
   socialRouter.post(`/users/:id/${kind}`, asyncHandler(async (req, res) => {
     if (req.params.id === req.me.id) return res.status(400).json({ error: `You can't ${kind} yourself.` });
     const target = await prisma.user.findUnique({ where: { id: req.params.id }, select: { id: true } });
-    if (!target) return res.status(404).json({ error: 'Trader not found.' });
+    if (!target) return res.status(404).json({ error: 'We couldn’t find that trader. Their account may have been closed.' });
     await prisma.userRelation.upsert({ where: { userId_targetId_kind: { userId: req.me.id, targetId: target.id, kind } }, update: {}, create: { userId: req.me.id, targetId: target.id, kind } });
     if (kind === 'block') await prisma.follow.deleteMany({ where: { OR: [{ followerId: req.me.id, targetType: 'user', targetId: target.id }, { followerId: target.id, targetType: 'user', targetId: req.me.id }] } });
     auditLater(req, `community.${kind === 'block' ? 'blocked' : 'muted'}_user`, { targetType: 'user', targetId: req.params.id, actor: req.me });

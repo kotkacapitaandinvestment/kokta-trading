@@ -39,7 +39,7 @@ profilesRouter.put('/me/profile', asyncHandler(async (req, res) => {
     const { username, error } = validateUsername(req.body.username, { staff });
     if (error) return res.status(400).json({ error, field: 'username' });
     const taken = await prisma.user.findFirst({ where: { username, id: { not: req.me.id } }, select: { id: true } });
-    if (taken) return res.status(409).json({ error: 'That username is taken.', field: 'username' });
+    if (taken) return res.status(409).json({ error: 'That username is taken. Try another.', field: 'username' });
     data.username = username;
   }
   if (req.body?.headline !== undefined) {
@@ -88,7 +88,7 @@ profilesRouter.put('/me/preferences', asyncHandler(async (req, res) => {
 // Public profile. Counts are plain counts, never a credibility score.
 profilesRouter.get('/users/:username', asyncHandler(async (req, res) => {
   const u = await prisma.user.findUnique({ where: { username: String(req.params.username).toLowerCase() }, select: { ...USER_CARD_SELECT, bio: true, createdAt: true } });
-  if (!u || u.status === 'banned') return res.status(404).json({ error: 'Trader not found.' });
+  if (!u || u.status === 'banned') return res.status(404).json({ error: 'We couldn’t find that trader. Their account may have been closed.' });
   const [prefs, followers, following, posts, ideas, markets, iFollow, rel, followsMe] = await Promise.all([
     loadPrefs(u.id),
     prisma.follow.count({ where: { targetType: 'user', targetId: u.id } }),
@@ -113,14 +113,14 @@ profilesRouter.get('/users/:username', asyncHandler(async (req, res) => {
       blocked: (await prisma.userRelation.findUnique({ where: { userId_targetId_kind: { userId: req.me.id, targetId: u.id, kind: 'block' } } })) !== null,
       muted: (await prisma.userRelation.findUnique({ where: { userId_targetId_kind: { userId: req.me.id, targetId: u.id, kind: 'mute' } } })) !== null,
       canMessage,
-      messageBlockedReason: canMessage || self ? null : rel.blockedEitherWay.has(u.id) ? 'Messaging is blocked between you.' : dms === 'nobody' ? 'This trader is not accepting direct messages.' : 'This trader only accepts messages from people they follow.',
+      messageBlockedReason: canMessage || self ? null : rel.blockedEitherWay.has(u.id) ? 'You can’t message each other because one of you has blocked the other.' : dms === 'nobody' ? 'This trader is not accepting direct messages.' : 'This trader only accepts messages from people they follow.',
     },
   });
 }));
 
 profilesRouter.get('/users/:username/:list(followers|following)', asyncHandler(async (req, res) => {
   const u = await prisma.user.findUnique({ where: { username: String(req.params.username).toLowerCase() }, select: { id: true } });
-  if (!u) return res.status(404).json({ error: 'Trader not found.' });
+  if (!u) return res.status(404).json({ error: 'We couldn’t find that trader. Their account may have been closed.' });
   const rows =
     req.params.list === 'followers'
       ? await prisma.follow.findMany({ where: { targetType: 'user', targetId: u.id }, orderBy: { createdAt: 'desc' }, take: 200, select: { followerId: true } })

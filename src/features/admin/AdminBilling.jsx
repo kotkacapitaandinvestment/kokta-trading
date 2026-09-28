@@ -36,14 +36,14 @@ export default function AdminBilling() {
             </div>
             <p className="max-w-2xl text-sm leading-relaxed text-ink-600 dark:text-ink-300">
               {paid
-                ? 'Free accounts now get the free-plan AI limit and any feature set to Premium is restricted. There is no checkout yet, so Premium can only be granted by a Super Admin from Users.'
-                : 'Every trader has every feature. Kotka AI has a fair-use daily cap for everyone, and admins are never capped. No one is charged and nothing is billed.'}
+                ? 'Free accounts now get the free-plan Kotka AI limit, and any feature set to Premium is limited to Premium accounts. There’s no checkout yet, so a Super Admin gives someone Premium by changing their Role in Users.'
+                : 'Every trader has every feature. Kotka AI has a daily limit for everyone, and staff have no limit. No one is charged.'}
             </p>
             <ul className="space-y-1.5 text-sm text-ink-600 dark:text-ink-300">
               <li>
-                Paystack: {paystack ? (paystack.configured ? (paystack.enabled ? 'connected' : 'configured but disabled') : 'not connected') : '…'}. Checkout, subscriptions and invoices are not built yet.
+                Paystack: {paystack ? (paystack.configured ? (paystack.enabled ? 'connected' : 'set up but switched off') : 'not connected') : '…'}. Checkout, subscriptions and invoices aren’t built yet.
               </li>
-              <li>No subscription or revenue data exists, so none is shown here.</li>
+              <li>There’s no subscription or revenue data yet, so none is shown here.</li>
             </ul>
             {user?.role === 'super_admin' ? (
               <p className="text-xs text-ink-400">
@@ -59,8 +59,8 @@ export default function AdminBilling() {
         <CardBody>
           <ol className="list-decimal space-y-2 pl-5 text-sm text-ink-600 marker:text-ink-400 dark:text-ink-300">
             <li>Decide which features are Premium. Today only Fundamental Research can be restricted (in its settings), plus the Kotka AI free-plan limit.</li>
-            <li>Build checkout and webhooks on Paystack so paying traders are upgraded automatically.</li>
-            <li>Then turn on paid plans. Until then, turning it on only restricts free accounts.</li>
+            <li>Have your developer add Paystack checkout, so people who pay are upgraded to Premium automatically.</li>
+            <li>Then turn on paid plans. Until checkout exists, turning them on only limits free accounts.</li>
           </ol>
         </CardBody>
       </Card>

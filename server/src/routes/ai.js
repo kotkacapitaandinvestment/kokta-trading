@@ -97,7 +97,7 @@ aiRouter.get('/conversations', asyncHandler(async (req, res) => {
 
 aiRouter.get('/conversations/:id', asyncHandler(async (req, res) => {
   const conversation = await loadOwnedConversation(req.params.id, req.userId);
-  if (!conversation) return res.status(404).json({ error: 'Conversation not found.' });
+  if (!conversation) return res.status(404).json({ error: 'We couldn’t find that chat. It may have been deleted.' });
   const messages = await prisma.aIMessage.findMany({
     where: { conversationId: conversation.id },
     orderBy: { createdAt: 'asc' },
@@ -115,7 +115,7 @@ aiRouter.post('/conversations', asyncHandler(async (req, res) => {
 
 aiRouter.patch('/conversations/:id', asyncHandler(async (req, res) => {
   const existing = await loadOwnedConversation(req.params.id, req.userId);
-  if (!existing) return res.status(404).json({ error: 'Conversation not found.' });
+  if (!existing) return res.status(404).json({ error: 'We couldn’t find that chat. It may have been deleted.' });
 
   const { title, market, favorite } = req.body ?? {};
   const conversation = await prisma.aIConversation.update({
@@ -131,7 +131,7 @@ aiRouter.patch('/conversations/:id', asyncHandler(async (req, res) => {
 
 aiRouter.post('/conversations/:id/messages', asyncHandler(async (req, res) => {
   const conversation = await loadOwnedConversation(req.params.id, req.userId);
-  if (!conversation) return res.status(404).json({ error: 'Conversation not found.' });
+  if (!conversation) return res.status(404).json({ error: 'We couldn’t find that chat. It may have been deleted.' });
 
   const { content, image, timeframe = '15m' } = req.body ?? {};
   if (!content && !image) return res.status(400).json({ error: 'A message or image is required.' });

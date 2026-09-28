@@ -51,7 +51,7 @@ marketsRouter.get('/markets', asyncHandler(async (req, res) => {
 
 marketsRouter.get('/markets/:symbol', asyncHandler(async (req, res) => {
   const inst = instrument(req.params.symbol);
-  if (!inst) return res.status(404).json({ error: 'Unknown market.' });
+  if (!inst) return res.status(404).json({ error: 'We couldn’t find that market.' });
   const room = await ensureMarketRoom(inst.symbol);
   const now = new Date();
   const [data, sentiment, history, myVote, activity, research, events, openIdeas, followers, following] = await Promise.all([
@@ -74,7 +74,7 @@ marketsRouter.get('/markets/:symbol', asyncHandler(async (req, res) => {
     status: marketStatus(inst, now),
     fundamental: research
       ? { subject: inst.research, score: research.score, confidence: research.confidence, condition: research.condition, direction: research.direction, updatedAt: research.createdAt }
-      : { available: false, reason: inst.research ? 'Kotka has not researched this pair yet.' : 'Fundamental Research covers currency pairs only.' },
+      : { available: false, reason: inst.research ? 'Kotka has not researched this pair yet.' : 'Kotka’s research covers currency pairs only.' },
     sentiment: { ...sentiment, windowDays: SENTIMENT_WINDOW_DAYS, mine: myVote && myVote.updatedAt > new Date(now.getTime() - SENTIMENT_WINDOW_DAYS * 86400e3) ? myVote.stance : null, history },
     events: events.map((e) => eventView(e, now)),
     counts: { openIdeas, followers },
@@ -84,7 +84,7 @@ marketsRouter.get('/markets/:symbol', asyncHandler(async (req, res) => {
 
 marketsRouter.post('/markets/:symbol/sentiment', requireProfile, asyncHandler(async (req, res) => {
   const inst = instrument(req.params.symbol);
-  if (!inst) return res.status(404).json({ error: 'Unknown market.' });
+  if (!inst) return res.status(404).json({ error: 'We couldn’t find that market.' });
   const stance = req.body?.stance;
   if (stance === null) {
     await prisma.sentimentVote.deleteMany({ where: { instrument: inst.symbol, userId: req.me.id } });
@@ -101,7 +101,7 @@ marketsRouter.post('/markets/:symbol/sentiment', requireProfile, asyncHandler(as
 // Charts: images traders shared about this market, and the real price history.
 marketsRouter.get('/markets/:symbol/charts', asyncHandler(async (req, res) => {
   const inst = instrument(req.params.symbol);
-  if (!inst) return res.status(404).json({ error: 'Unknown market.' });
+  if (!inst) return res.status(404).json({ error: 'We couldn’t find that market.' });
   const room = await ensureMarketRoom(inst.symbol);
   const [posts, messages, data] = await Promise.all([
     prisma.post.findMany({ where: { instrument: inst.symbol, deletedAt: null, removedAt: null }, orderBy: { createdAt: 'desc' }, take: 60, select: { id: true, kind: true, authorId: true, attachments: true, createdAt: true, body: true } }),

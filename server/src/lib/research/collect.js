@@ -30,6 +30,7 @@ const BIS_NAMES = {
   WS_EER: 'BIS effective exchange rates',
 };
 
+const CALENDAR_NAME = { fomc: 'US Federal Reserve meeting dates', ecb: 'European Central Bank meeting dates', bls: 'US jobs and inflation release dates', bea: 'US growth and spending release dates', eurostat: 'Eurostat release dates' };
 const isoDaysAgo = (now, days) => new Date(now.getTime() - days * DAY).toISOString().slice(0, 10);
 
 function startFor(def, now) {
@@ -93,13 +94,13 @@ export async function collectEvidence(codes, { settings, now = new Date(), bypas
   // ── IMF World Economic Outlook: current dataset + previous vintage ──
   const imfTask = (async () => {
     if (enabled.imf_weo === false) {
-      statuses.push({ id: 'imf_weo', name: 'IMF World Economic Outlook', status: 'disabled' });
+      statuses.push({ id: 'imf_weo', name: 'IMF economic forecasts', status: 'disabled' });
       return { current: null, previous: null };
     }
-    const flows = await track('imf_weo_flows', 'IMF WEO vintage catalogue', () => cachedSource('imf:weo:flows', TTL.weoFlows, listWeoDataflows, { bypass: bypassCache }));
+    const flows = await track('imf_weo_flows', 'IMF list of forecast editions', () => cachedSource('imf:weo:flows', TTL.weoFlows, listWeoDataflows, { bypass: bypassCache }));
     const currentFlow = flows?.find((f) => f.id === 'WEO') ?? { id: 'WEO', version: '9.0.0' };
     const params = { countries: allImf, indicators, startYear: year - 3, endYear: year + 5 };
-    const current = await track('imf_weo', 'IMF World Economic Outlook (current)', () =>
+    const current = await track('imf_weo', 'IMF economic forecasts (latest)', () =>
       cachedSource(`imf:weo:${currentFlow.id}:${currentFlow.version}:${year}`, TTL.weoCurrent, () => fetchWeo({ dataflow: currentFlow.id, version: currentFlow.version, ...params }), { bypass: bypassCache }),
     );
     let previous = null;
@@ -108,7 +109,7 @@ export async function collectEvidence(codes, { settings, now = new Date(), bypas
       const candidates = flows.filter((f) => f.vintageDate && f.vintageDate.slice(0, 7) < curMonth).sort((a, b) => b.vintageDate.localeCompare(a.vintageDate));
       const prevFlow = candidates[0];
       if (prevFlow) {
-        previous = await track('imf_weo_previous', `IMF World Economic Outlook (${vintageLabel(prevFlow.vintageDate)} vintage)`, () =>
+        previous = await track('imf_weo_previous', `IMF economic forecasts (${vintageLabel(prevFlow.vintageDate)} edition)`, () =>
           cachedSource(`imf:weo:${prevFlow.id}:${prevFlow.version}:${year}`, TTL.weoPrevious, async () => ({ ...(await fetchWeo({ dataflow: prevFlow.id, version: prevFlow.version, ...params })), vintageDate: prevFlow.vintageDate }), { bypass: bypassCache }),
         );
       }
@@ -118,7 +119,7 @@ export async function collectEvidence(codes, { settings, now = new Date(), bypas
 
   // ── IMF COFER ──
   const coferCodes = SUPPORTED_CURRENCY_CODES.map((c) => CURRENCIES[c].cofer).filter(Boolean);
-  const coferTask = track('imf_cofer', 'IMF COFER (currency composition of FX reserves)', () =>
+  const coferTask = track('imf_cofer', 'IMF data on central bank currency reserves', () =>
     cachedSource(`imf:cofer:${coferCodes.join('+')}`, TTL.cofer, () => fetchCofer({ currencies: coferCodes, startPeriod: `${year - 3}-Q1` }), { bypass: bypassCache }),
     { disabled: enabled.imf_cofer === false },
   );
@@ -201,7 +202,7 @@ export async function collectEvidence(codes, { settings, now = new Date(), bypas
   const calendarTasks = Object.fromEntries(
     [...calendarKeys].map((k) => [
       k,
-      track(`calendar.${k}`, `Calendar: ${k.toUpperCase()}`, () => cachedSource(`calendar:${k}:${now.toISOString().slice(0, 10)}`, TTL.calendars, calendarFetchers[k], { bypass: bypassCache }), {
+      track(`calendar.${k}`, CALENDAR_NAME[k] ?? `${k.toUpperCase()} release dates`, () => cachedSource(`calendar:${k}:${now.toISOString().slice(0, 10)}`, TTL.calendars, calendarFetchers[k], { bypass: bypassCache }), {
         disabled: enabled.calendars === false,
       }),
     ]),

@@ -10,10 +10,10 @@ import Modal from '../../components/ui/Modal';
 import { api } from '../../lib/api';
 import { useAuth } from '../../context/AuthContext';
 import { conditionWord } from '../../lib/plain';
-import { confirmDialog, promptDialog, toast } from '../../lib/dialogs';
+import { confirmDialog } from '../../lib/dialogs';
 import EmptyState from '../../components/ui/EmptyState';
 
-const when = (iso) => (iso ? new Date(iso).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'UTC' }) + ' UTC' : 'Never');
+const when = (iso) => (iso ? new Date(iso).toLocaleString(undefined, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : 'Never');
 
 function Toggle({ checked, onChange, disabled, label, hint }) {
   return (
@@ -40,7 +40,7 @@ async function forceRefresh(subject) {
   const res = await fetch(`/api/research/${subject}/refresh`, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ force: true }) });
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));
-    throw new Error(data.message ?? data.error ?? `Refresh failed (${res.status})`);
+    throw new Error(data.message ?? data.error ?? 'Couldn’t update this report. Try again in a few minutes.');
   }
   const text = await res.text();
   const events = text.split('\n').filter(Boolean).map((l) => JSON.parse(l));
@@ -66,15 +66,15 @@ function StatusCard({ status, onRefreshed }) {
   };
   return (
     <Card>
-      <CardHeader title="Research status" subtitle={`Last scheduled run: ${when(status?.lastCronRunAt)}`} />
+      <CardHeader title="Research status" subtitle={`Last hourly update: ${when(status?.lastCronRunAt)}`} />
       <CardBody className="-mx-0 overflow-x-auto px-0">
         <table className="w-full min-w-[640px] text-left text-sm">
           <thead>
             <tr className="border-b border-ink-100 text-[11px] text-ink-400 dark:border-ink-800">
-              <th className="px-5 py-2 font-medium">Instrument</th>
-              <th className="px-2 py-2 font-medium">Score</th>
+              <th className="px-5 py-2 font-medium">Market</th>
+              <th className="px-2 py-2 font-medium">Outlook score</th>
               <th className="px-2 py-2 font-medium">Condition</th>
-              <th className="px-2 py-2 font-medium">Narrative</th>
+              <th className="px-2 py-2 font-medium">Summary written by</th>
               <th className="px-2 py-2 font-medium">Last researched</th>
               <th className="px-5 py-2" />
             </tr>
@@ -84,21 +84,21 @@ function StatusCard({ status, onRefreshed }) {
               <tr>
                 <td colSpan={6} className="px-5 py-6 text-sm text-ink-400">
                   <Loader2 className="mr-2 inline h-4 w-4 animate-spin" />
-                  Loading research status
+                  Loading research status…
                 </td>
               </tr>
             ) : null}
             {(status?.reports ?? []).map((r) => (
               <tr key={`${r.kind}-${r.subject}`} className="border-b border-ink-50 dark:border-ink-800/60">
-                <td className="px-5 py-2 font-mono text-xs text-ink-800 dark:text-ink-100">{r.subject}</td>
-                <td className="px-2 py-2 font-mono text-xs tabular-nums text-ink-800 dark:text-ink-100">{r.score ?? 'n/a'}{r.confidence !== null ? <span className="text-ink-400"> · conf {r.confidence}</span> : null}</td>
+                <td className="px-5 py-2 font-mono text-xs text-ink-800 dark:text-ink-100">{/^[A-Z]{6}$/.test(r.subject) ? `${r.subject.slice(0, 3)}/${r.subject.slice(3)}` : r.subject}</td>
+                <td className="px-2 py-2 font-mono text-xs tabular-nums text-ink-800 dark:text-ink-100">{r.score ?? '–'}{r.confidence !== null ? <span className="text-ink-400"> · {r.confidence}% confidence</span> : null}</td>
                 <td className="px-2 py-2 text-xs text-ink-600 dark:text-ink-300">{r.condition ? conditionWord(r.condition) : 'Not researched'}</td>
-                <td className="px-2 py-2 text-xs text-ink-500">{r.narrativeSource === 'ai' ? 'AI (verified)' : r.narrativeSource === 'rules' ? 'Rules' : 'n/a'}</td>
+                <td className="px-2 py-2 text-xs text-ink-500">{r.narrativeSource === 'ai' ? 'Kotka AI (checked)' : r.narrativeSource === 'rules' ? 'Standard template' : '–'}</td>
                 <td className="px-2 py-2 text-xs">
                   {r.freshness ? (
                     <span className={r.freshness.stale ? 'text-amber-700 dark:text-amber-400' : 'text-ink-600 dark:text-ink-300'}>
                       {when(r.freshness.lastUpdated)}
-                      {r.freshness.stale ? ' (stale)' : ''}
+                      {r.freshness.stale ? ' (out of date)' : ''}
                     </span>
                   ) : (
                     <span className="text-ink-400">Never</span>
@@ -107,7 +107,7 @@ function StatusCard({ status, onRefreshed }) {
                 </td>
                 <td className="px-5 py-2 text-right">
                   <Button size="sm" variant="ghost" icon={busy[r.subject] ? Loader2 : RefreshCw} disabled={busy[r.subject]} onClick={() => run(r.subject)}>
-                    {busy[r.subject] ? 'Running' : 'Refresh'}
+                    {busy[r.subject] ? 'Updating…' : 'Update now'}
                   </Button>
                 </td>
               </tr>
@@ -119,26 +119,44 @@ function StatusCard({ status, onRefreshed }) {
   );
 }
 
+// Reports written before the plain names keep the old ones; show those in words too.
+const LEGACY_SOURCE = [
+  [/^IMF WEO vintage catalogue$/, 'IMF list of forecast editions'],
+  [/^IMF World Economic Outlook \(current\)$/, 'IMF economic forecasts (latest)'],
+  [/^IMF World Economic Outlook \((.+) vintage\)$/, 'IMF economic forecasts ($1 edition)'],
+  [/^IMF World Economic Outlook$/, 'IMF economic forecasts'],
+  [/^IMF COFER.*$/, 'IMF data on central bank currency reserves'],
+  [/^Calendar: FOMC$/, 'US Federal Reserve meeting dates'],
+  [/^Calendar: ECB$/, 'European Central Bank meeting dates'],
+  [/^Calendar: BLS$/, 'US jobs and inflation release dates'],
+  [/^Calendar: BEA$/, 'US growth and spending release dates'],
+  [/^Calendar: EUROSTAT$/, 'Eurostat release dates'],
+];
+const sourceName = (name) => {
+  for (const [re, plain] of LEGACY_SOURCE) if (re.test(name)) return name.replace(re, plain);
+  return name;
+};
+
 function SourceHealth({ status }) {
   const list = status?.sourceHealth ?? [];
   return (
     <Card>
-      <CardHeader title="Source health" subtitle={!status ? 'Loading' : status.sourceHealthAt ? `From the latest completed run, ${when(status.sourceHealthAt)}` : 'No completed runs yet'} />
+      <CardHeader title="Data sources" subtitle={!status ? 'Loading…' : status.sourceHealthAt ? `As of the last research update, ${when(status.sourceHealthAt)}` : 'No research updates yet'} />
       <CardBody>
         {list.length ? (
           <ul className="space-y-1.5">
             {list.map((s) => (
               <li key={s.id} className="flex items-start justify-between gap-3 text-xs">
-                <span className="text-ink-600 dark:text-ink-300">{s.name}</span>
-                <span className={clsx('flex shrink-0 items-center gap-1 font-mono', s.status === 'failed' ? 'text-loss-500' : s.status === 'disabled' ? 'text-ink-400' : 'text-profit-600 dark:text-profit-400')}>
+                <span className="text-ink-600 dark:text-ink-300">{sourceName(s.name)}</span>
+                <span className={clsx('flex shrink-0 items-center gap-1', s.status === 'failed' ? 'text-loss-500' : s.status === 'disabled' ? 'text-ink-400' : 'text-profit-600 dark:text-profit-400')}>
                   {s.status === 'failed' ? <XCircle className="h-3.5 w-3.5" /> : s.status === 'disabled' ? null : <CheckCircle2 className="h-3.5 w-3.5" />}
-                  {s.status}
+                  {{ ok: 'Working', cached: 'Working (saved copy)', failed: 'Not responding', disabled: 'Turned off' }[s.status] ?? s.status}
                 </span>
               </li>
             ))}
           </ul>
         ) : status ? (
-          <p className="text-sm text-ink-400">Run research once to see the status of every source.</p>
+          <p className="text-sm text-ink-400">Update research once to see how every data source is doing.</p>
         ) : null}
       </CardBody>
     </Card>
@@ -159,7 +177,7 @@ function SettingsCard({ data, canEdit, onSaved }) {
     try {
       const { settings } = await api.put('/admin/research/settings', form);
       setForm(settings);
-      setMessage({ ok: true, text: 'Settings saved.' });
+      setMessage({ ok: true, text: 'Saved. Reports use these settings from their next update.' });
       onSaved();
     } catch (err) {
       setMessage({ ok: false, text: err.message });
@@ -176,26 +194,26 @@ function SettingsCard({ data, canEdit, onSaved }) {
 
   return (
     <Card>
-      <CardHeader title="Configuration" subtitle={canEdit ? 'Changes apply to the next research run.' : 'Read-only. Only a Super Admin can change research configuration.'} />
+      <CardHeader title="Settings" subtitle={canEdit ? 'Changes apply from the next research update.' : 'View only. Only a Super Admin can change these settings.'} />
       <CardBody className="space-y-6">
         <div className="divide-y divide-ink-50 dark:divide-ink-800/60">
-          <Toggle label="Fundamental Research enabled" hint="When off, traders see an unavailable notice; admins can still run research." checked={form.enabled} onChange={(v) => set('enabled', v)} disabled={!canEdit} />
-          <Toggle label="AI-written narrative" hint="When off, reports use the deterministic rules narrative only." checked={form.aiNarrative} onChange={(v) => set('aiNarrative', v)} disabled={!canEdit} />
+          <Toggle label="Show Fundamental Research to traders" hint="When off, traders see a short “not available right now” notice. Admins can still update research." checked={form.enabled} onChange={(v) => set('enabled', v)} disabled={!canEdit} />
+          <Toggle label="AI-written summaries" hint="When off, reports use a standard written summary built from the numbers." checked={form.aiNarrative} onChange={(v) => set('aiNarrative', v)} disabled={!canEdit} />
         </div>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <Select label="Available to" value={form.availability} onChange={(e) => set('availability', e.target.value)} disabled={!canEdit}>
             <option value="all">All traders</option>
             <option value="premium">Premium and above (once paid plans are on)</option>
           </Select>
-          <Input label="Refresh every (hours)" type="number" min={1} max={168} value={form.refreshHours} onChange={(e) => set('refreshHours', e.target.value)} disabled={!canEdit} />
-          <Input label="Refreshes per trader per day" type="number" min={0} value={form.userRefreshLimitPerDay} onChange={(e) => set('userRefreshLimitPerDay', e.target.value)} disabled={!canEdit} />
-          <Input label="Catalyst horizon (days)" type="number" min={7} max={120} value={form.catalystHorizonDays} onChange={(e) => set('catalystHorizonDays', e.target.value)} disabled={!canEdit} />
+          <Input label="Update reports every (hours)" hint="How often reports update automatically." type="number" min={1} max={168} value={form.refreshHours} onChange={(e) => set('refreshHours', e.target.value)} disabled={!canEdit} />
+          <Input label="Updates each trader can ask for per day" hint="0 means traders can’t update reports themselves." type="number" min={0} value={form.userRefreshLimitPerDay} onChange={(e) => set('userRefreshLimitPerDay', e.target.value)} disabled={!canEdit} />
+          <Input label="Upcoming events to show (days ahead)" hint="How far ahead reports list rate decisions and data releases." type="number" min={7} max={120} value={form.catalystHorizonDays} onChange={(e) => set('catalystHorizonDays', e.target.value)} disabled={!canEdit} />
         </div>
         <Input
-          label="Narrative model (NVIDIA)"
+          label="AI model for summaries (advanced)"
           value={form.model}
           placeholder={cat.defaultModel}
-          hint={`Leave blank to use the verified default (${cat.defaultModel}). If this model is retired, Kotka falls back to other vetted models automatically. ${data.integrations.nvidia ? 'Uses the NVIDIA key from Integrations.' : 'The NVIDIA integration is not configured, so reports use the rules narrative.'}`}
+          hint={`Leave blank to use Kotka’s tested default. If a model stops working, Kotka switches to another tested one automatically. ${data.integrations.nvidia ? 'Uses the NVIDIA key from Connected services.' : 'NVIDIA isn’t connected, so reports use the standard written summary. Connect it in Connected services.'}`}
           onChange={(e) => set('model', e.target.value)}
           disabled={!canEdit}
         />
@@ -213,12 +231,12 @@ function SettingsCard({ data, canEdit, onSaved }) {
                   onClick={() => set('currencies', on ? form.currencies.filter((x) => x !== c.code) : [...form.currencies, c.code])}
                   className={clsx('rounded-lg border px-3 py-1.5 text-left text-xs transition-colors disabled:cursor-not-allowed', on ? 'border-accent-500 bg-accent-50 text-ink-900 dark:bg-accent-900/20 dark:text-ink-50' : 'border-ink-200 text-ink-500 dark:border-ink-700')}
                 >
-                  <span className="font-mono font-medium">{c.code}</span> <span className="text-ink-400">{c.coverage === 'full' ? 'full coverage' : 'core coverage'}</span>
+                  <span className="font-mono font-medium">{c.code}</span> <span className="text-ink-400">{c.coverage === 'full' ? 'full' : 'basic'}</span>
                 </button>
               );
             })}
           </div>
-          <p className="mt-1.5 text-xs text-ink-400">Full coverage adds national statistics, market expectations, central bank statements and official event calendars. Core coverage uses IMF and BIS data only.</p>
+          <p className="mt-1.5 text-xs text-ink-400">Full: national statistics, market expectations, central bank statements and official event calendars. Basic: international data only (IMF and the Bank for International Settlements).</p>
         </div>
 
         <div>
@@ -241,7 +259,7 @@ function SettingsCard({ data, canEdit, onSaved }) {
               </span>
             ) : null}
           </div>
-          <p className="mt-1.5 text-xs text-ink-400">Both currencies of a pair must be enabled above.</p>
+          <p className="mt-1.5 text-xs text-ink-400">Both currencies of a pair must be turned on above. Otherwise the pair is removed when you save.</p>
         </div>
 
         <div>
@@ -251,12 +269,12 @@ function SettingsCard({ data, canEdit, onSaved }) {
               <Toggle key={key} label={label} checked={form.sources[key] !== false} onChange={(v) => set('sources', { ...form.sources, [key]: v })} disabled={!canEdit} />
             ))}
           </div>
-          <p className="mt-1.5 text-xs text-ink-400">Turning a source off leaves its figures out of every report (shown as “not available”) and lowers confidence. Access keys for NVIDIA, FRED and Massive are in Integrations.</p>
+          <p className="mt-1.5 text-xs text-ink-400">Turning a source off leaves its figures out of every report (shown as “not available”) and makes reports less certain. Access keys for NVIDIA, FRED and Massive are in Connected services.</p>
         </div>
 
         {canEdit ? (
           <div className="flex items-center gap-3">
-            <Button onClick={save} disabled={saving} icon={saving ? Loader2 : undefined}>{saving ? 'Saving' : 'Save configuration'}</Button>
+            <Button onClick={save} disabled={saving} icon={saving ? Loader2 : undefined}>{saving ? 'Saving…' : 'Save settings'}</Button>
             {message ? <span className={clsx('text-sm', message.ok ? 'text-profit-600' : 'text-loss-500')}>{message.text}</span> : null}
           </div>
         ) : null}
@@ -278,7 +296,7 @@ function CronCard({ settings, cronJob, lastCronRunAt, canEdit, onRotated }) {
     const warning = managed
       ? 'Kotka will update the scheduled job for you automatically.'
       : 'The current scheduled-job link will stop working until you paste the new one into cron-job.org.';
-    if (settings.cron.configured && !(await confirmDialog({ title: 'Create a new access key?', message: warning, confirmLabel: 'Create new key' }))) return;
+    if (settings.cron.configured && !(await confirmDialog({ title: 'Create a new update link?', message: warning, confirmLabel: 'Create new link' }))) return;
     setBusy(true);
     setError(null);
     setResult(null);
@@ -299,7 +317,7 @@ function CronCard({ settings, cronJob, lastCronRunAt, canEdit, onRotated }) {
     setTimeout(() => setCopied(false), 1500);
   };
 
-  const badge = managed && job ? (job.enabled ? (job.lastStatusOk || job.lastStatus === 'Not executed yet' ? 'profit' : 'warning') : 'loss') : settings.cron.configured ? 'profit' : 'warning';
+  const badge = managed && job ? (job.enabled ? (job.lastStatusOk || job.lastStatusCode === 0 ? 'profit' : 'warning') : 'loss') : settings.cron.configured ? 'profit' : 'warning';
   const badgeText = managed && job ? (job.enabled ? 'Running hourly' : 'Paused on cron-job.org') : settings.cron.configured ? 'Link active' : 'Not set up';
 
   return (
@@ -324,18 +342,18 @@ function CronCard({ settings, cronJob, lastCronRunAt, canEdit, onRotated }) {
             </div>
             <div className="rounded-lg bg-ink-50 px-3 py-2 dark:bg-ink-800">
               <dt className="text-ink-400">Last result</dt>
-              <dd className={clsx('mt-0.5', job.lastStatusOk ? 'text-profit-600 dark:text-profit-400' : job.lastStatus === 'Not executed yet' ? 'text-ink-800 dark:text-ink-100' : 'text-loss-500')}>{job.lastStatus}</dd>
+              <dd className={clsx('mt-0.5', job.lastStatusOk ? 'text-profit-600 dark:text-profit-400' : job.lastStatusCode === 0 ? 'text-ink-800 dark:text-ink-100' : 'text-loss-500')}>{job.lastStatus}</dd>
             </div>
           </dl>
         ) : null}
-        {managed && cronJob.error ? <p className="text-xs text-loss-500">Kotka couldn’t check the schedule on cron-job.org just now. It will try again; if this persists, check the key in Integrations.</p> : null}
+        {managed && cronJob.error ? <p className="text-xs text-loss-500">Kotka couldn’t check the schedule on cron-job.org just now. It will try again; if this persists, check the key in Connected services.</p> : null}
         {!managed ? (
           <>
             <ol className="list-decimal space-y-1 pl-5 text-xs text-ink-500 dark:text-ink-400">
               <li>Create an update link below and copy it (it’s shown only once).</li>
               <li>In cron-job.org, add a job that opens that link every 60 minutes.</li>
             </ol>
-            <p className="text-xs text-ink-400">Or add your cron-job.org key in Integrations and Kotka will set this up and keep it in sync for you.</p>
+            <p className="text-xs text-ink-400">Or add your cron-job.org key in Connected services and Kotka will set this up and keep it in sync for you.</p>
           </>
         ) : null}
 
@@ -366,6 +384,9 @@ function CronCard({ settings, cronJob, lastCronRunAt, canEdit, onRotated }) {
   );
 }
 
+const FACTOR_LABEL = { valuation: 'Currency valuation', imf_view: 'IMF view', central_bank: 'Central bank', fiscal: 'Government finances', external: 'Trade and payments', financial_stability: 'Financial stability', general: 'General' };
+// Verdicts are stored exactly as the report words them (in capitals); show them in sentence case.
+const sentence = (s) => (s ? s.charAt(0) + s.slice(1).toLowerCase() : s);
 const EMPTY_ASSESSMENT = { currency: 'EUR', factor: 'valuation', institution: 'International Monetary Fund', title: '', classification: 'BROADLY IN LINE', statement: '', url: '', publishedAt: '' };
 
 function AssessmentsCard({ catalog }) {
@@ -402,13 +423,13 @@ function AssessmentsCard({ catalog }) {
   return (
     <Card>
       <CardHeader
-        title="Curated institutional assessments"
-        subtitle="For assessments with no machine-readable source, such as IMF External Sector Report valuations or Article IV conclusions. Every entry must cite the original publication."
+        title="Official assessments you’ve added"
+        subtitle="Add official views Kotka can’t fetch automatically, such as the IMF’s view on whether a currency is over- or undervalued. Always link the original report."
         action={<Button size="sm" variant="secondary" icon={Plus} onClick={() => setOpen(true)}>Add</Button>}
       />
       <CardBody>
         {!items ? (
-          <p className="text-sm text-ink-400">Loading</p>
+          <p className="text-sm text-ink-400">Loading…</p>
         ) : items.length ? (
           <ul className="divide-y divide-ink-50 dark:divide-ink-800/60">
             {items.map((a) => (
@@ -416,7 +437,7 @@ function AssessmentsCard({ catalog }) {
                 <div className="min-w-0">
                   <p className="text-sm text-ink-800 dark:text-ink-100">
                     <span className="font-mono text-xs">{a.currency}</span> {a.title}
-                    {a.classification ? <span className="ml-1.5 text-xs text-ink-400">{a.classification}</span> : null}
+                    {a.classification ? <span className="ml-1.5 text-xs text-ink-400">{sentence(a.classification)}</span> : null}
                   </p>
                   <p className="mt-0.5 line-clamp-2 text-xs text-ink-500">{a.statement}</p>
                   <a href={a.url} target="_blank" rel="noopener noreferrer" className="text-[11px] text-accent-700 underline dark:text-accent-300">{a.institution}, {new Date(a.publishedAt).toLocaleDateString('en-GB', { timeZone: 'UTC' })}</a>
@@ -428,10 +449,10 @@ function AssessmentsCard({ catalog }) {
             ))}
           </ul>
         ) : (
-          <p className="text-sm text-ink-400">None recorded. Without a formal assessment, reports show "IMF FORMAL VALUATION: NOT AVAILABLE" and Kotka does not infer one.</p>
+          <p className="text-sm text-ink-400">None added yet. Without one, reports say the IMF hasn’t published a valuation, and Kotka won’t guess one.</p>
         )}
       </CardBody>
-      <Modal open={open} onClose={() => setOpen(false)} title="Add institutional assessment" width="max-w-xl">
+      <Modal open={open} onClose={() => setOpen(false)} title="Add an official assessment" width="max-w-xl">
         <form onSubmit={save} className="space-y-4">
           <div className="grid grid-cols-2 gap-3">
             <Select label="Currency" value={form.currency} onChange={(e) => set('currency', e.target.value)}>
@@ -439,18 +460,18 @@ function AssessmentsCard({ catalog }) {
                 <option key={c.code} value={c.code}>{c.code}</option>
               ))}
             </Select>
-            <Select label="Factor" value={form.factor} onChange={(e) => set('factor', e.target.value)}>
+            <Select label="Topic" value={form.factor} onChange={(e) => set('factor', e.target.value)}>
               {catalog.assessmentFactors.map((f) => (
-                <option key={f} value={f}>{f.replace('_', ' ')}</option>
+                <option key={f} value={f}>{FACTOR_LABEL[f] ?? f}</option>
               ))}
             </Select>
           </div>
           <Input label="Institution" value={form.institution} onChange={(e) => set('institution', e.target.value)} />
           <Input label="Title" placeholder="e.g. External Sector Report 2026: euro area assessment" value={form.title} onChange={(e) => set('title', e.target.value)} />
           {form.factor === 'valuation' ? (
-            <Select label="Classification (exactly as assessed)" value={form.classification} onChange={(e) => set('classification', e.target.value)}>
+            <Select label="Verdict (as worded in the report)" value={form.classification} onChange={(e) => set('classification', e.target.value)}>
               {catalog.valuationClasses.map((c) => (
-                <option key={c} value={c}>{c}</option>
+                <option key={c} value={c}>{sentence(c)}</option>
               ))}
             </Select>
           ) : null}
@@ -466,12 +487,12 @@ function AssessmentsCard({ catalog }) {
           </label>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <div className="sm:col-span-2">
-              <Input label="Source URL" type="url" placeholder="https://www.imf.org/..." value={form.url} onChange={(e) => set('url', e.target.value)} />
+              <Input label="Link to the report" type="url" placeholder="https://www.imf.org/..." value={form.url} onChange={(e) => set('url', e.target.value)} />
             </div>
             <Input label="Publication date" type="date" value={form.publishedAt} onChange={(e) => set('publishedAt', e.target.value)} />
           </div>
           {error ? <p className="text-sm text-loss-500">{error}</p> : null}
-          <Button type="submit" disabled={saving}>{saving ? 'Saving' : 'Save assessment'}</Button>
+          <Button type="submit" disabled={saving}>{saving ? 'Saving…' : 'Save assessment'}</Button>
         </form>
       </Modal>
     </Card>
@@ -485,34 +506,34 @@ function RunsCard() {
   }, []);
   return (
     <Card>
-      <CardHeader title="Recent runs" />
+      <CardHeader title="Recent research updates" />
       <CardBody className="overflow-x-auto px-0">
         {!runs ? (
-          <p className="px-5 text-sm text-ink-400">Loading</p>
+          <p className="px-5 text-sm text-ink-400">Loading…</p>
         ) : runs.length ? (
           <table className="w-full min-w-[640px] text-left text-xs">
             <thead>
               <tr className="border-b border-ink-100 text-[11px] text-ink-400 dark:border-ink-800">
                 <th className="px-5 py-2 font-medium">Started</th>
-                <th className="px-2 py-2 font-medium">Instrument</th>
-                <th className="px-2 py-2 font-medium">Trigger</th>
-                <th className="px-2 py-2 font-medium">Status</th>
-                <th className="px-2 py-2 font-medium">Duration</th>
-                <th className="px-5 py-2 font-medium">Unavailable sources</th>
+                <th className="px-2 py-2 font-medium">Market</th>
+                <th className="px-2 py-2 font-medium">Started by</th>
+                <th className="px-2 py-2 font-medium">Result</th>
+                <th className="px-2 py-2 font-medium">Time taken</th>
+                <th className="px-5 py-2 font-medium">Data that didn’t load</th>
               </tr>
             </thead>
             <tbody>
               {runs.map((r) => (
                 <tr key={r.id} className="border-b border-ink-50 align-top dark:border-ink-800/60">
                   <td className="px-5 py-2 text-ink-600 dark:text-ink-300">{when(r.startedAt)}</td>
-                  <td className="px-2 py-2 font-mono text-ink-800 dark:text-ink-100">{r.subject}</td>
+                  <td className="px-2 py-2 font-mono text-ink-800 dark:text-ink-100">{/^[A-Z]{6}$/.test(r.subject) ? `${r.subject.slice(0, 3)}/${r.subject.slice(3)}` : r.subject}</td>
                   <td className="px-2 py-2 text-ink-600 dark:text-ink-300">{{ cron: 'Hourly update', user: 'Trader request', admin: 'Admin request' }[r.trigger] ?? r.trigger}{r.user ? ` (${r.user.name})` : ''}</td>
                   <td className={clsx('px-2 py-2 font-medium', r.status === 'failed' ? 'text-loss-500' : r.status === 'running' ? 'text-amber-700 dark:text-amber-400' : 'text-profit-600 dark:text-profit-400')}>
-                    {{ done: 'Finished', failed: 'Didn’t finish', running: 'In progress' }[r.status] ?? r.status}
+                    {{ done: 'Finished', succeeded: 'Finished', failed: 'Didn’t finish', running: 'In progress' }[r.status] ?? r.status}
                     {r.error ? <p className="font-normal text-loss-500" title={r.error}>Something went wrong while writing this report. It will be retried on the next hourly update.</p> : null}
                   </td>
-                  <td className="px-2 py-2 font-mono tabular-nums text-ink-600 dark:text-ink-300">{r.durationMs ? `${(r.durationMs / 1000).toFixed(1)}s` : 'n/a'}</td>
-                  <td className="px-5 py-2 text-ink-500">{r.failedSources.length ? r.failedSources.map((s) => s.name).join('; ') : 'None'}</td>
+                  <td className="px-2 py-2 font-mono tabular-nums text-ink-600 dark:text-ink-300">{r.durationMs ? `${(r.durationMs / 1000).toFixed(1)} seconds` : '–'}</td>
+                  <td className="px-5 py-2 text-ink-500">{r.failedSources.length ? r.failedSources.map((s) => sourceName(s.name)).join('; ') : 'None'}</td>
                 </tr>
               ))}
             </tbody>
@@ -549,7 +570,7 @@ export default function AdminResearch() {
 
   return (
     <div className="space-y-6">
-      <PageHeader eyebrow="Admin" title="Fundamental Research" description="Sources, coverage, refresh cadence and curated assessments for Kotka Fundamental Research." />
+      <PageHeader eyebrow="Admin" title="Fundamental Research" description="Choose which markets and data Kotka researches, how often reports update, and add official assessments." />
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
         <div className="xl:col-span-2">
           <StatusCard status={status} onRefreshed={loadStatus} />

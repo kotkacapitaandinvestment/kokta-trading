@@ -70,7 +70,7 @@ export default function AdminSettings() {
       setSaved(res.settings);
       setDraft(res.settings);
       setMeta((m) => ({ ...m, updatedAt: res.updatedAt, updatedBy: res.updatedBy }));
-      setState({ ok: 'Saved. Changes reach every server within about a minute.' });
+      setState({ ok: 'Saved. Changes take effect within a minute.' });
     } catch (err) {
       setState({ error: err.message });
     }
@@ -81,7 +81,7 @@ export default function AdminSettings() {
       <PageHeader
         eyebrow="Admin"
         title="Platform Settings"
-        description="Switches that apply to every account. Every change is recorded in the audit log."
+        description="Switches that apply to every account. Each change is noted in the Audit Log."
       />
 
       <Card>
@@ -96,7 +96,7 @@ export default function AdminSettings() {
           />
           <Toggle
             label="Require identity verification"
-            hint="Traders must submit legal name, date of birth, country, phone and address before using the app. They keep access while it is in review. Admins are exempt."
+            hint="Traders must give their legal name, date of birth, country, phone and address before using Kotka. They keep access while it’s being reviewed. Staff don’t need to."
             checked={draft.kycRequired}
             onChange={(v) => set('kycRequired', v)}
             disabled={disabled}
@@ -112,29 +112,29 @@ export default function AdminSettings() {
         />
         <CardBody className="space-y-5">
           <Toggle
-            label="Enable paid plans"
-            hint="Turns on the free-plan AI limit below and lets features marked Premium (such as Fundamental Research, if set that way) be restricted to Premium accounts. Leave off until billing is ready."
+            label="Turn on paid plans"
+            hint="Free accounts get the lower Kotka AI limit below straight away, and features set to Premium (such as Fundamental Research, if you chose that) are limited to Premium accounts. No one is charged, as there’s no checkout yet. Leave this off until payments are ready."
             checked={draft.paidPlansEnabled}
             onChange={(v) => set('paidPlansEnabled', v)}
             disabled={disabled}
           />
           <div className="grid grid-cols-1 gap-4 border-t border-ink-100 pt-5 dark:border-ink-800 sm:grid-cols-2">
             <Input
-              label="Kotka AI fair-use limit"
+              label="Daily Kotka AI limit (all traders)"
               type="number"
               min="0"
               max="10000"
-              hint="Messages per person per UTC day, for everyone. 0 means no cap. Admins are never capped."
+              hint="Messages each trader can send per day. Resets at midnight UTC (1am in Lagos). 0 means no limit. Staff have no limit."
               value={draft.aiFairUseDailyLimit}
               onChange={(e) => set('aiFairUseDailyLimit', e.target.value === '' ? '' : Number(e.target.value))}
               disabled={disabled}
             />
             <Input
-              label="Free-plan AI limit"
+              label="Daily Kotka AI limit (free plan)"
               type="number"
               min="0"
               max="10000"
-              hint={draft.paidPlansEnabled ? 'Messages per day on the free plan.' : 'Only applies once paid plans are enabled.'}
+              hint={draft.paidPlansEnabled ? 'Messages per day on the free plan. Set it lower than the limit on the left to make a difference.' : 'Only applies once paid plans are on. Set it lower than the limit on the left to make a difference.'}
               value={draft.aiDailyLimitFree}
               onChange={(e) => set('aiDailyLimitFree', e.target.value === '' ? '' : Number(e.target.value))}
               disabled={disabled}

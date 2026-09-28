@@ -55,6 +55,16 @@ const SENTENCE = {
   'community.room_updated': 'changed a Community room',
   'community.event_created': 'added a market event',
   'community.event_updated': 'changed a market event',
+  'community.remove': 'removed something a trader posted',
+  'community.restore': 'restored something a moderator had removed',
+  'community.mute': 'paused a trader’s posting',
+  'community.unmute': 'ended a trader’s posting pause',
+  'community.suspend': 'suspended a trader’s account',
+  'community.ban': 'banned a trader',
+  'community.reinstate': 'reinstated a trader’s account',
+  'community.dismiss': 'dismissed a report',
+  'community.post_featured': 'featured a post',
+  'community.post_unfeatured': 'stopped featuring a post',
   'announcement.created': 'drafted an announcement',
   'announcement.updated': 'edited an announcement',
   'announcement.published': 'published an announcement',
@@ -65,7 +75,7 @@ const SENTENCE = {
   'integration.created': 'connected a service',
   'integration.updated': 'updated a connected service',
   'research.settings_updated': 'changed research settings',
-  'research.cron_token_rotated': 'renewed the research schedule’s access key',
+  'research.cron_token_rotated': 'created a new hourly update link',
   'research.assessment_created': 'added a source assessment',
   'research.assessment_updated': 'edited a source assessment',
   'research.assessment_deleted': 'deleted a source assessment',
@@ -73,10 +83,13 @@ const SENTENCE = {
 const SECURITY = new Set(['auth.sign_in_failed', 'auth.sign_in_blocked', 'auth.sign_in_refused', 'account.password_changed', 'account.deleted']);
 
 const words = (k) => String(k).replace(/([a-z])([A-Z])/g, '$1 $2').replace(/_/g, ' ').toLowerCase().replace(/^\w/, (c) => c.toUpperCase());
-const SETTING = { dailyLossLimit: 'Daily loss limit', defaultRisk: 'Risk per trade', baseCurrency: 'Base currency', kycRequired: 'Verification required', signupsOpen: 'Sign-ups open', maintenanceMode: 'Maintenance mode' };
+const SETTING = { dailyLossLimit: 'Daily loss limit', defaultRisk: 'Risk per trade', baseCurrency: 'Base currency', kycRequired: 'Verification required', signupsOpen: 'Sign-ups open', paidPlansEnabled: 'Paid plans', aiFairUseDailyLimit: 'Daily Kotka AI limit', aiDailyLimitFree: 'Free-plan Kotka AI limit', supportEmail: 'Support email' };
 const SERVICE = { nvidia: 'Kotka AI', massive: 'market prices', finnhub: 'market news', fred: 'economic data', paystack: 'payments', cronjob: 'scheduled updates' };
 const fmt = (v) => (typeof v === 'boolean' ? (v ? 'on' : 'off') : v == null || v === '' ? 'not set' : String(v));
 const UNIT = { dailyLossLimit: 'R', defaultRisk: '%' };
+// Roles, statuses and plans as admins see them elsewhere.
+const VALUE = { trader: 'Trader', premium: 'Premium', moderator: 'Moderator', admin: 'Admin', super_admin: 'Super Admin', active: 'Active', suspended: 'Suspended', banned: 'Banned', free: 'Free' };
+const plainValue = (v) => VALUE[v] ?? fmt(v);
 const withUnit = (k, v) => (v == null || v === '' || typeof v === 'boolean' || !UNIT[k] ? fmt(v) : `${v}${UNIT[k]}`);
 const changes = (obj) => Object.entries(obj ?? {}).filter(([, v]) => v && typeof v === 'object' && 'to' in v).map(([k, v]) => `${SETTING[k] ?? words(k)}: ${withUnit(k, v.from)} → ${withUnit(k, v.to)}`).join(' · ');
 
@@ -96,7 +109,7 @@ function detailText(log) {
     case 'platform.settings_updated':
       return changes(d);
     case 'user.updated':
-      return [d.email, ...['role', 'status', 'plan'].filter((k) => d[k]).map((k) => `${words(k)} ${fmt(d[k].from)} → ${fmt(d[k].to)}`)].filter(Boolean).join(' · ');
+      return [d.email, ...['role', 'status', 'plan'].filter((k) => d[k]).map((k) => `${words(k)} ${plainValue(d[k].from)} → ${plainValue(d[k].to)}`)].filter(Boolean).join(' · ');
     case 'kyc.viewed':
     case 'kyc.approved':
     case 'kyc.rejected':
@@ -155,7 +168,7 @@ const AREAS = [
   { value: 'journal.', label: 'Trading journal' },
   { value: 'goals.', label: 'Goal Room' },
   { value: 'community.joined,community.username_,community.posted,community.idea_posted,community.post_deleted,community.reported,community.blocked_user,community.muted_user', label: 'Community' },
-  { value: 'user.,platform.,integration.,research.,announcement.,kyc.viewed,kyc.approved,kyc.rejected,community.post_removed,community.message_removed,community.room_,community.event_', label: 'Admin actions' },
+  { value: 'user.,platform.,integration.,research.,announcement.,kyc.viewed,kyc.approved,kyc.rejected,community.post_removed,community.message_removed,community.room_,community.event_,community.remove,community.restore,community.mute,community.unmute,community.suspend,community.ban,community.reinstate,community.dismiss,community.post_featured,community.post_unfeatured', label: 'Admin actions' },
 ];
 
 function ago(at) {

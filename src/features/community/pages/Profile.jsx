@@ -6,7 +6,7 @@ import { api } from '../../../lib/api';
 import Button from '../../../components/ui/Button';
 import Modal from '../../../components/ui/Modal';
 import { useCommunity } from '../CommunityContext';
-import { timeAgo } from '../util';
+import { ago } from '../util';
 import { useAuth } from '../../../context/AuthContext';
 import { uploadAvatar } from '../../../lib/avatar';
 import { Avatar, StaffBadge } from '../components/Identity';
@@ -16,7 +16,7 @@ import ReportDialog from '../components/ReportDialog';
 import Menu from '../components/Menu';
 import { display } from '../components/inputs';
 import AchievementPost from '../../goals/AchievementPost';
-import { confirmDialog, promptDialog, toast } from '../../../lib/dialogs';
+import { confirmDialog, toast } from '../../../lib/dialogs';
 import EmptyState from '../../../components/ui/EmptyState';
 
 // Goal Room record on a profile: discipline and consistency, never money.
@@ -29,7 +29,7 @@ function AchievementShowcase({ data, self }) {
     <section className="rounded-2xl border border-ink-100 bg-white p-5 dark:border-ink-800 dark:bg-ink-900">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-sm font-semibold text-ink-900 dark:text-ink-50">Achievements</h2>
-        <span className="text-[11px] text-ink-400">Level {s.level.n} · {s.level.name} · self-reported</span>
+        <span className="text-[11px] text-ink-400">Level {s.level.n} · {s.level.name} · Self-reported</span>
       </div>
       {self && data.hiddenFromOthers ? <p className="mt-1 text-xs text-ink-400">Only you can see this. Turn on “Show achievements on my profile” in <Link to="/app/goals" className="underline">Goal Room</Link> to show it.</p> : null}
       {empty ? (
@@ -135,7 +135,7 @@ export default function Profile() {
           <Avatar user={p} size={80} showOnline />
           <div className="min-w-0 flex-1">
             <h1 className="flex flex-wrap items-center gap-2 text-2xl font-semibold tracking-tight text-ink-900 dark:text-ink-50">{p.name} {p.staff ? <StaffBadge /> : null}</h1>
-            <p className="text-sm text-ink-400">@{p.username} · {p.online ? 'Online' : p.lastSeenAt ? `Active ${timeAgo(p.lastSeenAt)} ago` : 'Joined'} · member since {new Date(p.memberSince).toLocaleDateString(undefined, { month: 'short', year: 'numeric' })}</p>
+            <p className="text-sm text-ink-400">@{p.username} · {p.online ? 'Online' : p.lastSeenAt ? `Active ${ago(p.lastSeenAt)}` : null} {p.online || p.lastSeenAt ? '·' : null} Member since {new Date(p.memberSince).toLocaleDateString(undefined, { month: 'short', year: 'numeric' })}</p>
             {p.headline ? <p className="mt-2 text-sm font-medium text-ink-700 dark:text-ink-200">{p.headline}</p> : null}
             {p.bio ? <p className="mt-2 max-w-2xl whitespace-pre-wrap text-sm leading-relaxed text-ink-600 dark:text-ink-300">{p.bio}</p> : null}
             {p.marketsFollowed?.length ? <p className="mt-3 flex flex-wrap gap-1.5">{p.marketsFollowed.map((s) => <Link key={s} to={`/app/community/markets/${s}`} className="rounded bg-ink-50 px-1.5 py-0.5 font-mono text-[11px] text-ink-600 hover:bg-ink-100 dark:bg-ink-800 dark:text-ink-300">{display(s)}</Link>)}</p> : null}

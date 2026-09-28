@@ -1,3 +1,4 @@
+import { SearchX } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { api } from '../../../lib/api';
@@ -5,6 +6,7 @@ import { Avatar, UserName } from '../components/Identity';
 import PostCard from '../components/PostCard';
 import { NewsLine, EventLine } from '../components/FeedCards';
 import { timeAgo } from '../util';
+import EmptyState from '../../../components/ui/EmptyState';
 
 const SECTIONS = [
   ['markets', 'Markets'],
@@ -32,10 +34,10 @@ export default function Search() {
     <div className="space-y-4">
       <div className="rounded-2xl border border-ink-100 bg-white p-5 dark:border-ink-800 dark:bg-ink-900">
         <h1 className="text-lg font-semibold text-ink-900 dark:text-ink-50">Results for "{q}"</h1>
-        <p className="mt-1 text-xs text-ink-400">Filters: <code>author:username</code> <code>type:idea|post|message|news|event|user</code> <code>market:EURUSD</code> or <code>$EURUSD</code> <code>date:today|last-7-days|month</code></p>
+        <p className="mt-1 text-xs text-ink-400">Tip: search a market (EURUSD), a trader (@name) or a topic. To narrow it down, add <span className="font-mono">type:idea</span>, <span className="font-mono">author:name</span> or <span className="font-mono">date:last-7-days</span>.</p>
       </div>
       {!data && q ? <div className="h-40 animate-pulse rounded-2xl bg-white dark:bg-ink-900" /> : null}
-      {empty ? <p className="rounded-2xl bg-white p-10 text-center text-sm text-ink-400 dark:bg-ink-900">No results. Try fewer words or remove a filter.</p> : null}
+      {empty ? <EmptyState icon={SearchX} title={`Nothing found for "${q}"`} description="Try fewer words, check the spelling, or remove a filter." /> : null}
       {SECTIONS.filter(([k]) => r[k]?.length).map(([k, l]) => (
         <section key={k} className="overflow-hidden rounded-2xl border border-ink-100 bg-white dark:border-ink-800 dark:bg-ink-900">
           <h2 className="border-b border-ink-100 px-5 py-2.5 text-xs font-semibold uppercase tracking-wide text-ink-400 dark:border-ink-800">{l}</h2>

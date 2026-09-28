@@ -19,13 +19,21 @@ export function useAiAction() {
   return { state, run, clear: () => setState(null) };
 }
 
-const TITLES = { summary: 'Community summary', challenge: 'Thesis stress test', explain: 'Why it matters', chart: 'Chart read', factcheck: 'Fact check' };
+const TITLES = { summary: 'Discussion summary', challenge: 'Stress test of this idea', explain: 'Why it matters', chart: 'Chart reading', factcheck: 'Fact check' };
+
+// Kotka AI cites its data as tags like "PRICE EUR/USD"; show them as words.
+const SOURCE_WORDS = { PRICE: 'Price data', RESEARCH: 'Kotka research', EVENT: 'Official calendar', SENTIMENT: 'Community views', STATUS: 'Market hours', NEWS: 'News' };
+function sourceLabel(s) {
+  const [head, ...rest] = String(s).replace(/[[\]]/g, '').trim().split(/\s+/);
+  const word = SOURCE_WORDS[head?.toUpperCase()];
+  return word ? [word, ...rest].join(' · ') : String(s).replace(/[[\]]/g, '');
+}
 
 function List({ title, items, tone }) {
   if (!items?.length) return null;
   return (
     <div>
-      <p className={clsx('text-[11px] font-semibold uppercase tracking-wide', tone ?? 'text-ink-400')}>{title}</p>
+      <p className={clsx('text-[11px] font-semibold', tone ?? 'text-ink-500 dark:text-ink-400')}>{title}</p>
       <ul className="mt-1 space-y-1">
         {items.map((t, i) => (
           <li key={i} className="flex gap-2 text-sm leading-relaxed text-ink-700 dark:text-ink-200">
@@ -38,16 +46,16 @@ function List({ title, items, tone }) {
   );
 }
 
-function Facts({ items, title = 'Verified facts' }) {
+function Facts({ items, title = 'Confirmed facts' }) {
   if (!items?.length) return null;
   return (
     <div className="rounded-lg bg-profit-50/60 p-3 dark:bg-profit-500/5">
-      <p className="text-[11px] font-semibold uppercase tracking-wide text-profit-700 dark:text-profit-400">{title}</p>
+      <p className="text-[11px] font-semibold text-profit-700 dark:text-profit-400">{title}</p>
       <ul className="mt-1 space-y-1.5">
         {items.map((f, i) => (
           <li key={i} className="text-sm text-ink-700 dark:text-ink-200">
             {f.fact ?? f.point}
-            {f.source ? <span className="ml-1.5 rounded bg-white px-1 py-px font-mono text-[10px] text-ink-500 dark:bg-ink-900">{f.source}</span> : null}
+            {f.source ? <span className="ml-1.5 whitespace-nowrap rounded bg-white px-1.5 py-px text-[10px] text-ink-500 dark:bg-ink-900">{sourceLabel(f.source)}</span> : null}
           </li>
         ))}
       </ul>
@@ -59,25 +67,25 @@ function Body({ kind, r }) {
   if (kind === 'summary')
     return (
       <div className="space-y-3">
-        <p className="text-xs text-ink-500 dark:text-ink-400">From {r.messageCount} messages by {r.participants} trader{r.participants === 1 ? '' : 's'}. Everything below is community opinion unless it is listed as a verified fact.</p>
-        {r.consensus ? <div><p className="text-[11px] font-semibold uppercase tracking-wide text-ink-400">Main consensus</p><p className="mt-1 text-sm text-ink-800 dark:text-ink-100">{r.consensus}</p></div> : null}
-        {r.disagreement ? <div><p className="text-[11px] font-semibold uppercase tracking-wide text-ink-400">Main disagreement</p><p className="mt-1 text-sm text-ink-800 dark:text-ink-100">{r.disagreement}</p></div> : null}
+        <p className="text-xs text-ink-500 dark:text-ink-400">From {r.messageCount} messages by {r.participants} trader{r.participants === 1 ? '' : 's'}. Everything below is traders’ opinion unless it’s listed as a confirmed fact.</p>
+        {r.consensus ? <div><p className="text-[11px] font-semibold text-ink-500 dark:text-ink-400">Where most agree</p><p className="mt-1 text-sm text-ink-800 dark:text-ink-100">{r.consensus}</p></div> : null}
+        {r.disagreement ? <div><p className="text-[11px] font-semibold text-ink-500 dark:text-ink-400">Where they disagree</p><p className="mt-1 text-sm text-ink-800 dark:text-ink-100">{r.disagreement}</p></div> : null}
         <div className="grid gap-3 sm:grid-cols-2">
           <List title="Arguments for a higher price" items={r.bullishArguments} tone="text-profit-700 dark:text-profit-400" />
           <List title="Arguments for a lower price" items={r.bearishArguments} tone="text-loss-600 dark:text-loss-400" />
         </div>
-        <List title="Unresolved questions" items={r.unresolved} />
+        <List title="Open questions" items={r.unresolved} />
         <Facts items={r.verifiedFacts} />
-        <List title="Claims made that Kotka could not verify" items={r.claimsNotVerified} tone="text-amber-700 dark:text-amber-400" />
+        <List title="Claims Kotka couldn’t confirm" items={r.claimsNotVerified} tone="text-amber-700 dark:text-amber-400" />
       </div>
     );
   if (kind === 'challenge')
     return (
       <div className="space-y-3">
-        <List title="Assumptions the thesis depends on" items={r.assumptions} />
+        <List title="What the idea assumes" items={r.assumptions} />
         <Facts items={r.counterEvidence} title="Data that cuts against it" />
         <List title="Risks it doesn't address" items={r.risks} tone="text-loss-600 dark:text-loss-400" />
-        {r.invalidation ? <div><p className="text-[11px] font-semibold uppercase tracking-wide text-ink-400">What would prove it wrong</p><p className="mt-1 text-sm text-ink-800 dark:text-ink-100">{r.invalidation}</p></div> : null}
+        {r.invalidation ? <div><p className="text-[11px] font-semibold text-ink-500 dark:text-ink-400">What would prove it wrong</p><p className="mt-1 text-sm text-ink-800 dark:text-ink-100">{r.invalidation}</p></div> : null}
         <List title="Questions for the author" items={r.questions} />
       </div>
     );
@@ -87,7 +95,7 @@ function Body({ kind, r }) {
         <p className="text-sm leading-relaxed text-ink-800 dark:text-ink-100">{r.whyItMatters}</p>
         {r.markets?.length ? (
           <div className="space-y-1.5">
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-400">How it can feed through</p>
+            <p className="text-[11px] font-semibold text-ink-500 dark:text-ink-400">How it can affect markets</p>
             {r.markets.map((m) => <p key={m.symbol} className="text-sm text-ink-700 dark:text-ink-200"><span className="font-mono font-semibold">{m.display}</span>: {m.channel}</p>)}
           </div>
         ) : null}
@@ -98,7 +106,7 @@ function Body({ kind, r }) {
   if (kind === 'chart')
     return (
       <div className="space-y-3">
-        {r.instrument ? <p className="text-xs text-ink-500">Chart: {r.instrument}</p> : null}
+        {r.instrument && !/not\s+readable|unknown|unclear/i.test(r.instrument) ? <p className="text-xs text-ink-500">Chart: {r.instrument}</p> : null}
         <p className="text-sm leading-relaxed text-ink-800 dark:text-ink-100">{r.structure}</p>
         <List title="Visible levels" items={r.levels} />
         <List title="Observations" items={r.observations} />
@@ -106,10 +114,10 @@ function Body({ kind, r }) {
       </div>
     );
   if (kind === 'factcheck') {
-    const V = { supported: [CheckCircle2, 'text-profit-600 dark:text-profit-400', 'Supported by data'], contradicted: [XCircle, 'text-loss-500', 'Contradicted by data'], cannot_verify: [CircleHelp, 'text-ink-400', 'Cannot verify'] };
+    const V = { supported: [CheckCircle2, 'text-profit-600 dark:text-profit-400', 'Supported by data'], contradicted: [XCircle, 'text-loss-500', 'Contradicted by data'], cannot_verify: [CircleHelp, 'text-ink-400', 'Couldn’t check'] };
     return (
       <div className="space-y-3">
-        {!r.claims?.length ? <p className="text-sm text-ink-500">No checkable factual claims found.</p> : null}
+        {!r.claims?.length ? <p className="text-sm text-ink-500">There aren’t any facts here that Kotka can check.</p> : null}
         {r.claims?.map((c, i) => {
           const [Icon, tone, label] = V[c.verdict];
           return (
@@ -117,12 +125,12 @@ function Body({ kind, r }) {
               <Icon className={clsx('mt-0.5 h-4 w-4 shrink-0', tone)} aria-label={label} />
               <div>
                 <p className="text-sm text-ink-800 dark:text-ink-100">"{c.claim}"</p>
-                <p className="text-xs text-ink-500 dark:text-ink-400"><span className={clsx('font-medium', tone)}>{label}.</span> {c.explanation} {c.source ? <span className="font-mono text-[10px]">[{c.source}]</span> : null}</p>
+                <p className="text-xs text-ink-500 dark:text-ink-400"><span className={clsx('font-medium', tone)}>{label}.</span> {c.explanation} {c.source ? <span className="whitespace-nowrap rounded bg-ink-50 px-1.5 py-px text-[10px] dark:bg-ink-800">{sourceLabel(c.source)}</span> : null}</p>
               </div>
             </div>
           );
         })}
-        <List title="Opinions (not checkable)" items={r.opinions} />
+        <List title="Opinions (can’t be checked)" items={r.opinions} />
       </div>
     );
   }
@@ -152,7 +160,7 @@ export default function AiPanel({ state, onClose, className }) {
       </div>
       {state.result ? (
         <p className="mt-3 flex items-center gap-1.5 border-t border-ink-100 pt-2 text-[11px] text-ink-400 dark:border-ink-800">
-          <Sparkles className="h-3 w-3" /> Generated by Kotka AI{state.result.model ? ` (${state.result.model.split('/').pop()})` : ''}{state.cached ? ', from a recent run' : ''}. Not investment advice.
+          <Sparkles className="h-3 w-3" /> Written by Kotka AI{state.cached ? ' a little earlier' : ''}. Not investment advice.
         </p>
       ) : null}
     </section>

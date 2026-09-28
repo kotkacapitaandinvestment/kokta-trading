@@ -35,14 +35,14 @@ export default function AdminLayout() {
         brandTo="/admin/overview"
         items={items}
         secondaryItems={traderTools}
-        secondaryLabel="Trader Tools"
+        secondaryLabel="Trader tools"
       />
       <div className="flex min-w-0 flex-1 flex-col">
         <Topbar
           title={titleFromPath(location.pathname)}
           right={
             <>
-              <Badge tone="accent" className="hidden sm:inline-flex">{isSuperAdmin ? 'Super Admin' : isModerator ? 'Moderator' : 'Administrator'}</Badge>
+              <Badge tone="accent" className="hidden sm:inline-flex">{isSuperAdmin ? 'Super Admin' : isModerator ? 'Moderator' : 'Admin'}</Badge>
               <MobileNav items={items} secondaryItems={traderTools} />
             </>
           }

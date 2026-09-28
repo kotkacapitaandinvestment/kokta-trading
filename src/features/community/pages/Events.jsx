@@ -31,7 +31,7 @@ export default function Events() {
     <div className="overflow-hidden rounded-2xl border border-ink-100 bg-white dark:border-ink-800 dark:bg-ink-900">
       <div className="border-b border-ink-100 px-5 py-4 dark:border-ink-800">
         <h1 className="text-lg font-semibold tracking-tight text-ink-900 dark:text-ink-50">Market events</h1>
-        <p className="mt-0.5 text-xs text-ink-500 dark:text-ink-400">Every event has a live room. Times are shown in your local time. {data?.coverage}</p>
+        <p className="mt-0.5 text-xs text-ink-500 dark:text-ink-400">Every event has its own live chat. Times are in your local time. {data?.coverage}</p>
         <PushNudge className="mt-3 border-dashed">Get a reminder before events you follow, even with Kotka closed.</PushNudge>
       </div>
       <div className="flex flex-wrap items-center gap-1.5 border-b border-ink-100 px-4 py-2.5 dark:border-ink-800">

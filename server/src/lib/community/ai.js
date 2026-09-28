@@ -30,7 +30,7 @@ Hard rules:
 
 async function nvidia() {
   const integration = await prisma.integration.findUnique({ where: { provider: 'nvidia' } });
-  if (!integration?.enabled || !integration.secretCipher) throw new AiUnavailable('Kotka AI is not connected right now.');
+  if (!integration?.enabled || !integration.secretCipher) throw new AiUnavailable('Kotka AI isn’t available right now. Please try again later.');
   return integration;
 }
 

@@ -23,8 +23,8 @@ export const INSTRUMENTS = [
   { symbol: 'ETHUSD', display: 'ETH/USD', name: 'Ether / US Dollar', market: 'Crypto', ticker: 'X:ETHUSD', decimals: 1, currencies: ['USD'], topics: ['ethereum', 'crypto'] },
   { symbol: 'NAS100', display: 'NAS100', name: 'Nasdaq 100', market: 'Indices', ticker: 'I:NDX', decimals: 1, currencies: ['USD'], topics: ['us-stocks'], pulse: true },
   // Not in the current Massive plan (403). Rooms work; prices are unavailable.
-  { symbol: 'SPX500', display: 'S&P 500', name: 'S&P 500', market: 'Indices', ticker: null, dataNote: 'S&P 500 prices are not included in the current market-data plan.', decimals: 1, currencies: ['USD'], topics: ['us-stocks'] },
-  { symbol: 'US30', display: 'US30', name: 'Dow Jones Industrial Average', market: 'Indices', ticker: null, dataNote: 'Dow Jones prices are not included in the current market-data plan.', decimals: 0, currencies: ['USD'], topics: ['us-stocks'] },
+  { symbol: 'SPX500', display: 'S&P 500', name: 'S&P 500', market: 'Indices', ticker: null, dataNote: 'We don’t have S&P 500 prices yet. The room and chat work as normal.', decimals: 1, currencies: ['USD'], topics: ['us-stocks'] },
+  { symbol: 'US30', display: 'US30', name: 'Dow Jones Industrial Average', market: 'Indices', ticker: null, dataNote: 'We don’t have Dow Jones prices yet. The room and chat work as normal.', decimals: 0, currencies: ['USD'], topics: ['us-stocks'] },
 ];
 
 const BY_SYMBOL = new Map(INSTRUMENTS.map((i) => [i.symbol, i]));
@@ -69,11 +69,11 @@ export function marketStatus(inst, now = new Date()) {
   const minutes = ny.getUTCHours() * 60 + ny.getUTCMinutes();
   if (inst.market === 'Indices') {
     const open = day >= 1 && day <= 5 && minutes >= 570 && minutes < 960;
-    return { open, label: open ? 'Cash session open' : 'Cash session closed', session: open ? 'New York' : null, note: 'Regular New York hours; holidays not accounted for.' };
+    return { open, label: open ? 'Main session open' : 'Main session closed', session: open ? 'New York' : null, note: 'Regular New York trading hours. Holidays aren’t shown.' };
   }
   // FX and metals: Sunday 17:00 to Friday 17:00 New York time.
   const closed = day === 6 || (day === 5 && minutes >= 1020) || (day === 0 && minutes < 1020);
-  if (closed) return { open: false, label: 'Closed for the weekend', session: null, note: 'Reopens Sunday 17:00 New York time.' };
+  if (closed) return { open: false, label: 'Closed for the weekend', session: null, note: 'Reopens Sunday at 5pm New York time.' };
   const utcH = now.getUTCHours();
   const sessions = [];
   if (utcH >= 22 || utcH < 7) sessions.push('Sydney');
@@ -81,7 +81,7 @@ export function marketStatus(inst, now = new Date()) {
   if (utcH >= 7 && utcH < 16) sessions.push('London');
   const nyH = ny.getUTCHours();
   if (nyH >= 8 && nyH < 17) sessions.push('New York');
-  return { open: true, label: 'Open', session: sessions.join(' + ') || null, note: 'Session times are approximate; holidays not accounted for.' };
+  return { open: true, label: 'Open', session: sessions.join(' + ') || null, note: 'Session times are approximate. Holidays aren’t shown.' };
 }
 
 export { DAY_MS };

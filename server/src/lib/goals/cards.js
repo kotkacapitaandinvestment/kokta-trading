@@ -11,7 +11,7 @@
 import { prisma } from '../prisma.js';
 import { BADGES, METRICS, computeStats, goalProgress, isDisciplined, loadContext, monthLabel, monthStats, monthStatus, runEndingAt } from './engine.js';
 
-export const MOTTO = 'DISCIPLINE > RECKLESS RISK';
+export const MOTTO = 'DISCIPLINE OVER RECKLESS RISK';
 const IDENTITY_KEYS = ['name', 'username'];
 
 const periodWord = (days) => (days === 7 ? 'Weekly' : days >= 28 && days <= 31 ? 'Monthly' : `${days}-Day`);
@@ -134,7 +134,7 @@ function achievementModel(a, ctx) {
         subline: s.label,
         sentence: champ ? `{who} was a Consistency Champion in ${s.label}.` : `{who} was among the most improved traders in ${s.label}.`,
         fields: [
-          champ ? f('hero', 'Discipline adherence', `${s.adherence}%`, { kind: 'hero', unit: 'DISCIPLINE ADHERENCE' }) : f('hero', 'Discipline adherence', `${d.from}% → ${d.to}%`, { kind: 'hero', unit: 'DISCIPLINE ADHERENCE' }),
+          champ ? f('hero', 'Discipline', `${s.adherence}%`, { kind: 'hero', unit: 'DISCIPLINE' }) : f('hero', 'Discipline', `${d.from}% → ${d.to}%`, { kind: 'hero', unit: 'DISCIPLINE ADHERENCE' }),
           f('monthCheckins', 'Daily check-ins', String(s.checkins)),
           ...(s.longestStreak ? [f('monthStreak', 'Consistency streak', plural(s.longestStreak, 'day'))] : []),
           f('basis', 'Recognised for', champ ? '15+ check-ins at 90%+ discipline' : '+15 points of discipline month on month', { on: true }),
@@ -153,7 +153,7 @@ function monthModel(m, ctx) {
     f('monthStreak', 'Consistency streak', plural(m.longestStreak, 'day')),
     f('monthCheckins', 'Daily check-ins', String(m.checkins)),
   ];
-  if (m.adherence != null) fields.push(f('monthDiscipline', 'Discipline adherence', `${m.adherence}%`));
+  if (m.adherence != null) fields.push(f('monthDiscipline', 'Discipline', `${m.adherence}%`));
   if (m.learning) fields.push(f('monthLearning', 'Learning activities', String(m.learning)));
   if (m.backtests) fields.push(f('monthBacktests', 'Backtesting sessions', String(m.backtests), { on: false }));
   const badges = (m.badgesEarned ?? []).map((b) => BADGES[b]?.name).filter(Boolean);
@@ -185,7 +185,7 @@ function checkinModel(c, ctx) {
   return {
     eyebrow: `DAY ${n} COMPLETE`,
     icon: 'flame',
-    headline: `${n} consecutive ${n === 1 ? 'check-in' : 'trading-day check-ins'}`,
+    headline: n === 1 ? '1 check-in' : `${n} trading days in a row`,
     sentence: clean ? `Day ${n}: {who} checked in and kept to the plan.` : `Day ${n} of {who}'s check-in streak.`,
     fields,
     date: new Date(`${c.date}T12:00:00Z`),

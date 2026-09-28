@@ -25,11 +25,11 @@ function IdeaStatusEditor({ post, onUpdated }) {
     <div className="space-y-2 rounded-xl border border-ink-100 p-3 dark:border-ink-800">
       <p className="text-xs font-semibold text-ink-700 dark:text-ink-200">Update your idea</p>
       <div className="flex gap-2">
-        <select value={status} onChange={(e) => setStatus(e.target.value)} className="h-9 rounded-lg border border-ink-200 bg-white px-2 text-sm dark:border-ink-700 dark:bg-ink-800" aria-label="Status">
-          <option value="updated">Updated</option>
-          <option value="closed">Closed</option>
-          <option value="invalidated">Invalidated</option>
-          <option value="open">Open</option>
+        <select value={status} onChange={(e) => setStatus(e.target.value)} className="h-9 rounded-lg border border-ink-200 bg-white px-2 text-sm dark:border-ink-700 dark:bg-ink-800" aria-label="What’s changed">
+          <option value="updated">Post an update</option>
+          <option value="closed">Close the idea</option>
+          <option value="invalidated">No longer valid</option>
+          <option value="open">Reopen</option>
         </select>
         <input value={note} onChange={(e) => setNote(e.target.value)} maxLength={1000} placeholder="What changed? (shown to followers)" className="h-9 flex-1 rounded-lg border border-ink-200 bg-white px-3 text-sm dark:border-ink-700 dark:bg-ink-800 dark:text-ink-50" />
         <Button size="sm" onClick={save} disabled={status !== 'open' && !note.trim()}>Save</Button>

@@ -92,7 +92,7 @@ async function fetchFinnhub(key) {
     const list = await fetchJson(`https://finnhub.io/api/v1/news?category=${category}&token=${key}`, { timeoutMs: 15000 }).catch(() => []);
     for (const n of Array.isArray(list) ? list : []) {
       if (!n.headline || !n.url || !n.datetime) continue;
-      out.push({ source: 'finnhub', provider: n.source || 'Finnhub', externalId: `finnhub:${n.id}`, headline: n.headline.slice(0, 300), summary: cleanSummary(n.summary, n.headline), url: n.url, imageUrl: n.image && /^https:\/\//.test(n.image) ? n.image : null, publishedAt: new Date(n.datetime * 1000), official: false, category });
+      out.push({ source: 'finnhub', provider: n.source || 'News wire', externalId: `finnhub:${n.id}`, headline: n.headline.slice(0, 300), summary: cleanSummary(n.summary, n.headline), url: n.url, imageUrl: n.image && /^https:\/\//.test(n.image) ? n.image : null, publishedAt: new Date(n.datetime * 1000), official: false, category });
     }
   }
   return out;

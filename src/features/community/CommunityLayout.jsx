@@ -9,9 +9,9 @@ import Onboarding from './pages/Onboarding';
 import EmptyState from '../../components/ui/EmptyState';
 
 const NAV = [
-  { to: '/app/community', label: 'For You', icon: Sparkles, end: true },
+  { to: '/app/community', label: 'For you', icon: Sparkles, end: true },
   { to: '/app/community/markets', label: 'Markets', icon: Globe2 },
-  { to: '/app/community/ideas', label: 'Ideas', icon: Lightbulb },
+  { to: '/app/community/ideas', label: 'Trade ideas', icon: Lightbulb },
   { to: '/app/community/goals', label: 'Goals', icon: Trophy },
   { to: '/app/community/events', label: 'Events', icon: CalendarDays },
   { to: '/app/community/following', label: 'Following', icon: Users },
@@ -44,21 +44,21 @@ export function Rail() {
             <li key={r.id}>
               <Link to={r.kind === 'room' ? `/app/community/markets/${r.instrument}` : r.kind === 'event' ? `/app/community/events/${r.eventId}` : `/app/community/messages/${r.id}`} className="flex items-center justify-between rounded-lg px-2 py-1.5 text-sm hover:bg-ink-50 dark:hover:bg-ink-800">
                 <span className="truncate font-medium text-ink-800 dark:text-ink-100">{r.display}</span>
-                <span className="shrink-0 text-[11px] tabular-nums text-ink-400">{r.people} discussing</span>
+                <span className="shrink-0 text-[11px] tabular-nums text-ink-400">{r.people} chatting</span>
               </Link>
             </li>
           ))}
         </ul>
         {live?.news?.length ? (
           <div className="mt-3 border-t border-ink-100 pt-3 dark:border-ink-800">
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-400">Developing</p>
+            <p className="text-[11px] font-semibold text-ink-500 dark:text-ink-400">Just in</p>
             {live.news.slice(0, 3).map((n) => <Link key={n.id} to={`/app/community/news/${n.id}`} className="mt-1.5 block text-xs leading-snug text-ink-700 hover:underline dark:text-ink-200">{n.headline}</Link>)}
           </div>
         ) : null}
       </section>
       <section className="rounded-2xl border border-ink-100 bg-white p-4 dark:border-ink-800 dark:bg-ink-900">
         <h2 className="flex items-center gap-2 text-sm font-semibold text-ink-900 dark:text-ink-50"><Flame className="h-4 w-4 text-accent-600" /> Trending now</h2>
-        {trending && !trending.markets.length ? <p className="mt-3 text-xs text-ink-400">Not enough activity yet to rank markets.</p> : null}
+        {trending && !trending.markets.length ? <p className="mt-3 text-xs text-ink-400">Not enough activity yet to show what’s trending.</p> : null}
         <ol className="mt-2 space-y-1">
           {trending?.markets.map((m, i) => (
             <li key={m.symbol}>
@@ -66,7 +66,7 @@ export function Rail() {
                 <span className="w-4 text-right font-mono text-xs text-ink-400">{i + 1}</span>
                 <span className="min-w-0 flex-1">
                   <span className="block font-mono text-sm font-semibold text-ink-900 dark:text-ink-50">{m.display}</span>
-                  <span className="text-[11px] text-ink-400">{[m.participants24h ? `${m.participants24h} traders` : null, m.posts24h ? `${m.posts24h} posts` : null, m.eventToday ? 'event today' : null].filter(Boolean).join(' · ') || 'unusual move'}</span>
+                  <span className="text-[11px] text-ink-400">{[m.participants24h ? `${m.participants24h} traders` : null, m.posts24h ? `${m.posts24h} posts` : null, m.eventToday ? 'event today' : null].filter(Boolean).join(' · ') || 'Bigger move than usual'}</span>
                 </span>
                 {m.changePct != null ? <span className={clsx('font-mono text-xs tabular-nums', m.changePct > 0 ? 'text-profit-600 dark:text-profit-400' : m.changePct < 0 ? 'text-loss-500' : 'text-ink-400')}>{m.changePct > 0 ? '+' : ''}{m.changePct}%</span> : null}
               </Link>
@@ -108,7 +108,7 @@ export default function CommunityLayout() {
         <div className="flex items-center gap-1.5">
           <form onSubmit={(e) => { e.preventDefault(); if (q.trim()) navigate(`/app/community/search?q=${encodeURIComponent(q.trim())}`); }} className="relative flex-1 lg:w-72 lg:flex-none">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-ink-400" />
-            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search: EURUSD author:@name type:idea" className="h-9 w-full rounded-lg border border-ink-200 bg-white pl-9 pr-3 text-sm outline-none focus:border-accent-500 dark:border-ink-700 dark:bg-ink-900 dark:text-ink-50" aria-label="Search Community" />
+            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search markets, traders, ideas…" className="h-9 w-full rounded-lg border border-ink-200 bg-white pl-9 pr-3 text-sm outline-none focus:border-accent-500 dark:border-ink-700 dark:bg-ink-900 dark:text-ink-50" aria-label="Search Community" />
           </form>
           <Link to="/app/community/saved" className="flex h-9 w-9 items-center justify-center rounded-lg text-ink-500 hover:bg-white dark:text-ink-400 dark:hover:bg-ink-800" aria-label="Saved" title="Saved"><Bookmark className="h-4 w-4" /></Link>
           <Link to="/app/community/guidelines" className="flex h-9 w-9 items-center justify-center rounded-lg text-ink-500 hover:bg-white dark:text-ink-400 dark:hover:bg-ink-800" aria-label="Community Guidelines" title="Community Guidelines"><BookOpen className="h-4 w-4" /></Link>

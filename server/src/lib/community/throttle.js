@@ -18,5 +18,6 @@ export async function overLimit(kind, userId) {
   const n = await l.count(userId, new Date(Date.now() - l.windowMs));
   if (n < l.max) return null;
   const mins = Math.round(l.windowMs / 60000);
-  return `You're posting too quickly. Please wait a little (limit: ${l.max} per ${mins >= 60 ? `${mins / 60} hour${mins >= 120 ? 's' : ''}` : `${mins} minute${mins > 1 ? 's' : ''}`}).`;
+  const wait = mins >= 24 * 60 ? 'tomorrow' : mins >= 60 ? 'in a little while' : 'in a minute';
+  return `You’re going a bit fast. Please try again ${wait}.`;
 }

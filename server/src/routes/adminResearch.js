@@ -72,10 +72,10 @@ adminResearchRouter.post('/cron-token', requireRole('super_admin'), asyncHandler
   const url = `${publicAppUrl(req)}${CRON_PATH}`;
   const { configured, apiKey } = await getCronJobOrgKey();
   if (configured && !apiKey) {
-    return res.status(409).json({ error: 'The cron-job.org API key in Integrations is empty or unreadable, so the job could not be updated. The token was not changed.' });
+    return res.status(409).json({ error: 'Kotka couldn’t use the cron-job.org key in Connected services, so nothing was changed. Check the key there. Your current update link still works.' });
   }
   if (!configured && settings.cron.jobId) {
-    return res.status(409).json({ error: `The current token is used by cron-job.org job #${settings.cron.jobId}. Add the cron-job.org API key in Integrations so the job can be updated; the token was not changed.` });
+    return res.status(409).json({ error: 'Your hourly update is set up in cron-job.org. Add its key in Connected services first so Kotka can update it for you. Nothing was changed.' });
   }
 
   if (apiKey) {
@@ -83,7 +83,7 @@ adminResearchRouter.post('/cron-token', requireRole('super_admin'), asyncHandler
     try {
       sync = await syncCronJob({ apiKey, jobId: settings.cron.jobId, url, token });
     } catch (err) {
-      return res.status(502).json({ error: `cron-job.org could not be updated, so the token was not changed: ${err.message}` });
+      return res.status(502).json({ error: 'Kotka couldn’t update cron-job.org, so nothing was changed. Check its key in Connected services and try again.' });
     }
     await saveCronToken(token, req.userId, { jobId: sync.jobId });
     await audit(req, 'research.cron_token_rotated', { targetType: 'cron_job', targetId: String(sync.jobId), detail: { managed: true, created: sync.created } });
@@ -149,20 +149,20 @@ function validateAssessment(body) {
   const currency = String(body.currency ?? '').toUpperCase();
   const factor = String(body.factor ?? '');
   const errors = [];
-  if (!SUPPORTED_CURRENCY_CODES.includes(currency)) errors.push('Unsupported currency.');
-  if (!ASSESSMENT_FACTORS.includes(factor)) errors.push('Unsupported factor.');
-  if (!body.institution?.trim()) errors.push('Institution is required.');
-  if (!body.title?.trim()) errors.push('Title is required.');
-  if (!body.statement?.trim()) errors.push('The statement (quoted or closely summarised from the source) is required.');
+  if (!SUPPORTED_CURRENCY_CODES.includes(currency)) errors.push('Choose a currency from the list.');
+  if (!ASSESSMENT_FACTORS.includes(factor)) errors.push('Choose a topic from the list.');
+  if (!body.institution?.trim()) errors.push('Add the institution.');
+  if (!body.title?.trim()) errors.push('Add a title.');
+  if (!body.statement?.trim()) errors.push('Add the statement, quoted or closely summarised from the report.');
   let url;
   try {
     url = new URL(body.url);
     if (!['http:', 'https:'].includes(url.protocol)) throw new Error();
   } catch {
-    errors.push('A valid source URL is required — Kotka never records an assessment without its original source.');
+    errors.push('Add a working link to the original report. Kotka never records an assessment without its source.');
   }
   const publishedAt = new Date(body.publishedAt);
-  if (Number.isNaN(publishedAt.getTime())) errors.push('Publication date is required.');
+  if (Number.isNaN(publishedAt.getTime())) errors.push('Add the date the report was published.');
   if (factor === 'valuation' && !VALUATION_CLASSES.includes(String(body.classification ?? '').toUpperCase())) errors.push('Valuation assessments need a classification.');
   return {
     errors,
