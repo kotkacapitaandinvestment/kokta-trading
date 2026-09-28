@@ -169,6 +169,12 @@ accountRouter.delete('/', limit('accountDelete'), asyncHandler(async (req, res) 
     const others = await prisma.user.count({ where: { role: 'super_admin', status: 'active', id: { not: user.id } } });
     if (others === 0) return res.status(409).json({ error: 'You are the only Super Admin. Promote someone else before deleting this account.' });
   }
+  // Money first: the Trading Game ledger is kept, but the balance can't be
+  // left behind or a match abandoned by deleting the account.
+  const wallet = await prisma.wallet.findUnique({ where: { userId: user.id } });
+  if (wallet && wallet.availableKobo + wallet.lockedKobo + wallet.pendingWithdrawKobo > 0n) return res.status(409).json({ error: 'Your Trading Game wallet still has money in it. Withdraw it (and wait for any withdrawal or match to finish) before deleting your account.' });
+  const inMatch = await prisma.gamePlayer.count({ where: { userId: user.id, match: { status: { in: ['WAITING_FOR_OPPONENT', 'READY', 'LOCKED', 'COUNTDOWN', 'ACTIVE', 'COMPLETED', 'SCORING', 'SETTLEMENT'] } } } });
+  if (inMatch) return res.status(409).json({ error: 'You’re in a Trading Game match. Finish or cancel it before deleting your account.' });
   await audit(req, 'account.deleted', { targetType: 'user', targetId: user.id, actor: user, detail: { email: user.email, role: user.role } });
   await prisma.follow.deleteMany({ where: { targetType: 'user', targetId: user.id } });
   // Off the newsletter list too.

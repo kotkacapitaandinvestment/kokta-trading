@@ -29,6 +29,8 @@ import { goalsRouter } from './routes/goals.js';
 import { publicAchievementsRouter, achievementPage } from './routes/publicAchievements.js';
 import { usageRouter } from './routes/usage.js';
 import { adminUsageRouter } from './routes/adminUsage.js';
+import { gameRouter, gameWebhookRouter } from './routes/game.js';
+import { adminGameRouter } from './routes/adminGame.js';
 import { requireAuth, requireRole } from './middleware/auth.js';
 import { securityHeaders, sameOriginWrites } from './middleware/security.js';
 import { isAllowedOrigin } from './lib/origins.js';
@@ -42,6 +44,9 @@ app.set('trust proxy', true);
 app.use('/api', securityHeaders);
 // Only Kotka's own sites may call the API with credentials; never reflect any origin.
 app.use(cors({ origin: (origin, cb) => cb(null, !origin || isAllowedOrigin(origin)), credentials: true }));
+// Payment webhooks are verified against the exact bytes sent, so they get
+// the raw body (and no JSON parsing) before anything else.
+app.use('/api/game/webhooks', express.raw({ type: () => true, limit: '1mb' }));
 // Bodies stay small, except the three routes that carry an image as base64.
 const big = express.json({ limit: '6mb' });
 app.use('/api/media', big);
@@ -78,6 +83,9 @@ app.use('/api/admin/kyc', requireAdmin, adminKycRouter);
 app.use('/api/admin/platform', requireAdmin, adminPlatformRouter);
 app.use('/api/admin/usage', requireAdmin, adminUsageRouter);
 app.use('/api/usage', usageRouter);
+app.use('/api/game/webhooks', gameWebhookRouter);
+app.use('/api/game', gameRouter);
+app.use('/api/admin/game', requireAdmin, adminGameRouter);
 app.use('/api/ai', aiRouter);
 app.use('/api/me', meStatsRouter);
 app.use('/api/market', marketDataRouter);
@@ -90,7 +98,8 @@ app.use((err, req, res, next) => {
   if (err?.type === 'entity.too.large') return res.status(413).json({ error: 'That’s too large to send. Try a smaller file.' });
   if (err?.type === 'entity.parse.failed') return res.status(400).json({ error: 'That request wasn’t understood. Please try again.' });
   // Errors marked `expose` carry a message written for people (and a status).
-  if (err?.expose && typeof err.message === 'string' && err.status < 500) return res.status(err.status ?? 400).json({ error: err.message });
+  // (Game and payment errors marked `expose` may be 502/503: still written for people.)
+  if (err?.expose && typeof err.message === 'string') return res.status(err.status ?? 400).json({ error: err.message, ...(err.code ? { code: err.code } : {}) });
   console.error(err);
   res.status(500).json({ error: 'Internal server error' });
 });

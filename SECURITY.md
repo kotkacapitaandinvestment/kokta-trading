@@ -146,13 +146,48 @@ Rate limits stop bursts. Usage limits are separate: they cap how much of a costl
 - The hourly job's token is stored only as a hash and compared in constant time.
 - Git history has been scanned for committed credentials; none were found.
 
-## Payments and webhooks
+## Payments and webhooks (Trading Game)
 
-There is no checkout and no webhook endpoint yet: paid plans are off and Paystack is used only for a connection test. Before checkout is built, it must:
-- verify every payment server-side with Paystack's transaction verification API;
-- verify webhook signatures (HMAC-SHA512 of the raw body with the secret key);
-- reject replays, and make processing idempotent by transaction reference;
-- never trust amounts or status sent by the browser.
+Real money exists only in the Trading Game wallet (`server/src/lib/game/`). Whop is the main provider; Paystack is optional, switched in Admin → Trading Game. Paid plans remain off.
+
+- **Three separate money systems:**
+  - **Naira** moves only through the provider: deposits and withdrawals.
+  - **Kotka Credits** are the wallet balance, 1 credit = ₦1, held in kobo.
+  - **Virtual trading capital** exists only inside a match; it is never stored in a wallet and can never be converted.
+- **Ledger:**
+  - Balances change only in a transaction that locks the wallet row (`SELECT … FOR UPDATE`) and writes an immutable `WalletEntry` recording the balance before and after.
+  - Each entry carries a unique idempotency key: a replayed webhook, a double settlement or a retried request moves money at most once.
+  - Balances can't go below zero.
+  - Stakes move from available to locked when a player enters, so the same money can't be staked or withdrawn twice.
+  - Ledger rows are kept even if an account is deleted, and an account with money in its wallet or a live match can't be deleted.
+- **Deposits:**
+  - Credited only after the provider's API confirms the payment is paid, in NGN, for the exact amount and the matching deposit (Whop Payments API, Paystack transaction verification).
+  - The browser never confirms a payment.
+- **Webhooks:**
+  - Whop uses Standard Webhooks: HMAC-SHA256 of `id.timestamp.body`, keyed by the `ws_…` secret, with a 5-minute tolerance.
+  - Paystack uses HMAC-SHA512 of the raw body.
+  - Both are verified against the raw bytes.
+  - Every delivery is recorded once (`PaymentWebhookEvent`).
+  - The endpoints are exempt from the browser-origin check but require a valid signature.
+- **Withdrawals:**
+  - Requesting one sets the amount aside, so it's no longer available.
+  - By default an admin approves each withdrawal. With automatic approval on, a bank account whose name doesn't match the verified legal name still waits for an admin.
+  - A definite refusal returns the money; a timeout doesn't, until someone confirms with the provider.
+  - Transfers carry the withdrawal id as their idempotency key.
+- **Identity:** stakes, deposits and withdrawals need approved identity verification, which also enforces 18+. Practice needs neither.
+- **Matches:**
+  - The server is the source of truth: it holds the clock, generates the market, executes every order at its own tick, fills stops and targets from the market path, and scores and settles.
+  - Clients send decisions only, never prices, fills or results.
+  - Future market data is never sent.
+  - Settlement:
+    - runs once, under an advisory lock and a row lock, as one transaction;
+    - the market is regenerated from its seed and must match the hash stored at creation, or the match is marked disputed and not settled.
+  - Order timing that claims a future tick is refused and flagged on the match.
+- **Admin controls (all audited):**
+  - switches for competitions, deposits and withdrawals;
+  - withdrawal review;
+  - match dispute and refund (refund is super admin only);
+  - wallet adjustments, with a required reason (super admin only).
 
 ## Audit log
 
@@ -172,6 +207,7 @@ Passwords, tokens and keys are never logged.
 - role and ownership checks, including one-user-reading-another's-data (IDOR) tests;
 - private chat isolation, uploads and headers;
 - Goal Room integrity, share links, Kotka AI isolation and quota;
+- the Trading Game (`game.test.js`): market determinism, same-trade-different-score, stake locking under races, settlement once with the fee, draws and refunds, expiry, anti-cheat, no future data, identity gating, signed and replayed webhooks for Whop and Paystack (stand-in APIs), withdrawals, admin rights and ledger consistency;
 - usage limits: periods, most restrictive wins, overrides, resets, pauses, idempotency, concurrency and admin rights (`usage.test.js`, using a local stand-in for the NVIDIA API);
 - the check that every route requires sign-in.
 

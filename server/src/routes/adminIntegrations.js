@@ -7,6 +7,7 @@ import { nvidiaChatCompletion } from '../lib/nvidia.js';
 import { connection, withModelFallback, effectiveModels, checkModelHealth, modelName, VETTED_MODELS } from '../lib/aiModels.js';
 import { loadSettings as loadResearchSettings } from '../lib/research/settings.js';
 import { paystackTestConnection } from '../lib/paystack.js';
+import { testConnection as whopTestConnection } from '../lib/game/payments/whop.js';
 import { finnhubTestConnection } from '../lib/finnhub.js';
 import { massiveTestConnection } from '../lib/massive.js';
 import { fredTestConnection } from '../lib/research/sources/timeseries.js';
@@ -27,9 +28,9 @@ import { asyncHandler } from '../lib/asyncHandler.js';
 export const adminIntegrationsRouter = Router();
 adminIntegrationsRouter.use(requireAuth, requireRole('super_admin'));
 
-const CONFIG_KEYS = { nvidia: ['model', 'chatFallbacks', 'visionModel', 'visionFallbacks', 'baseUrl'], paystack: [], finnhub: [], massive: [], fred: [], cronjob: [], resend: [], inbox: ['listId', 'senderEmail'] };
+const CONFIG_KEYS = { nvidia: ['model', 'chatFallbacks', 'visionModel', 'visionFallbacks', 'baseUrl'], whop: ['companyId', 'webhookSecret'], paystack: [], finnhub: [], massive: [], fred: [], cronjob: [], resend: [], inbox: ['listId', 'senderEmail'] };
 
-const SERVICE_NAME = { nvidia: 'NVIDIA', paystack: 'Paystack', finnhub: 'Finnhub', massive: 'Massive', fred: 'FRED', cronjob: 'cron-job.org', resend: 'Resend', inbox: 'INBOX' };
+const SERVICE_NAME = { nvidia: 'NVIDIA', whop: 'Whop', paystack: 'Paystack', finnhub: 'Finnhub', massive: 'Massive', fred: 'FRED', cronjob: 'cron-job.org', resend: 'Resend', inbox: 'INBOX' };
 
 const TEST_CONNECTIONS = {
   nvidia: async (row) => {
@@ -56,6 +57,7 @@ const TEST_CONNECTIONS = {
     }
     return message;
   },
+  whop: async (row) => whopTestConnection(decryptSecret(row.secretCipher), row.config?.companyId),
   paystack: async (row) => paystackTestConnection(decryptSecret(row.secretCipher)),
   finnhub: async (row) => finnhubTestConnection(decryptSecret(row.secretCipher)),
   massive: async (row) => massiveTestConnection(decryptSecret(row.secretCipher)),
@@ -70,7 +72,9 @@ function toPublicIntegration(row, extras = {}) {
   return {
     provider: row.provider,
     enabled: row.enabled,
-    config: row.config,
+    // Secrets kept in config (Whop's webhook secret) are encrypted and never sent back.
+    config: Object.fromEntries(Object.entries(row.config ?? {}).filter(([k]) => !k.endsWith('Cipher'))),
+    ...(row.config?.webhookSecretCipher ? { webhookSecretSet: true } : {}),
     publicKey: row.publicKey,
     maskedSecret: row.secretCipher ? maskSecret(decryptSecret(row.secretCipher)) : null,
     updatedAt: row.updatedAt,
@@ -101,6 +105,15 @@ adminIntegrationsRouter.put('/:provider', asyncHandler(async (req, res) => {
     ? Object.fromEntries(Object.entries(req.body.config).filter(([k, v]) => allowed.includes(k) && (typeof v === 'string' ? v.length <= 1000 : ['number', 'boolean'].includes(typeof v))))
     : undefined;
   if (config?.baseUrl && !/^https:\/\/[a-z0-9.-]+(\/[\w./-]*)?$/i.test(config.baseUrl)) return res.status(400).json({ error: 'The address must start with https://' });
+  if (provider === 'whop' && config) {
+    if (config.companyId !== undefined && config.companyId !== '' && !/^biz_[A-Za-z0-9]+$/.test(config.companyId)) return res.status(400).json({ error: 'The Whop company id starts with biz_.' });
+    // The webhook secret is stored encrypted, like the API key.
+    if (typeof config.webhookSecret === 'string' && config.webhookSecret.trim()) {
+      if (!/^(ws|whsec)_[A-Za-z0-9+/=_-]+$/.test(config.webhookSecret.trim())) return res.status(400).json({ error: 'The Whop webhook secret starts with ws_.' });
+      config.webhookSecretCipher = encryptSecret(config.webhookSecret.trim());
+    }
+    delete config.webhookSecret;
+  }
   if (publicKey !== undefined && (typeof publicKey !== 'string' || publicKey.length > 500)) return res.status(400).json({ error: 'That public key doesn’t look right.' });
   const secret = typeof req.body?.secret === 'string' ? req.body.secret.trim() : undefined;
 

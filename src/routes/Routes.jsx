@@ -38,6 +38,12 @@ import AdminVerifications from '../features/admin/AdminVerifications';
 import AdminBilling from '../features/admin/AdminBilling';
 import AdminCommunity from '../features/admin/AdminCommunity';
 import AdminUsage from '../features/admin/AdminUsage';
+import AdminGame from '../features/admin/AdminGame';
+import GameHome from '../features/game/GameHome';
+import GameWallet from '../features/game/Wallet';
+import GameMatch from '../features/game/MatchPage';
+import GameHistory from '../features/game/History';
+import GameProfile from '../features/game/Profile';
 import CommunityLayout from '../features/community/CommunityLayout';
 import ForYou from '../features/community/pages/ForYou';
 import Markets from '../features/community/pages/Markets';
@@ -87,6 +93,12 @@ export default function AppRoutes() {
         <Route path="analytics" element={<Analytics />} />
         <Route path="calculators" element={<Calculators />} />
         <Route path="market" element={<MarketIntelligence />} />
+        <Route path="game" element={<GameHome />} />
+        <Route path="game/wallet" element={<GameWallet />} />
+        <Route path="game/matches/:id" element={<GameMatch />} />
+        <Route path="game/history" element={<GameHistory />} />
+        <Route path="game/profile" element={<GameProfile />} />
+        <Route path="game/traders/:username" element={<GameProfile />} />
         <Route path="settings" element={<Settings />} />
         <Route path="notifications" element={<Notifications />} />
         <Route path="community" element={<CommunityLayout />}>
@@ -117,6 +129,7 @@ export default function AppRoutes() {
         <Route path="users" element={<AdminUsers />} />
         <Route path="verifications" element={<AdminVerifications />} />
         <Route path="usage" element={<AdminUsage />} />
+        <Route path="game" element={<AdminGame />} />
         <Route path="ai-usage" element={<AdminAIUsage />} />
         <Route path="trading-stats" element={<AdminTradingStats />} />
         <Route path="journal-stats" element={<AdminJournalStats />} />

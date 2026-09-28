@@ -88,6 +88,9 @@ const PUBLIC = [
   'GET /api/public/achievements/:slug/image',
   'GET /achievement/:slug',
   'ALL /api/research/cron',
+  // Payment providers, verified by signature instead of a session.
+  'POST /api/game/webhooks/whop',
+  'POST /api/game/webhooks/paystack',
 ];
 
 function mountPath(layer) {

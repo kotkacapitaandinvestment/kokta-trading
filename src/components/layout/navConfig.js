@@ -23,6 +23,7 @@ import {
   UsersRound,
   Target,
   Gauge,
+  Swords,
 } from 'lucide-react';
 
 export const traderNav = [
@@ -34,6 +35,7 @@ export const traderNav = [
   { to: '/app/analytics', label: 'Analytics', icon: BarChart3 },
   { to: '/app/calculators', label: 'Calculators', icon: Calculator },
   { to: '/app/market', label: 'Market Intelligence', icon: Globe2 },
+  { to: '/app/game', label: 'Trading Game', icon: Swords },
   { to: '/app/community', label: 'Community', icon: MessagesSquare },
 ];
 
@@ -50,6 +52,7 @@ export const adminNav = [
   { to: '/admin/announcements', label: 'Announcements', icon: Megaphone },
   { to: '/admin/research', label: 'Fundamental Research', icon: Landmark },
   { to: '/admin/usage', label: 'Usage Control', icon: Gauge },
+  { to: '/admin/game', label: 'Trading Game', icon: Swords },
   { to: '/admin/ai-usage', label: 'AI Usage', icon: Cpu },
   { to: '/admin/trading-stats', label: 'Trading Statistics', icon: LineChart },
   { to: '/admin/journal-stats', label: 'Journal Statistics', icon: NotebookPen },

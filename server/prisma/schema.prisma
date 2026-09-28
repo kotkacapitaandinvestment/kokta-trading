@@ -52,11 +52,11 @@ model User {
   // Security. Sessions issued before sessionsValidAfter are rejected (set on
   // password change and "sign out everywhere"). Two-step verification (TOTP)
   // is optional; the secret is encrypted and recovery codes are stored hashed.
-  sessionsValidAfter  DateTime?
-  mfaSecretCipher     String?
-  mfaEnabledAt        DateTime?
-  mfaRecoveryHashes   String[]  @default([])
-  mfaLastUsedStep     Int?
+  sessionsValidAfter DateTime?
+  mfaSecretCipher    String?
+  mfaEnabledAt       DateTime?
+  mfaRecoveryHashes  String[]  @default([])
+  mfaLastUsedStep    Int?
 
   // Email: confirmed address, and the newsletter choice (opt-in only).
   // newsletterContactId is the contact's id in the INBOX list.
@@ -65,39 +65,46 @@ model User {
   newsletterOptInAt   DateTime?
   newsletterContactId String?
 
-  media               Media[]
-  memberships         ConversationMember[]
-  messages            Message[]
-  messageReactions    MessageReaction[]
-  posts               Post[]
-  comments            Comment[]
-  postReactions       PostReaction[]
-  pollVotes           PollVote[]
-  sentimentVotes      SentimentVote[]
-  follows             Follow[]
-  savedItems          SavedItem[]
-  notifications       Notification[]
-  pushSubscriptions   PushSubscription[]
-  sessions            Session[]
-  emailTokens         EmailToken[]
-  goals               Goal[]
-  goalCheckIns        GoalCheckIn[]
-  achievements        Achievement[]
-  achievementShares   AchievementShare[]
-  reports             Report[]
-  relations           UserRelation[] @relation("relationOwner")
-  relatedBy           UserRelation[] @relation("relationTarget")
-  usageRecords        UsageRecord[]
-  usageOverrides      UsageOverride[]
-  usageResets         UsageReset[]
+  media             Media[]
+  memberships       ConversationMember[]
+  messages          Message[]
+  messageReactions  MessageReaction[]
+  posts             Post[]
+  comments          Comment[]
+  postReactions     PostReaction[]
+  pollVotes         PollVote[]
+  sentimentVotes    SentimentVote[]
+  follows           Follow[]
+  savedItems        SavedItem[]
+  notifications     Notification[]
+  pushSubscriptions PushSubscription[]
+  sessions          Session[]
+  emailTokens       EmailToken[]
+  goals             Goal[]
+  goalCheckIns      GoalCheckIn[]
+  achievements      Achievement[]
+  achievementShares AchievementShare[]
+  reports           Report[]
+  relations         UserRelation[]       @relation("relationOwner")
+  relatedBy         UserRelation[]       @relation("relationTarget")
+  usageRecords      UsageRecord[]
+  usageOverrides    UsageOverride[]
+  usageResets       UsageReset[]
+  wallet            Wallet?
+  deposits          Deposit[]
+  withdrawals       Withdrawal[]
+  payoutAccounts    PayoutAccount[]
+  gamePlayers       GamePlayer[]
+  gameProfile       GameProfile?
+  gameBadges        GameBadge[]
 
   @@index([name(ops: raw("gin_trgm_ops"))], type: Gin, map: "User_name_trgm")
 }
 
 model JournalEntry {
-  id                String   @id @default(cuid())
+  id                String    @id @default(cuid())
   userId            String
-  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   date              String
   market            String
   session           String
@@ -113,12 +120,12 @@ model JournalEntry {
   emotionBefore     String
   emotionAfter      String?
   confidence        Int
-  mistakes          String   @default("")
-  lessons           String   @default("")
-  checklistComplete Boolean  @default(false)
-  positionStatus    String   @default("closed")
+  mistakes          String    @default("")
+  lessons           String    @default("")
+  checklistComplete Boolean   @default(false)
+  positionStatus    String    @default("closed")
   closedAt          DateTime?
-  createdAt         DateTime @default(now())
+  createdAt         DateTime  @default(now())
   // Kotka AI review, generated on request and kept with the entry.
   aiReview          String?
   aiReviewModel     String?
@@ -138,17 +145,17 @@ model ChecklistDay {
 }
 
 model UserSettings {
-  id                String @id @default(cuid())
-  userId            String @unique
-  user              User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  notifications     Json   @default("{\"checklist\": true, \"journal\": true, \"riskWarnings\": true, \"weeklyReview\": true, \"aiInsights\": false}")
-  aiPreferences     Json   @default("{\"tone\": \"Direct & challenging\", \"autoSuggest\": true, \"rememberContext\": true}")
-  tradingPreferences Json  @default("{\"baseCurrency\": \"USD\", \"dailyLossLimit\": 2, \"defaultRisk\": 1}")
+  id                   String @id @default(cuid())
+  userId               String @unique
+  user                 User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  notifications        Json   @default("{\"checklist\": true, \"journal\": true, \"riskWarnings\": true, \"weeklyReview\": true, \"aiInsights\": false}")
+  aiPreferences        Json   @default("{\"tone\": \"Direct & challenging\", \"autoSuggest\": true, \"rememberContext\": true}")
+  tradingPreferences   Json   @default("{\"baseCurrency\": \"USD\", \"dailyLossLimit\": 2, \"defaultRisk\": 1}")
   // Community notification switches and privacy (online status, read
   // receipts, who may message you). Missing keys use the defaults in code.
-  communityPreferences Json @default("{}")
+  communityPreferences Json   @default("{}")
   // Goal Room: { autoPost, showOnProfile }. Missing keys use code defaults.
-  goalRoomPreferences  Json @default("{}")
+  goalRoomPreferences  Json   @default("{}")
 }
 
 model Integration {
@@ -201,13 +208,13 @@ model MarketNewsItem {
 // Legacy: Kotka AI's first usage log. Its rows were copied into UsageRecord on
 // 2026-09-28 and nothing writes here any more. Kept, not dropped.
 model AIUsageLog {
-  id         String   @id @default(cuid())
-  userId     String
-  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  source     String
-  model      String
-  latencyMs  Int
-  createdAt  DateTime @default(now())
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  source    String
+  model     String
+  latencyMs Int
+  createdAt DateTime @default(now())
 
   @@index([userId])
   @@index([createdAt])
@@ -363,8 +370,8 @@ model SimulatorTrade {
   pnl           Float?
   result        String?
   closeReason   String?
-  status        String   @default("open")
-  createdAt     DateTime @default(now())
+  status        String           @default("open")
+  createdAt     DateTime         @default(now())
 
   @@index([sessionId])
 }
@@ -589,27 +596,27 @@ model Media {
 // One model for every place people talk: direct messages, private groups,
 // public/private communities, market rooms and event rooms.
 model Conversation {
-  id            String    @id @default(cuid())
+  id            String       @id @default(cuid())
   kind          String // dm | group | community | room | event
-  visibility    String    @default("private") // public | private | invite_only
-  slug          String?   @unique
+  visibility    String       @default("private") // public | private | invite_only
+  slug          String?      @unique
   name          String?
   description   String?
   imageId       String?
   instrument    String? // market rooms
-  eventId       String?   @unique
+  eventId       String?      @unique
   event         MarketEvent? @relation(fields: [eventId], references: [id], onDelete: SetNull)
-  sendPolicy    String    @default("everyone") // everyone | admins
-  joinPolicy    String    @default("open") // open | approval | invite
-  inviteCode    String?   @unique
-  dmKey         String?   @unique // "<userA>:<userB>" sorted, for one-to-one chats
+  sendPolicy    String       @default("everyone") // everyone | admins
+  joinPolicy    String       @default("open") // open | approval | invite
+  inviteCode    String?      @unique
+  dmKey         String?      @unique // "<userA>:<userB>" sorted, for one-to-one chats
   createdById   String?
-  featured      Boolean   @default(false)
+  featured      Boolean      @default(false)
   archivedAt    DateTime?
   lastMessageAt DateTime?
-  messageCount  Int       @default(0)
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  messageCount  Int          @default(0)
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
 
   members  ConversationMember[]
   messages Message[]
@@ -1098,4 +1105,264 @@ model RealtimeEvent {
   createdAt DateTime @default(now())
 
   @@index([createdAt])
+}
+
+// ── Trading Game (server/src/lib/game/) ─────────────────────────────────────
+// Three money systems that never mix:
+//   1. Naira: real money moving through Whop or Paystack (Deposit, Withdrawal).
+//   2. Kotka Credits: the wallet balance, 1 credit = ₦1, held in kobo
+//      (Wallet, WalletEntry). Only cash credits can be withdrawn.
+//   3. Virtual trading capital: game-only numbers inside a match (GamePlayer),
+//      never stored in a wallet and never convertible.
+
+model GameSettings {
+  id        String   @id @default("singleton")
+  config    Json     @default("{}")
+  updatedAt DateTime @updatedAt
+  updatedBy String?
+}
+
+// One wallet per person, plus one "house" wallet that receives platform
+// fees. Balances are kobo. They change only inside a transaction that also
+// writes a WalletEntry, with the row locked (SELECT ... FOR UPDATE).
+model Wallet {
+  id                  String        @id @default(cuid())
+  kind                String        @default("user") // user | house
+  userId              String?       @unique
+  user                User?         @relation(fields: [userId], references: [id], onDelete: SetNull)
+  availableKobo       BigInt        @default(0)
+  lockedKobo          BigInt        @default(0) // stakes in live competitions
+  pendingWithdrawKobo BigInt        @default(0) // requested withdrawals not yet paid
+  promoAvailableKobo  BigInt        @default(0) // promotional credits: never withdrawable
+  promoLockedKobo     BigInt        @default(0)
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+  entries             WalletEntry[]
+}
+
+// The immutable ledger. Rows are only ever inserted. idempotencyKey makes a
+// money movement happen at most once (a replayed webhook, a double settle).
+model WalletEntry {
+  id              String   @id @default(cuid())
+  walletId        String
+  wallet          Wallet   @relation(fields: [walletId], references: [id], onDelete: Restrict)
+  userId          String?
+  type            String // deposit | stake_lock | stake_release | stake_debit | winnings | draw_return | refund | fee | withdrawal_hold | withdrawal_release | withdrawal_paid | adjustment | promo_credit
+  creditType      String   @default("cash") // cash | promo
+  amountKobo      BigInt // always positive; the deltas give the direction
+  availableDelta  BigInt   @default(0)
+  lockedDelta     BigInt   @default(0)
+  pendingDelta    BigInt   @default(0)
+  availableBefore BigInt
+  availableAfter  BigInt
+  lockedBefore    BigInt
+  lockedAfter     BigInt
+  pendingBefore   BigInt
+  pendingAfter    BigInt
+  currency        String   @default("NGN")
+  status          String   @default("completed")
+  matchId         String?
+  depositId       String?
+  withdrawalId    String?
+  reason          String?
+  idempotencyKey  String   @unique
+  createdBy       String?
+  createdAt       DateTime @default(now())
+
+  @@index([walletId, createdAt])
+  @@index([userId, createdAt])
+  @@index([matchId])
+  @@index([type, createdAt])
+}
+
+model Deposit {
+  id                String    @id @default(cuid())
+  userId            String?
+  user              User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+  provider          String // whop | paystack
+  amountKobo        BigInt
+  currency          String    @default("NGN")
+  status            String    @default("initiated") // initiated | succeeded | failed | expired
+  providerRef       String? // Whop checkout configuration id / Paystack reference
+  providerPaymentId String? // Whop pay_… / Paystack transaction id
+  checkoutUrl       String?
+  failureReason     String?
+  createdAt         DateTime  @default(now())
+  completedAt       DateTime?
+
+  @@unique([provider, providerRef])
+  @@index([userId, createdAt])
+  @@index([status, createdAt])
+}
+
+model Withdrawal {
+  id              String    @id @default(cuid())
+  userId          String?
+  user            User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+  provider        String
+  amountKobo      BigInt
+  currency        String    @default("NGN")
+  status          String    @default("requested") // requested | processing | paid | failed | rejected | cancelled
+  payoutAccountId String?
+  providerRef     String?
+  failureReason   String?
+  reviewedBy      String?
+  reviewedAt      DateTime?
+  reviewNote      String?
+  createdAt       DateTime  @default(now())
+  completedAt     DateTime?
+
+  @@index([userId, createdAt])
+  @@index([status, createdAt])
+}
+
+// Where a person's withdrawals go: a Whop connected account (they finish
+// identity checks and choose a bank on Whop), or a Paystack bank recipient.
+model PayoutAccount {
+  id            String   @id @default(cuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  provider      String
+  externalId    String // Whop biz_… / Paystack RCP_…
+  bankName      String?
+  accountLast4  String?
+  accountName   String?
+  nameMatchesId Boolean?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([userId, provider])
+}
+
+// Each webhook delivery is handled once (providers deliver at least once).
+model PaymentWebhookEvent {
+  id          String    @id // provider:eventId
+  provider    String
+  type        String
+  status      String    @default("received") // received | processed | ignored | failed
+  error       String?
+  receivedAt  DateTime  @default(now())
+  processedAt DateTime?
+}
+
+// A competition (or a solo practice run). The market is regenerated from
+// scenario + seed + generatorVersion whenever it's needed; marketHash proves
+// it is the same path at settlement.
+model GameMatch {
+  id               String                @id @default(cuid())
+  code             String                @unique
+  mode             String                @default("duel") // duel | practice
+  status           String // CREATED | WAITING_FOR_OPPONENT | READY | LOCKED | COUNTDOWN | ACTIVE | COMPLETED | SCORING | SETTLEMENT | SETTLED | CANCELLED | EXPIRED | ABANDONED | DISPUTED | REFUNDED
+  scenario         String
+  scenarioCode     String
+  seed             Int
+  generatorVersion Int
+  marketHash       String
+  durationSec      Int
+  candleSec        Int
+  historyCandles   Int
+  speed            Float                 @default(1)
+  startingCapital  Int
+  stakeKobo        BigInt                @default(0)
+  feeBps           Int                   @default(0)
+  rules            Json                  @default("{}")
+  creatorId        String
+  invitedUserId    String?
+  isOpen           Boolean               @default(false)
+  rematchOfId      String?
+  expiresAt        DateTime?
+  readyBy          DateTime?
+  startsAt         DateTime?
+  endsAt           DateTime?
+  settledAt        DateTime?
+  result           Json?
+  flags            Json                  @default("[]")
+  createdAt        DateTime              @default(now())
+  updatedAt        DateTime              @updatedAt
+  players          GamePlayer[]
+  actions          GameAction[]
+  transitions      GameMatchTransition[]
+
+  @@index([status, createdAt])
+  @@index([creatorId, createdAt])
+  @@index([invitedUserId, status])
+  @@index([isOpen, status])
+}
+
+model GamePlayer {
+  id             String    @id @default(cuid())
+  matchId        String
+  match          GameMatch @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  userId         String?
+  user           User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+  role           String // creator | opponent | solo
+  confirmedAt    DateTime?
+  lastSeenAt     DateTime?
+  finalEquity    Float?
+  returnPct      Float?
+  maxDrawdownPct Float?
+  score          Float?
+  subscores      Json?
+  report         Json?
+  outcome        String? // win | loss | draw | refund | practice
+  payoutKobo     BigInt    @default(0)
+  xpAwarded      Int       @default(0)
+  createdAt      DateTime  @default(now())
+
+  @@unique([matchId, userId])
+  @@index([userId, createdAt])
+}
+
+// Every decision a player sends, stamped with the server's tick. Fills from
+// stops, targets and the end of the match are derived from these and the
+// market, never sent by the client.
+model GameAction {
+  id         String    @id @default(cuid())
+  matchId    String
+  match      GameMatch @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  userId     String
+  seq        Int
+  tick       Int
+  type       String // open | increase | reduce | close | modify
+  payload    Json
+  requestKey String?
+  clientTick Int?
+  createdAt  DateTime  @default(now())
+
+  @@unique([matchId, userId, seq])
+  @@unique([matchId, userId, requestKey])
+  @@index([matchId, tick])
+}
+
+model GameMatchTransition {
+  id        String    @id @default(cuid())
+  matchId   String
+  match     GameMatch @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  fromState String?
+  toState   String
+  actorId   String?
+  reason    String?
+  createdAt DateTime  @default(now())
+
+  @@index([matchId, createdAt])
+}
+
+// Progression is separate from money: XP and levels measure play and learning.
+model GameProfile {
+  userId    String   @id
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  xp        Int      @default(0)
+  level     Int      @default(1)
+  updatedAt DateTime @updatedAt
+}
+
+model GameBadge {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  badge     String
+  matchId   String?
+  awardedAt DateTime @default(now())
+
+  @@unique([userId, badge])
 }

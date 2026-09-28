@@ -99,6 +99,18 @@ const SENTENCE = {
   'usage.override_ended': 'ended someone’s own usage limits',
   'usage.reset': 'reset someone’s usage',
   'usage.settings_updated': 'changed Usage Control settings',
+  'game.settings_updated': 'changed Trading Game settings',
+  'game.withdrawal_approved': 'approved a withdrawal',
+  'game.withdrawal_rejected': 'declined a withdrawal',
+  'game.withdrawal_resolved': 'resolved a withdrawal by hand',
+  'game.match_disputed': 'marked a match as disputed',
+  'game.match_refunded': 'refunded a match',
+  'game.wallet_adjusted': 'adjusted a wallet balance',
+  'game.deposit_started': 'started a deposit',
+  'game.withdrawal_requested': 'requested a withdrawal',
+  'game.payout_account_set': 'set a payout bank account',
+  'game.challenge_created': 'created a Trading Game challenge',
+  'game.challenge_accepted': 'accepted a Trading Game challenge',
 };
 const SECURITY = new Set(['auth.sign_in_failed', 'auth.sign_in_blocked', 'auth.sign_in_refused', 'account.password_changed', 'account.deleted', 'auth.password_reset', 'auth.recovery_code_used', 'account.mfa_disabled', 'account.sessions_revoked']);
 
@@ -194,7 +206,22 @@ function detailText(log) {
     case 'usage.reset':
       return [d.label, d.period === 'day' ? 'today' : d.period === 'week' ? 'this week' : 'this month', d.reason ? `“${d.reason}”` : null].filter(Boolean).join(' · ');
     case 'usage.settings_updated':
+    case 'game.settings_updated':
       return changes(d);
+    case 'game.withdrawal_approved':
+    case 'game.withdrawal_requested':
+    case 'game.deposit_started':
+      return [d.amountKobo != null ? `₦${(d.amountKobo / 100).toLocaleString('en-NG')}` : null, d.provider, d.status].filter(Boolean).join(' · ');
+    case 'game.withdrawal_rejected':
+    case 'game.withdrawal_resolved':
+      return [d.amountKobo != null ? `₦${(d.amountKobo / 100).toLocaleString('en-NG')}` : null, d.outcome, d.note ? `“${d.note}”` : null].filter(Boolean).join(' · ');
+    case 'game.wallet_adjusted':
+      return [`₦${((d.amountKobo ?? 0) / 100).toLocaleString('en-NG')}`, d.reason ? `“${d.reason}”` : null].filter(Boolean).join(' · ');
+    case 'game.match_disputed':
+    case 'game.match_refunded':
+      return d.reason ? `“${d.reason}”` : '';
+    case 'game.challenge_created':
+      return [d.stakeKobo != null ? `₦${(d.stakeKobo / 100).toLocaleString('en-NG')} stake` : null, d.open ? 'open challenge' : 'direct challenge'].filter(Boolean).join(' · ');
     default:
       return '';
   }
@@ -209,7 +236,8 @@ const AREAS = [
   { value: 'journal.', label: 'Trading journal' },
   { value: 'goals.', label: 'Goal Room' },
   { value: 'community.joined,community.username_,community.posted,community.idea_posted,community.post_deleted,community.reported,community.blocked_user,community.muted_user', label: 'Community' },
-  { value: 'user.,platform.,integration.,research.,announcement.,usage.,kyc.viewed,kyc.approved,kyc.rejected,community.post_removed,community.message_removed,community.room_,community.event_,community.remove,community.restore,community.mute,community.unmute,community.suspend,community.ban,community.reinstate,community.dismiss,community.post_featured,community.post_unfeatured', label: 'Admin actions' },
+  { value: 'game.', label: 'Trading Game' },
+  { value: 'user.,platform.,integration.,research.,announcement.,usage.,game.settings_,game.withdrawal_approved,game.withdrawal_rejected,game.withdrawal_resolved,game.match_,game.wallet_adjusted,kyc.viewed,kyc.approved,kyc.rejected,community.post_removed,community.message_removed,community.room_,community.event_,community.remove,community.restore,community.mute,community.unmute,community.suspend,community.ban,community.reinstate,community.dismiss,community.post_featured,community.post_unfeatured', label: 'Admin actions' },
 ];
 
 function ago(at) {

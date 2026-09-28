@@ -1,4 +1,4 @@
-import { Sparkles, CreditCard, Globe2, Landmark, CalendarClock, Mail } from 'lucide-react';
+import { Sparkles, CreditCard, Globe2, Landmark, CalendarClock, Mail, Wallet } from 'lucide-react';
 
 export const INTEGRATION_PROVIDERS = [
   {
@@ -50,12 +50,25 @@ export const INTEGRATION_PROVIDERS = [
     ],
   },
   {
+    id: 'whop',
+    name: 'Whop',
+    category: 'Payments',
+    icon: Wallet,
+    description: 'The main way money goes in and out of Trading Game wallets: deposits by checkout, withdrawals to each trader’s Whop payout account.',
+    fallbackNote: 'Without it (and without Paystack switched on in Admin → Trading Game), deposits and withdrawals say they aren’t set up yet. Practice matches still work.',
+    fields: [
+      { key: 'secret', label: 'API key', type: 'password', placeholder: 'Your Whop company API key', hint: 'Whop dashboard → Developer → API keys. It needs checkout, payments, companies, account links and transfers permissions.' },
+      { key: 'config.companyId', label: 'Company id', type: 'text', placeholder: 'Starts with biz_', hint: 'Whop dashboard → Settings. Payouts come from this company’s balance.' },
+      { key: 'config.webhookSecret', label: 'Webhook secret', type: 'password', placeholder: 'Starts with ws_', hint: 'From the webhook you create in Whop pointing at https://www.kotkafinance.online/api/game/webhooks/whop (events payment.succeeded and payment.failed). Stored encrypted.' },
+    ],
+  },
+  {
     id: 'paystack',
     name: 'Paystack',
     category: 'Payments',
     icon: CreditCard,
-    description: 'Takes payments for Premium once paid plans launch.',
-    fallbackNote: 'Without it, traders can’t upgrade or pay, and billing options stay hidden.',
+    description: 'An optional second way to pay into and out of Trading Game wallets (switch it on in Admin → Trading Game).',
+    fallbackNote: 'Without it, Whop is the only payment option.',
     fields: [
       { key: 'secret', label: 'Secret key', type: 'password', placeholder: 'Starts with sk_live_ (or sk_test_ for testing)', hint: 'Paystack dashboard → Settings → API keys.' },
       { key: 'publicKey', label: 'Public key', type: 'text', placeholder: 'Starts with pk_live_ (or pk_test_)' },

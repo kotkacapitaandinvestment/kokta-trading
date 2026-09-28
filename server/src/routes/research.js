@@ -11,6 +11,7 @@ import { loadAppSettings, paidFeatureLocked } from '../lib/appSettings.js';
 import { reserveUsage, settleUsage, usageSnapshot, withUsageContext, clientRequestKey, metered, DUPLICATE_REQUEST } from '../lib/usage/index.js';
 import { warmInstrumentBars } from '../lib/marketPulse.js';
 import { runCommunityJobs } from '../lib/community/jobs.js';
+import { sweep as sweepGameMatches } from '../lib/game/matches.js';
 import { cryptoContext, CRYPTO } from '../lib/research/crypto.js';
 import { instrument } from '../lib/instruments.js';
 
@@ -36,6 +37,8 @@ researchRouter.all('/cron', asyncHandler(async (req, res) => {
   if (settings.enabled) jobs.push(warm.then(() => runCronBatch()).catch((err) => console.error('Research cron batch failed:', err)));
   else jobs.push(warm);
   jobs.push(runCommunityJobs().catch((err) => console.error('Community jobs failed:', err)));
+  // Trading Game: expire, start and settle anything that's due.
+  jobs.push(sweepGameMatches().catch((err) => console.error('Game sweep failed:', err)));
   waitUntil(Promise.all(jobs));
   res.status(202).json({
     ok: true,

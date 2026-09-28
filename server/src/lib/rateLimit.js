@@ -35,6 +35,12 @@ export const LIMITS = {
   profile: [30, 3600e3],
   conversationWrite: [120, 3600e3],
   emailSend: [5, 3600e3],
+  gameAction: [40, 60e3],
+  gameCreate: [30, 3600e3],
+  deposit: [10, 3600e3],
+  depositCheck: [60, 3600e3],
+  withdrawal: [10, 3600e3],
+  payoutSetup: [10, 3600e3],
 };
 
 function prune() {

@@ -19,14 +19,15 @@ export function securityHeaders(req, res, next) {
 
 const UNSAFE = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 // Machine-to-machine endpoints authenticated by their own token, not cookies.
-const EXEMPT = [/^\/api\/research\/cron\/?$/];
+const EXEMPT = [/^\/api\/research\/cron\/?$/, /^\/api\/game\/webhooks\/(whop|paystack)\/?$/];
 
 // Cross-site request forgery: state-changing requests must come from one of
 // Kotka's own pages. Browsers always send Origin on these requests, and
 // Sec-Fetch-Site when they can't; a cookie-bearing request from another site
 // is refused. (Session cookies are also SameSite=Lax.)
 export function sameOriginWrites(req, res, next) {
-  if (!UNSAFE.has(req.method) || EXEMPT.some((re) => re.test(req.path))) return next();
+  // Mounted under /api, so match on the full URL (req.path drops the mount).
+  if (!UNSAFE.has(req.method) || EXEMPT.some((re) => re.test(req.originalUrl.split('?')[0]))) return next();
   const origin = req.get('origin');
   if (origin) {
     // Same-origin requests: the page's origin equals this host.
