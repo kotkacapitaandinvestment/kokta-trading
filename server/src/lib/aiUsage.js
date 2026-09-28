@@ -10,14 +10,9 @@
 import { prisma } from './prisma.js';
 import { loadAppSettings, aiDailyLimitFor, PAID_ROLES } from './appSettings.js';
 
-const COUNTED = ['nvidia', 'pending'];
-
-export function logUsage(userId, source, model, startedAt) {
-  const latencyMs = Date.now() - startedAt;
-  prisma.aIUsageLog.create({ data: { userId, source, model, latencyMs } }).catch((err) => {
-    console.error('Failed to record AI usage log:', err.message);
-  });
-}
+// 'abandoned' = a reservation never settled (e.g. the function was stopped);
+// it still counts, so a lost update can never make an answer free.
+const COUNTED = ['nvidia', 'pending', 'abandoned'];
 
 // Daily limits reset at midnight UTC.
 export function startOfUtcDay(d = new Date()) {
@@ -51,8 +46,9 @@ export async function reserveAiUse(userId) {
   return prisma.$transaction(async (tx) => {
     // Serialises this user's reservations across every server instance.
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`kotka-ai:${userId}`}))`;
-    // A request that died mid-answer (e.g. a timeout) doesn't count forever.
-    await tx.aIUsageLog.updateMany({ where: { userId, source: 'pending', createdAt: { lt: new Date(Date.now() - 10 * 60e3) } }, data: { source: 'error' } });
+    // Reservations older than 10 minutes were never settled; mark them so
+    // they stop looking in progress (they keep counting).
+    await tx.aIUsageLog.updateMany({ where: { userId, source: 'pending', createdAt: { lt: new Date(Date.now() - 10 * 60e3) } }, data: { source: 'abandoned' } });
     const usageToday = await countToday(tx, userId);
     const usage = { usageToday, ...limits };
     if (limitReached(usage)) return { usage, reservation: null };
@@ -61,10 +57,12 @@ export async function reserveAiUse(userId) {
   }, { maxWait: 15000, timeout: 20000 });
 }
 
-// source: 'nvidia' (answered, counted), 'error' / 'unavailable' (not counted).
-export function settleAiUse(reservation, source, model, startedAt) {
+// source: 'nvidia' (answered, counted), 'error' / 'unavailable' / 'cached'
+// (not counted). Awaited before the response ends: on serverless, work left
+// running after the response may never finish.
+export async function settleAiUse(reservation, source, model, startedAt) {
   if (!reservation) return;
-  prisma.aIUsageLog
+  await prisma.aIUsageLog
     .update({ where: { id: reservation }, data: { source, model: String(model ?? 'none').slice(0, 120), latencyMs: Date.now() - startedAt } })
     .catch((err) => console.error('Failed to settle AI usage:', err.message));
 }

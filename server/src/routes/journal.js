@@ -180,11 +180,11 @@ journalRouter.post('/:id/review', limit('aiBurst', { message: 'You’re asking K
     }));
   } catch (err) {
     console.error('Journal review failed:', err.message);
-    settleAiUse(reservation, 'error', 'none', startedAt);
+    await settleAiUse(reservation, 'error', 'none', startedAt);
     return res.status(502).json({ error: 'Kotka AI could not review this trade right now. Try again shortly.' });
   }
 
-  settleAiUse(reservation, 'nvidia', model, startedAt);
+  await settleAiUse(reservation, 'nvidia', model, startedAt);
   const updated = await prisma.journalEntry.update({ where: { id: entry.id }, data: { aiReview: review, aiReviewModel: model, aiReviewAt: new Date() } });
   res.json({ entry: updated });
 }));

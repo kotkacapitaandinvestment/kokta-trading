@@ -205,7 +205,7 @@ aiRouter.post('/conversations/:id/messages', limit('aiBurst', { message: 'You’
     writeEvent(res, { type: 'delta', text: reply });
     const saved = await prisma.aIMessage.create({ data: { conversationId: conversation.id, role: 'assistant', content: reply } });
     await prisma.aIConversation.update({ where: { id: conversation.id }, data: { updatedAt: new Date() } });
-    settleAiUse(reservation, 'unavailable', 'none', startedAt);
+    await settleAiUse(reservation, 'unavailable', 'none', startedAt);
     writeEvent(res, { type: 'done', messageId: saved.id });
     return res.end();
   }
@@ -337,7 +337,7 @@ aiRouter.post('/conversations/:id/messages', limit('aiBurst', { message: 'You’
     if (!full.trim()) throw new Error('NVIDIA API error (502): the model returned an empty reply');
     const saved = await prisma.aIMessage.create({ data: { conversationId: conversation.id, role: 'assistant', content: full } });
     await prisma.aIConversation.update({ where: { id: conversation.id }, data: { updatedAt: new Date() } });
-    settleAiUse(reservation, 'nvidia', model, startedAt);
+    await settleAiUse(reservation, 'nvidia', model, startedAt);
     writeEvent(res, { type: 'done', messageId: saved.id });
   } catch (err) {
     console.error('NVIDIA streaming completion failed:', err.message);
@@ -345,11 +345,11 @@ aiRouter.post('/conversations/:id/messages', limit('aiBurst', { message: 'You’
       const reply = 'Kotka AI is having a moment. Please try again in a minute.';
       writeEvent(res, { type: 'delta', text: reply });
       const saved = await prisma.aIMessage.create({ data: { conversationId: conversation.id, role: 'assistant', content: reply } });
-      settleAiUse(reservation, 'error', model ?? 'none', startedAt);
+      await settleAiUse(reservation, 'error', model ?? 'none', startedAt);
       writeEvent(res, { type: 'done', messageId: saved.id });
     } else {
       const saved = await prisma.aIMessage.create({ data: { conversationId: conversation.id, role: 'assistant', content: full } });
-      settleAiUse(reservation, 'nvidia', model ?? 'unknown', startedAt);
+      await settleAiUse(reservation, 'nvidia', model ?? 'unknown', startedAt);
       writeEvent(res, { type: 'error', message: 'Stream interrupted, but the partial reply was saved.' });
       writeEvent(res, { type: 'done', messageId: saved.id });
     }

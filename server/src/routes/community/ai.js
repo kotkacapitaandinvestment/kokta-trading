@@ -29,11 +29,11 @@ function aiAction(handler) {
     const started = Date.now();
     try {
       const out = await handler(req, res);
-      if (out === undefined) return settleAiUse(reservation, 'error', 'none', started); // handler already responded
-      settleAiUse(reservation, out.charged === false ? 'cached' : 'nvidia', out.result?.model ?? 'community', started);
+      if (out === undefined) return void (await settleAiUse(reservation, 'error', 'none', started)); // handler already responded
+      await settleAiUse(reservation, out.charged === false ? 'cached' : 'nvidia', out.result?.model ?? 'community', started);
       res.json({ result: out.result, cached: !!out.cached });
     } catch (err) {
-      settleAiUse(reservation, 'error', 'none', started);
+      await settleAiUse(reservation, 'error', 'none', started);
       if (err instanceof AiUnavailable) return res.status(503).json({ error: err.message });
       console.error('Community AI failed:', err.message);
       res.status(502).json({ error: 'Kotka AI could not complete that right now. Try again shortly.' });
