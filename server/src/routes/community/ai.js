@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { prisma } from '../../lib/prisma.js';
 import { asyncHandler } from '../../lib/asyncHandler.js';
 import { cachedSource } from '../../lib/research/cache.js';
-import { reserveAiUse, settleAiUse } from '../../lib/aiUsage.js';
+import { reserveUsage, settleUsage, withUsageContext, clientRequestKey, DUPLICATE_REQUEST } from '../../lib/usage/index.js';
 import { hit, LIMITS } from '../../lib/rateLimit.js';
 import { instrument, instrumentView, marketStatus } from '../../lib/instruments.js';
 import { instrumentMarketData } from '../../lib/marketPulse.js';
@@ -17,28 +17,33 @@ import { requireProfile } from './context.js';
 
 export const aiRouter = Router();
 
-// Wraps an AI action: burst limit, daily cap (reserved up front so parallel
-// requests can't overshoot it), usage accounting, friendly failures. Cached
+// Wraps an AI action: burst limit, then Kotka AI usage (reserved up front so
+// parallel requests can't overshoot a limit), friendly failures. Cached
 // answers cost nothing and release the reservation.
-function aiAction(handler) {
-  return asyncHandler(async (req, res) => {
-    const [max, windowMs] = LIMITS.communityAi;
-    if (await hit(`communityAi:${req.me.id}`, max, windowMs)) return res.status(429).json({ error: 'You’re asking Kotka AI a lot right now. Please wait a few minutes.' });
-    const { usage, reservation } = await reserveAiUse(req.me.id);
-    if (!reservation) return res.status(429).json({ error: "You’ve used today’s Kotka AI requests. More become available overnight.", ...usage });
-    const started = Date.now();
-    try {
-      const out = await handler(req, res);
-      if (out === undefined) return void (await settleAiUse(reservation, 'error', 'none', started)); // handler already responded
-      await settleAiUse(reservation, out.charged === false ? 'cached' : 'nvidia', out.result?.model ?? 'community', started);
-      res.json({ result: out.result, cached: !!out.cached });
-    } catch (err) {
-      await settleAiUse(reservation, 'error', 'none', started);
-      if (err instanceof AiUnavailable) return res.status(503).json({ error: err.message });
-      console.error('Community AI failed:', err.message);
-      res.status(502).json({ error: 'Kotka AI could not complete that right now. Try again shortly.' });
-    }
-  });
+function aiAction(action, handler) {
+  return asyncHandler((req, res) =>
+    withUsageContext(async () => {
+      const [max, windowMs] = LIMITS.communityAi;
+      if (await hit(`communityAi:${req.me.id}`, max, windowMs)) return res.status(429).json({ error: 'You’re asking Kotka AI a lot right now. Please wait a few minutes.', code: 'rate_limited' });
+      const usage = await reserveUsage({ userId: req.me.id, feature: 'kotka_ai', action, requestKey: clientRequestKey(req, 'kotka_ai', action), role: req.userRole });
+      if (!usage.ok) return res.status(usage.status).json(usage.body);
+      if (!usage.reservation) return res.status(409).json(DUPLICATE_REQUEST);
+      const { reservation } = usage;
+      try {
+        const out = await handler(req, res);
+        // The handler already answered (nothing to do), so the model wasn't asked.
+        if (out === undefined) return void (await settleUsage(reservation, 'released'));
+        if (out.charged === false) await settleUsage(reservation, 'released', { metadata: { cached: true } });
+        else await settleUsage(reservation, 'consumed', { model: out.result?.model });
+        res.json({ result: out.result, cached: !!out.cached });
+      } catch (err) {
+        await settleUsage(reservation, 'failed');
+        if (err instanceof AiUnavailable) return res.status(503).json({ error: err.message });
+        console.error('Community AI failed:', err.message);
+        res.status(502).json({ error: 'Kotka AI could not complete that right now. Try again shortly.' });
+      }
+    }),
+  );
 }
 
 async function transcriptOf(messages) {
@@ -49,7 +54,7 @@ async function transcriptOf(messages) {
 }
 
 // Summarise a conversation (or one thread), or the comments on a post.
-aiRouter.post('/ai/summarize', requireProfile, aiAction(async (req, res) => {
+aiRouter.post('/ai/summarize', requireProfile, aiAction('community_summary', async (req, res) => {
   if (req.body?.postId) {
     const post = await prisma.post.findUnique({ where: { id: String(req.body.postId) }, include: { idea: true } });
     if (!post || post.deletedAt || post.removedAt) return void res.status(404).json({ error: 'We couldn’t find that post. It may have been deleted.' });
@@ -83,7 +88,7 @@ aiRouter.post('/ai/summarize', requireProfile, aiAction(async (req, res) => {
   return { result: data, cached, charged: !cached };
 }));
 
-aiRouter.post('/ai/challenge', requireProfile, aiAction(async (req, res) => {
+aiRouter.post('/ai/challenge', requireProfile, aiAction('community_challenge', async (req, res) => {
   const post = await prisma.post.findUnique({ where: { id: String(req.body?.postId ?? '') }, include: { idea: true } });
   if (!post?.idea || post.deletedAt || post.removedAt) return void res.status(404).json({ error: 'We couldn’t find that trade idea. It may have been deleted.' });
   const key = `community:challenge:${post.id}:${post.idea.statusChangedAt?.toISOString() ?? post.createdAt.toISOString()}`;
@@ -91,7 +96,7 @@ aiRouter.post('/ai/challenge', requireProfile, aiAction(async (req, res) => {
   return { result: data, cached, charged: !cached };
 }));
 
-aiRouter.post('/ai/explain-news', requireProfile, aiAction(async (req, res) => {
+aiRouter.post('/ai/explain-news', requireProfile, aiAction('community_news', async (req, res) => {
   const n = await prisma.newsItem.findUnique({ where: { id: String(req.body?.newsId ?? '') } });
   if (!n) return void res.status(404).json({ error: 'We couldn’t find that news story. It may have been removed.' });
   if (n.explanation) return { result: n.explanation, cached: true, charged: false };
@@ -101,7 +106,7 @@ aiRouter.post('/ai/explain-news', requireProfile, aiAction(async (req, res) => {
 }));
 
 // Chart images come from message or post attachments the viewer can see.
-aiRouter.post('/ai/analyze-chart', requireProfile, aiAction(async (req, res) => {
+aiRouter.post('/ai/analyze-chart', requireProfile, aiAction('community_chart', async (req, res) => {
   const mediaId = String(req.body?.mediaId ?? '');
   const media = await prisma.media.findUnique({ where: { id: mediaId } });
   if (!media || media.kind !== 'image') return void res.status(404).json({ error: 'We couldn’t find that image. It may have been deleted.' });
@@ -121,7 +126,7 @@ aiRouter.post('/ai/analyze-chart', requireProfile, aiAction(async (req, res) => 
   return { result: data, cached, charged: !cached };
 }));
 
-aiRouter.post('/ai/fact-check', requireProfile, aiAction(async (req, res) => {
+aiRouter.post('/ai/fact-check', requireProfile, aiAction('community_fact_check', async (req, res) => {
   const type = String(req.body?.targetType ?? '');
   const id = String(req.body?.targetId ?? '');
   let text = '';

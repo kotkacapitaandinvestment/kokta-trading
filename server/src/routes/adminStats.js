@@ -12,28 +12,44 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 const daysAgo = (n) => new Date(Date.now() - n * DAY_MS);
 const startOfDay = (d = new Date()) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
 
+// Kotka AI requests from the usage ledger (every attempt except ones
+// refused over a limit).
+const cachedAnswer = (r) => r.metadata?.cached === true || r.metadata?.source === 'cached';
+function aiOutcome(r) {
+  if (r.status === 'consumed') return r.model ?? 'Answered (model not recorded)';
+  if (r.status === 'released') return cachedAnswer(r) ? 'Answered from a recent result' : 'Not answered (Kotka AI was unavailable)';
+  if (r.status === 'failed') return 'Not answered (Kotka AI had a problem)';
+  if (r.status === 'pending') return 'In progress';
+  return 'Interrupted';
+}
+
 adminStatsRouter.get('/ai-usage', asyncHandler(async (req, res) => {
   const since30d = daysAgo(30);
   const todayStart = startOfDay();
+  const attempts = { feature: 'kotka_ai', status: { not: 'blocked' } };
 
   const [logs30d, requestsToday] = await Promise.all([
-    prisma.aIUsageLog.findMany({ where: { createdAt: { gte: since30d } } }),
-    prisma.aIUsageLog.count({ where: { createdAt: { gte: todayStart } } }),
+    prisma.usageRecord.findMany({ where: { ...attempts, createdAt: { gte: since30d } }, select: { status: true, model: true, latencyMs: true, metadata: true } }),
+    prisma.usageRecord.count({ where: { ...attempts, createdAt: { gte: todayStart } } }),
   ]);
 
   const totalRequests = logs30d.length;
-  const avgLatencyMs = totalRequests ? Math.round(logs30d.reduce((s, l) => s + l.latencyMs, 0) / totalRequests) : 0;
-  const liveCount = logs30d.filter((l) => l.source === 'nvidia' || l.source === 'cached').length;
+  const timed = logs30d.filter((l) => l.latencyMs !== null);
+  const avgLatencyMs = timed.length ? Math.round(timed.reduce((s, l) => s + l.latencyMs, 0) / timed.length) : 0;
+  const liveCount = logs30d.filter((l) => l.status === 'consumed' || (l.status === 'released' && cachedAnswer(l))).length;
 
   const byModel = {};
   for (const l of logs30d) {
-    const key = l.source === 'nvidia' ? l.model : l.source === 'cached' ? 'Answered from a recent result' : l.source === 'pending' ? 'In progress' : l.source === 'abandoned' ? 'Interrupted' : 'Not answered (Kotka AI was unavailable)';
-    if (!byModel[key]) byModel[key] = { model: key, requests: 0, totalLatency: 0 };
+    const key = aiOutcome(l);
+    if (!byModel[key]) byModel[key] = { model: key, requests: 0, timed: 0, totalLatency: 0 };
     byModel[key].requests += 1;
-    byModel[key].totalLatency += l.latencyMs;
+    if (l.latencyMs !== null) {
+      byModel[key].timed += 1;
+      byModel[key].totalLatency += l.latencyMs;
+    }
   }
   const models = Object.values(byModel)
-    .map((m) => ({ model: m.model, requests: m.requests, avgLatencyMs: Math.round(m.totalLatency / m.requests) }))
+    .map((m) => ({ model: m.model, requests: m.requests, avgLatencyMs: m.timed ? Math.round(m.totalLatency / m.timed) : 0 }))
     .sort((a, b) => b.requests - a.requests);
 
   res.json({
@@ -109,7 +125,7 @@ adminStatsRouter.get('/overview', asyncHandler(async (req, res) => {
     prisma.user.count({ where: { createdAt: { gte: since30d } } }),
     prisma.user.count({ where: { lastLoginAt: { gte: todayStart } } }),
     prisma.user.count({ where: { lastLoginAt: { gte: since30d } } }),
-    prisma.aIUsageLog.count({ where: { createdAt: { gte: todayStart } } }),
+    prisma.usageRecord.count({ where: { feature: 'kotka_ai', status: { not: 'blocked' }, createdAt: { gte: todayStart } } }),
     prisma.journalEntry.count({ where: { createdAt: { gte: since30d } } }),
   ]);
 
@@ -125,7 +141,7 @@ adminStatsRouter.get('/overview', asyncHandler(async (req, res) => {
     prisma.kycProfile.count({ where: { status: 'pending' } }),
     prisma.user.count({ where: { createdAt: { gte: daysAgo(7) } } }),
   ]);
-  const aiUsageCount30d = await prisma.aIUsageLog.count({ where: { createdAt: { gte: since30d } } });
+  const aiUsageCount30d = await prisma.usageRecord.count({ where: { feature: 'kotka_ai', status: { not: 'blocked' }, createdAt: { gte: since30d } } });
   const checklistDays30d = await prisma.checklistDay.count({ where: { date: { gte: since30d.toISOString().slice(0, 10) } } });
 
   res.json({

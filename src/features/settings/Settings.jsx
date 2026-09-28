@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import clsx from 'clsx';
-import { User, Lock, BadgeCheck, Bell, Palette, Sparkles, LineChart, AlertTriangle, CheckCircle2, AlertCircle, Clock3, MessagesSquare, Camera, Loader2 } from 'lucide-react';
+import { User, Lock, BadgeCheck, Bell, Palette, Sparkles, LineChart, AlertTriangle, CheckCircle2, AlertCircle, Clock3, MessagesSquare, Camera, Loader2, Gauge } from 'lucide-react';
 import PageHeader from '../../components/ui/PageHeader';
 import Card from '../../components/ui/Card';
 import Input, { Select } from '../../components/ui/Input';
@@ -16,6 +16,7 @@ import { api } from '../../lib/api';
 import PushSettings from './PushSettings';
 import { DevicesSection, TwoStepSection } from './SecuritySettings';
 import EmailSettings from './EmailSettings';
+import UsageSettings from './UsageSettings';
 import { uploadAvatar, removeAvatar } from '../../lib/avatar';
 import { useCommunity } from '../community/CommunityContext';
 
@@ -27,6 +28,7 @@ const sections = [
   { id: 'community', label: 'Community', icon: MessagesSquare },
   { id: 'theme', label: 'Theme', icon: Palette },
   { id: 'ai', label: 'Kotka AI', icon: Sparkles },
+  { id: 'usage', label: 'Usage', icon: Gauge },
   { id: 'trading', label: 'Trading', icon: LineChart },
   { id: 'account', label: 'Delete account', icon: AlertTriangle },
 ];
@@ -452,6 +454,7 @@ export default function Settings() {
             </div>
           ) : null}
           {active === 'verification' ? <VerificationSection /> : null}
+          {active === 'usage' ? <UsageSettings /> : null}
           {active === 'community' ? <CommunitySection /> : null}
           {active === 'account' ? <DeleteAccountSection /> : null}
 

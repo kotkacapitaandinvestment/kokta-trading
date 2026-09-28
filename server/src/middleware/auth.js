@@ -82,6 +82,9 @@ export function requireAuth(req, res, next) {
       }
     }
     req.userId = payload.sub;
+    // From the database (cached ~60s), never the client. Usage Control uses it
+    // for the staff exemption.
+    req.userRole = access.role;
     pruneSessions();
     if (memoryHit(`api:${payload.sub}`, PER_USER_PER_MINUTE, 60e3)) return res.status(429).json({ error: 'You’re going a bit fast. Please wait a moment and try again.', code: 'rate_limited' });
     if (!access.active) {

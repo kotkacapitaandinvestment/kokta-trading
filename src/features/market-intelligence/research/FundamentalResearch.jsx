@@ -19,6 +19,8 @@ import SourcesSection, { FreshnessStrip } from './SourcesSection';
 import { Chapter, txt } from './primitives';
 import { ReadingGuide, ReportNav } from './ReportNav';
 import CryptoView from './CryptoView';
+import UsageMeter from '../../../components/UsageMeter';
+import { useFeatureUsage, usageNote } from '../../../lib/usage';
 
 function InstrumentPicker({ config, value, onChange }) {
   const pill = (subject, label) => (
@@ -199,9 +201,12 @@ export default function FundamentalResearch({ instrument, onInstrumentChange }) 
 }
 
 function ResearchView({ config, subject, onInstrumentChange }) {
-  const { status, report, freshness, history, error, steps, refreshing, notice, refresh } = useResearch(subject);
+  const { usage, refresh: refreshUsage } = useFeatureUsage('fundamental_research');
+  const { status, report, freshness, history, error, steps, refreshing, notice, refresh } = useResearch(subject, { onUsed: refreshUsage });
   const isAdmin = config.access.isAdmin;
-  const canRefresh = isAdmin || freshness?.stale || !report;
+  // Report updates left (Usage Control); reading saved reports is never limited.
+  const usageBlocked = !!usage && !usage.exempt && (usage.paused || usage.headline?.remaining === 0);
+  const canRefresh = !usageBlocked && (isAdmin || freshness?.stale || !report);
 
   return (
     <div className="space-y-5">
@@ -210,7 +215,7 @@ function ResearchView({ config, subject, onInstrumentChange }) {
         <div className="mt-4 flex flex-col gap-3 border-t border-ink-100 pt-4 dark:border-ink-800 lg:flex-row lg:items-center lg:justify-between">
           <FreshnessStrip freshness={freshness} report={report} />
           <div className="flex shrink-0 flex-wrap items-center gap-2 sm:gap-3">
-            {config.usage?.limit !== null && config.usage?.limit !== undefined ? <span className="mr-auto whitespace-nowrap text-[11px] text-ink-400 lg:mr-0">{config.usage.refreshesToday} of {config.usage.limit} updates used today</span> : null}
+            <UsageMeter usage={usage} className="mr-auto text-[11px] lg:mr-0" />
             {report ? (
               <Button
                 as={Link}
@@ -228,9 +233,9 @@ function ResearchView({ config, subject, onInstrumentChange }) {
               icon={refreshing ? Loader2 : RefreshCw}
               disabled={refreshing || !canRefresh}
               onClick={() => refresh({ force: isAdmin && !freshness?.stale })}
-              title={canRefresh ? undefined : 'This report is up to date. It updates automatically when new data is due.'}
+              title={canRefresh ? undefined : usageBlocked ? usageNote(usage)?.text : 'This report is up to date. It updates automatically when new data is due.'}
             >
-              {refreshing ? 'Researching' : isAdmin && !freshness?.stale && report ? 'Force refresh' : canRefresh ? 'Refresh' : 'Up to date'}
+              {refreshing ? 'Researching' : usageBlocked ? (usage.paused ? 'Updates paused' : 'Limit reached') : isAdmin && !freshness?.stale && report ? 'Force refresh' : canRefresh ? 'Refresh' : 'Up to date'}
             </Button>
           </div>
         </div>
@@ -241,6 +246,11 @@ function ResearchView({ config, subject, onInstrumentChange }) {
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
           <span>{notice}</span>
         </div>
+      ) : usageNote(usage) && !refreshing ? (
+        <p className="text-xs text-ink-500 dark:text-ink-400" role="status">
+          {usageNote(usage).text}
+          {usageBlocked ? ' You can still read the last saved report.' : ''}
+        </p>
       ) : null}
 
       {refreshing ? <ProgressPanel steps={steps} notice={notice} /> : null}

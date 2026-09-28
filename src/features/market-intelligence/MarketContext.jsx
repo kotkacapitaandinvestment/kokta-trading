@@ -1,11 +1,16 @@
 import { useEffect, useState } from 'react';
 import clsx from 'clsx';
-import { ArrowDownRight, ArrowUpRight, CalendarDays, ExternalLink } from 'lucide-react';
+import { ArrowDownRight, ArrowUpRight, CalendarDays, ExternalLink, Gauge, PauseCircle } from 'lucide-react';
 import { api } from '../../lib/api';
 import { safeHref } from '../../lib/safeHref';
 import { txt } from './research/primitives';
 import InfoTip from '../../components/ui/InfoTip';
 import EmptyState from '../../components/ui/EmptyState';
+
+// A load that was refused (usage limit, feature paused, too fast) says why;
+// anything else gets the fallback.
+const loadError = (err, fallback) => (['usage_limit', 'feature_paused', 'rate_limited'].includes(err?.code) ? { code: err.code, text: err.message } : { code: null, text: fallback });
+const ERROR_TITLE = { usage_limit: 'Market Intelligence limit reached', feature_paused: 'Temporarily unavailable', rate_limited: 'One moment' };
 
 const REGIME_TONE = {
   Normal: 'bg-ink-100 text-ink-600 dark:bg-ink-800 dark:text-ink-300',
@@ -89,13 +94,17 @@ function PulseTile({ item, onSelect }) {
   );
 }
 
-export function MarketPulse({ onSelect }) {
+export function MarketPulse({ onSelect, onLoaded }) {
   const [pulse, setPulse] = useState(null);
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    api.get('/market/pulse').then(setPulse).catch(() => setError('Couldn’t load market prices. Refresh the page to try again.'));
-  }, []);
+    api
+      .get('/market/pulse')
+      .then(setPulse)
+      .catch((err) => setError(loadError(err, 'Couldn’t load market prices. Refresh the page to try again.')))
+      .finally(() => onLoaded?.());
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const closeDate = pulse?.instruments?.find((i) => i.available)?.closeDate;
 
@@ -114,12 +123,19 @@ export function MarketPulse({ onSelect }) {
             : 'Prices as of the last daily close, not live'}
         </p>
       </div>
-      {error ? <p className="text-sm text-loss-500">{error}</p> : null}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-        {pulse
-          ? pulse.instruments.map((item) => <PulseTile key={item.symbol} item={item} onSelect={onSelect} />)
-          : Array.from({ length: 6 }, (_, i) => <div key={i} className="h-[9.5rem] animate-pulse rounded-xl bg-white dark:bg-ink-900" />)}
-      </div>
+      {error ? (
+        error.code ? (
+          <EmptyState size="page" icon={error.code === 'feature_paused' ? PauseCircle : Gauge} title={ERROR_TITLE[error.code]} description={error.text} />
+        ) : (
+          <p className="text-sm text-loss-500">{error.text}</p>
+        )
+      ) : (
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+          {pulse
+            ? pulse.instruments.map((item) => <PulseTile key={item.symbol} item={item} onSelect={onSelect} />)
+            : Array.from({ length: 6 }, (_, i) => <div key={i} className="h-[9.5rem] animate-pulse rounded-xl bg-white dark:bg-ink-900" />)}
+        </div>
+      )}
     </section>
   );
 }
@@ -128,13 +144,17 @@ function dayKey(iso) {
   return new Date(iso).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
 }
 
-export function ReleaseCalendar({ days = 14 }) {
+export function ReleaseCalendar({ days = 14, onLoaded }) {
   const [cal, setCal] = useState(null);
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    api.get(`/market/calendar?days=${days}`).then(setCal).catch(() => setError('Couldn’t load the calendar. Refresh the page to try again.'));
-  }, [days]);
+    api
+      .get(`/market/calendar?days=${days}`)
+      .then(setCal)
+      .catch((err) => setError(loadError(err, 'Couldn’t load the calendar. Refresh the page to try again.')))
+      .finally(() => onLoaded?.());
+  }, [days]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const groups = [];
   for (const e of cal?.events ?? []) {
@@ -155,7 +175,7 @@ export function ReleaseCalendar({ days = 14 }) {
       </div>
 
       <div className="max-h-[15.5rem] flex-1 overflow-y-auto scrollbar-thin px-4">
-        {error ? <p className="py-6 text-sm text-loss-500">{error}</p> : null}
+        {error ? <p className={clsx('py-6 text-sm', error.code ? 'text-ink-500 dark:text-ink-400' : 'text-loss-500')}>{error.text}</p> : null}
         {!cal && !error ? (
           <div className="space-y-2 py-4">
             {[0, 1, 2, 3].map((i) => <div key={i} className="h-10 animate-pulse rounded-lg bg-ink-50 dark:bg-ink-800" />)}

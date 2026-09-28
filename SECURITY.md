@@ -86,7 +86,7 @@ Email support@kotkafinance.online with "Security" in the subject. Include what y
 - The system prompt sets trust boundaries. Tool results, news, research text and other traders' posts are data, not instructions. The model can't claim permissions or reveal its prompt. Community AI actions have the same rules.
 - **Cost controls:**
   - A per-user burst limit.
-  - A daily cap, reserved up front under a per-user Postgres advisory lock, so parallel requests can't slip past it.
+  - Usage limits (see below), reserved up front under a per-user Postgres advisory lock, so parallel requests can't slip past them.
   - Messages up to 6,000 characters, chats limited to the last 30 messages, and only the newest image sent in full.
   - Images are cleaned and limited to PNG, JPEG or WebP under 4 MB.
 
@@ -100,6 +100,28 @@ Email support@kotkafinance.online with "Security" in the subject. Include what y
 - password change, two-step verification, KYC submission and account deletion.
 
 Posts, comments, messages, reports and uploads have their own content-based limits (`server/src/lib/community/throttle.js`). There is also a per-instance ceiling of 300 requests per minute per user, and per-IP ceilings on sign-in and public pages.
+
+## Usage limits
+
+Rate limits stop bursts. Usage limits are separate: they cap how much of a costly feature one person uses in a day, week or month. Kotka is free, and everyone has the same limits (`server/src/lib/usage/`, set by admins in Admin → Usage Control).
+
+- **What is metered.** The routes name the feature and action; nothing the client sends can change them or the number of units.
+  - Kotka AI: chat messages, chart readings, trade reviews and the five Community AI actions. One request is one unit, whatever it looks up to answer.
+  - Market Intelligence: fresh loads of prices, the calendar or a crypto overview. Reloading the same view within 15 minutes counts once.
+  - Fundamental Research: report updates that actually run.
+- **Enforcement** happens on the server only. A request first checks the feature's emergency switch, then the limits:
+  - day, week and month, for the feature and for the action; the most restrictive wins;
+  - a person's own override, if active, replaces the default;
+  - admins and super admins are exempt by default, and their use is still recorded.
+
+  It then reserves a `pending` row in the `UsageRecord` ledger. All of this runs under a per-person, per-feature `pg_advisory_xact_lock`, so parallel requests can't pass a limit.
+- **Periods are UTC:** days from 00:00 UTC, ISO weeks from Monday 00:00 UTC, months from the 1st at 00:00 UTC. The browser never decides when usage resets.
+- **What counts.**
+  - Counted: the work happened, or a reservation was never settled (an interrupted request counts, so it can't be used for free use).
+  - Not counted: refused requests, provider or server failures, and answers from a cache. They stay in the ledger as `blocked`, `failed` or `released`.
+- **Idempotency.** An `Idempotency-Key` header (or the 15-minute view key) is stored per person. A repeat of counted work isn't charged again; a repeat of failed work may retry.
+- **Admin resets** add a `UsageReset` row; counting restarts from it, and ledger rows are never deleted by Kotka. Every limit, pause, override, reset and settings change is written to the audit log.
+- **Future plans.** Limits have a `scope` (`default` today), so plan-specific limits can be added later without changing the engine.
 
 ## Browser protections
 
@@ -150,6 +172,7 @@ Passwords, tokens and keys are never logged.
 - role and ownership checks, including one-user-reading-another's-data (IDOR) tests;
 - private chat isolation, uploads and headers;
 - Goal Room integrity, share links, Kotka AI isolation and quota;
+- usage limits: periods, most restrictive wins, overrides, resets, pauses, idempotency, concurrency and admin rights (`usage.test.js`, using a local stand-in for the NVIDIA API);
 - the check that every route requires sign-in.
 
 They create and delete their own data. **They refuse to run against production**: they need `KOTKA_TEST_DB=1` and a `DATABASE_URL` for a separate database, such as a Neon branch.

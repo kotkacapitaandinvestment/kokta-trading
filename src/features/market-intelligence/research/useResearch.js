@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from '../../../lib/api';
+import { refusalText, requestKey } from '../../../lib/usage';
 
 // Loads the cached report for an instrument. If it is missing or stale, a
 // refresh is requested; the server only runs new research when the cache has
 // actually expired, so opening the page never triggers redundant runs.
-export function useResearch(subject, { autoRefresh = true } = {}) {
+// onUsed runs after an update request finishes, so usage shown elsewhere can refresh.
+export function useResearch(subject, { autoRefresh = true, onUsed } = {}) {
   const [state, setState] = useState({ status: 'loading', report: null, freshness: null, history: [], error: null });
   const [steps, setSteps] = useState([]);
   const [refreshing, setRefreshing] = useState(false);
@@ -53,14 +55,16 @@ export function useResearch(subject, { autoRefresh = true } = {}) {
         const res = await fetch(`/api/research/${subject}/refresh`, {
           method: 'POST',
           credentials: 'include',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', 'Idempotency-Key': requestKey() },
           body: JSON.stringify({ force }),
         });
         if (res.status === 409) return pollUntilDone();
         if (!res.ok) {
           const data = await res.json().catch(() => ({}));
-          setNotice(data.error ?? 'Couldn’t update the report. Try again in a few minutes.');
+          // A usage limit or a pause: the saved report stays readable.
+          setNotice(data.code === 'usage_limit' ? `${refusalText(data)} You can still read the last saved report.` : data.error ?? 'Couldn’t update the report. Try again in a few minutes.');
           setRefreshing(false);
+          onUsed?.();
           return;
         }
         const isStream = res.headers.get('content-type')?.includes('ndjson');
@@ -102,12 +106,13 @@ export function useResearch(subject, { autoRefresh = true } = {}) {
           }
         }
         setRefreshing(false);
+        onUsed?.();
       } catch {
         setNotice('Couldn’t update right now. You’re seeing the last saved report.');
         setRefreshing(false);
       }
     },
-    [subject, pollUntilDone],
+    [subject, pollUntilDone, onUsed],
   );
 
   useEffect(() => {

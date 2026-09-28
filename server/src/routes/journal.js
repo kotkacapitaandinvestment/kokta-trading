@@ -5,7 +5,8 @@ import { asyncHandler } from '../lib/asyncHandler.js';
 import { auditLater } from '../lib/audit.js';
 import { nvidiaChatCompletion } from '../lib/nvidia.js';
 import { connection, withModelFallback } from '../lib/aiModels.js';
-import { reserveAiUse, settleAiUse, tonePreference } from '../lib/aiUsage.js';
+import { tonePreference } from '../lib/aiUsage.js';
+import { reserveUsage, settleUsage, withUsageContext, clientRequestKey, DUPLICATE_REQUEST } from '../lib/usage/index.js';
 import { limit } from '../lib/rateLimit.js';
 
 export const journalRouter = Router();
@@ -141,20 +142,24 @@ function describeRecord(entries) {
   ].filter(Boolean).join('\n');
 }
 
-journalRouter.post('/:id/review', limit('aiBurst', { message: 'You’re asking Kotka AI a lot right now. Please wait a moment.' }), asyncHandler(async (req, res) => {
+// A trade review is one Kotka AI request ('trade_review').
+journalRouter.post('/:id/review', limit('aiBurst', { message: 'You’re asking Kotka AI a lot right now. Please wait a moment.' }), asyncHandler((req, res) => withUsageContext(() => reviewTrade(req, res))));
+
+async function reviewTrade(req, res) {
   const entry = await prisma.journalEntry.findUnique({ where: { id: req.params.id } });
   if (!entry || entry.userId !== req.userId) return res.status(404).json({ error: 'Journal entry not found.' });
 
   const integration = await prisma.integration.findUnique({ where: { provider: 'nvidia' } });
   if (!integration?.enabled || !integration.secretCipher) return res.status(503).json({ error: 'Kotka AI isn’t available right now. Please try again later.' });
 
-  const { usage, reservation } = await reserveAiUse(req.userId);
-  if (!reservation) return res.status(429).json({ error: "You’ve used today’s Kotka AI requests. More become available overnight.", ...usage });
+  const usage = await reserveUsage({ userId: req.userId, feature: 'kotka_ai', action: 'trade_review', requestKey: clientRequestKey(req, 'kotka_ai', 'trade_review'), role: req.userRole });
+  if (!usage.ok) return res.status(usage.status).json(usage.body);
+  if (!usage.reservation) return res.status(409).json(DUPLICATE_REQUEST);
+  const { reservation } = usage;
 
   const recent = await prisma.journalEntry.findMany({ where: { userId: req.userId, id: { not: entry.id } }, orderBy: { date: 'desc' }, take: 30 });
   const tone = await tonePreference(req.userId);
   const { apiKey, baseUrl } = connection(integration);
-  const startedAt = Date.now();
 
   let review;
   let model;
@@ -180,11 +185,11 @@ journalRouter.post('/:id/review', limit('aiBurst', { message: 'You’re asking K
     }));
   } catch (err) {
     console.error('Journal review failed:', err.message);
-    await settleAiUse(reservation, 'error', 'none', startedAt);
+    await settleUsage(reservation, 'failed');
     return res.status(502).json({ error: 'Kotka AI could not review this trade right now. Try again shortly.' });
   }
 
-  await settleAiUse(reservation, 'nvidia', model, startedAt);
+  await settleUsage(reservation, 'consumed', { model });
   const updated = await prisma.journalEntry.update({ where: { id: entry.id }, data: { aiReview: review, aiReviewModel: model, aiReviewAt: new Date() } });
   res.json({ entry: updated });
-}));
+}

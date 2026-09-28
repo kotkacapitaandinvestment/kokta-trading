@@ -37,6 +37,7 @@ import AdminResearch from '../features/admin/AdminResearch';
 import AdminVerifications from '../features/admin/AdminVerifications';
 import AdminBilling from '../features/admin/AdminBilling';
 import AdminCommunity from '../features/admin/AdminCommunity';
+import AdminUsage from '../features/admin/AdminUsage';
 import CommunityLayout from '../features/community/CommunityLayout';
 import ForYou from '../features/community/pages/ForYou';
 import Markets from '../features/community/pages/Markets';
@@ -115,6 +116,7 @@ export default function AppRoutes() {
         <Route path="overview" element={<AdminOverview />} />
         <Route path="users" element={<AdminUsers />} />
         <Route path="verifications" element={<AdminVerifications />} />
+        <Route path="usage" element={<AdminUsage />} />
         <Route path="ai-usage" element={<AdminAIUsage />} />
         <Route path="trading-stats" element={<AdminTradingStats />} />
         <Route path="journal-stats" element={<AdminJournalStats />} />

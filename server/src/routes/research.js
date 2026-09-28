@@ -8,6 +8,7 @@ import { loadSettings, publicSettings, verifyCronToken } from '../lib/research/s
 import { latestReport, freshnessOf, activeRun, runResearch, reportHistory, runCronBatch, ResearchError } from '../lib/research/engine.js';
 import { checkModelHealth } from '../lib/aiModels.js';
 import { loadAppSettings, paidFeatureLocked } from '../lib/appSettings.js';
+import { reserveUsage, settleUsage, usageSnapshot, withUsageContext, clientRequestKey, metered, DUPLICATE_REQUEST } from '../lib/usage/index.js';
 import { warmInstrumentBars } from '../lib/marketPulse.js';
 import { runCommunityJobs } from '../lib/community/jobs.js';
 import { cryptoContext, CRYPTO } from '../lib/research/crypto.js';
@@ -58,15 +59,6 @@ async function accessFor(userId, settings) {
   return { allowed: true, isAdmin };
 }
 
-function startOfUtcDay() {
-  const d = new Date();
-  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
-}
-
-async function refreshesToday(userId) {
-  return prisma.researchRun.count({ where: { userId, trigger: 'user', startedAt: { gte: startOfUtcDay() } } });
-}
-
 function subjectAllowed(parsed, settings) {
   if (!parsed) return false;
   if (parsed.kind === 'currency') return settings.currencies.includes(parsed.subject);
@@ -82,18 +74,31 @@ researchRouter.get('/config', asyncHandler(async (req, res) => {
     currencies: settings.currencies.map((c) => ({ code: c, name: CURRENCIES[c].name, economy: CURRENCIES[c].economy, centralBank: CURRENCIES[c].centralBank.name })),
     // Crypto has no issuing economy, so it gets a data context, not a score.
     crypto: Object.keys(CRYPTO).map((s) => ({ symbol: s, display: instrument(s).display, name: instrument(s).name })),
-    usage: { refreshesToday: await refreshesToday(req.userId), limit: access.isAdmin ? null : settings.userRefreshLimitPerDay },
+    usage: await researchUsage(req),
   });
 }));
 
-researchRouter.get('/crypto/:symbol', asyncHandler(async (req, res) => {
-  const settings = await loadSettings();
-  const access = await accessFor(req.userId, settings);
-  if (!access.allowed) return res.status(403).json({ error: access.reason });
-  const ctx = await cryptoContext(req.params.symbol);
-  if (!ctx) return res.status(404).json({ error: 'We don’t cover that crypto pair yet.' });
-  res.json(ctx);
-}));
+// Report updates used and left (Usage Control). refreshesToday/limit: the
+// older app's fields, for copies still open in a browser.
+async function researchUsage(req) {
+  const [u] = await usageSnapshot(req.userId, { role: req.userRole, features: ['fundamental_research'] });
+  return { ...u, refreshesToday: u.periods.day.used, limit: u.periods.day.limit };
+}
+
+// The crypto overview is a Market Intelligence view (one per pair, counted
+// once per 15 minutes). Access and coverage are checked before counting.
+researchRouter.get(
+  '/crypto/:symbol',
+  asyncHandler(async (req, res, next) => {
+    const access = await accessFor(req.userId, await loadSettings());
+    if (!access.allowed) return res.status(403).json({ error: access.reason });
+    const inst = instrument(req.params.symbol);
+    if (!inst || !CRYPTO[inst.symbol]) return res.status(404).json({ error: 'We don’t cover that crypto pair yet.' });
+    req.cryptoSymbol = inst.symbol;
+    next();
+  }),
+  metered('market_intelligence', 'crypto_context', (req) => cryptoContext(req.cryptoSymbol), { view: (req) => req.cryptoSymbol }),
+);
 
 researchRouter.get('/:subject', asyncHandler(async (req, res) => {
   const settings = await loadSettings();
@@ -117,7 +122,11 @@ researchRouter.get('/:subject', asyncHandler(async (req, res) => {
 
 // Streams NDJSON progress events. Serves the cached report unless it is stale
 // (or an admin forces a refresh), so opening a page never triggers a full run.
-researchRouter.post('/:subject/refresh', asyncHandler(async (req, res) => {
+// Only a run that actually happens is a Fundamental Research report update;
+// a cached answer, a refused request and a failed run cost nothing.
+researchRouter.post('/:subject/refresh', asyncHandler((req, res) => withUsageContext(() => refreshReport(req, res))));
+
+async function refreshReport(req, res) {
   const settings = await loadSettings();
   const access = await accessFor(req.userId, settings);
   if (!access.allowed) return res.status(403).json({ error: access.reason });
@@ -131,10 +140,10 @@ researchRouter.post('/:subject/refresh', asyncHandler(async (req, res) => {
   if (existing && !freshness.stale && !force) {
     return res.json({ type: 'done', cached: true, report: existing.payload, freshness });
   }
-  if (!access.isAdmin && (await refreshesToday(req.userId)) >= settings.userRefreshLimitPerDay) {
-    return res.status(429).json({ error: `You’ve used today’s ${settings.userRefreshLimitPerDay} report updates. You can still read the last saved report.` });
-  }
   if (await activeRun(parsed.subject)) return res.status(409).json({ error: 'in_progress', message: 'Research for this instrument is already running.' });
+  const usage = await reserveUsage({ userId: req.userId, feature: 'fundamental_research', action: 'report_update', requestKey: clientRequestKey(req, 'fundamental_research', 'report_update'), role: req.userRole, metadata: { subject: parsed.subject } });
+  if (!usage.ok) return res.status(usage.status).json({ ...usage.body, error: `${usage.body.error} You can still read the last saved report.` });
+  if (!usage.reservation) return res.status(409).json(DUPLICATE_REQUEST);
 
   res.setHeader('Content-Type', 'application/x-ndjson');
   res.setHeader('Cache-Control', 'no-cache');
@@ -149,14 +158,16 @@ researchRouter.post('/:subject/refresh', asyncHandler(async (req, res) => {
       bypassCache: force && !!req.body?.bypassCache,
       onStep: write,
     });
+    await settleUsage(usage.reservation, 'consumed');
     write({ type: 'done', cached: false, report: row.payload, freshness: freshnessOf(row, settings) });
   } catch (err) {
+    await settleUsage(usage.reservation, 'failed', { metadata: { error: err.code ?? 'failed' } });
     const message = err instanceof ResearchError ? err.message : 'Research run failed. The previous report (if any) is still available.';
     if (!(err instanceof ResearchError)) console.error('Research run failed:', err);
     write({ type: 'error', code: err.code ?? 'failed', message });
   }
   res.end();
-}));
+}
 
 researchRouter.get('/:subject/history', asyncHandler(async (req, res) => {
   const settings = await loadSettings();

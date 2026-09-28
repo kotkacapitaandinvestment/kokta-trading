@@ -13,6 +13,8 @@ import { markets, timeframes } from './options';
 import { api } from '../../lib/api';
 import { compressImage } from '../community/util';
 import { toast } from '../../lib/dialogs';
+import UsageMeter from '../../components/UsageMeter';
+import { usageNote, actionReached, refusalText, requestKey, whenItResets } from '../../lib/usage';
 
 // Starting points that show what Kotka can read. Each is answered from live
 // app data, not general knowledge.
@@ -24,12 +26,6 @@ const SUGGESTIONS = [
   'What changed in the US dollar research recently?',
   'How am I doing against my risk rules today?',
 ];
-
-// Daily message allowance refreshes at midnight UTC; say when that is locally.
-const RESET_AT = (() => {
-  const d = new Date();
-  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() + 1)).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-})();
 
 export default function KotkaAI() {
   const [conversations, setConversations] = useState(null);
@@ -83,10 +79,10 @@ export default function KotkaAI() {
 
   const active = conversations?.find((c) => c.id === activeId) ?? null;
   const activeMessages = activeId ? messagesCache[activeId] ?? [] : [];
-  const limitReached = usage && usage.usageLimit != null && usage.usageToday >= usage.usageLimit;
-  const limitMessage = usage?.limitKind === 'plan'
-    ? `You've used today's ${usage.usageLimit} free messages. More at ${RESET_AT} your time.`
-    : `You've used today's ${usage?.usageLimit} messages. More at ${RESET_AT} your time.`;
+  // Limits and pauses come from the server (Usage Control); this only shows them.
+  const limitReached = !!usage && (usage.paused || usage.headline?.remaining === 0);
+  const chartLimit = actionReached(usage, 'chart_analysis');
+  const note = usageNote(usage);
 
   const handleNew = () => {
     api.post('/ai/conversations', { market }).then(({ conversation }) => {
@@ -138,16 +134,18 @@ export default function KotkaAI() {
       const res = await fetch(`/api/ai/conversations/${conversationId}/messages`, {
         method: 'POST',
         credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'Idempotency-Key': requestKey() },
         body: JSON.stringify({ content, image, timeframe }),
       });
 
-      if (res.status === 429) {
+      // Refused before Kotka AI ran: a usage limit, a pause, or too many too fast.
+      if (res.status === 429 || res.status === 503 || res.status === 409) {
         const data = await res.json().catch(() => ({}));
-        setUsage((prev) => ({ ...(prev ?? {}), usageToday: data.usageToday ?? prev?.usageToday, usageLimit: data.usageLimit ?? prev?.usageLimit, limitKind: data.limitKind ?? prev?.limitKind }));
+        api.get('/ai/usage').then(setUsage).catch(() => {});
+        const text = refusalText(data) ?? 'Kotka AI couldn’t take that message right now. Please try again in a moment.';
         setMessagesCache((prev) => ({
           ...prev,
-          [conversationId]: [...prev[conversationId], { id: `local-limit-${Date.now()}`, role: 'assistant', content: `You've used today's messages. More at ${RESET_AT} your time.` }],
+          [conversationId]: [...prev[conversationId], { id: `local-limit-${Date.now()}`, role: 'assistant', content: text }],
         }));
         return;
       }
@@ -299,11 +297,7 @@ export default function KotkaAI() {
                   {lastSource && lastSource !== 'nvidia' ? (
                     <Badge tone="warning">{lastSource === 'vision_unconfigured' ? 'Chart reading is off right now' : 'Kotka AI is having trouble. Try again soon.'}</Badge>
                   ) : null}
-                  {usage && usage.usageLimit != null ? (
-                    <span className="text-xs tabular-nums text-ink-400" title={`Messages refresh at ${RESET_AT} your time`}>
-                      {Math.max(0, usage.usageLimit - usage.usageToday)} message{usage.usageLimit - usage.usageToday === 1 ? '' : 's'} left today
-                    </span>
-                  ) : null}
+                  <UsageMeter usage={usage} />
                   <button onClick={handleToggleFavorite} className="text-ink-300 hover:text-amber-400" aria-label={active.favorite ? 'Remove from favourites' : 'Add to favourites'} title={active.favorite ? 'Remove from favourites' : 'Add to favourites'}>
                     <Star className={active.favorite ? 'h-4 w-4 fill-amber-400 text-amber-400' : 'h-4 w-4'} />
                   </button>
@@ -344,8 +338,10 @@ export default function KotkaAI() {
               </div>
 
               <div className="border-t border-ink-100 p-3 dark:border-ink-800">
-                {limitReached ? (
-                  <p className="mb-2 text-xs text-loss-500">{limitMessage}</p>
+                {note ? (
+                  <p className={note.tone === 'loss' ? 'mb-2 text-xs text-loss-500' : note.tone === 'warning' ? 'mb-2 text-xs text-amber-600 dark:text-amber-400' : 'mb-2 text-xs text-ink-500 dark:text-ink-400'} role="status">{note.text}</p>
+                ) : chartLimit ? (
+                  <p className="mb-2 text-xs text-ink-500 dark:text-ink-400" role="status">You’ve reached your limit for chart readings. It resets {whenItResets(chartLimit.headline.resetAt)}. Questions without a chart still work in a new chat.</p>
                 ) : null}
                 {pendingImage ? (
                   <div className="mb-2 flex items-center gap-2">
@@ -365,7 +361,7 @@ export default function KotkaAI() {
                   />
                   <button
                     onClick={() => fileInputRef.current?.click()}
-                    disabled={limitReached}
+                    disabled={limitReached || !!chartLimit}
                     className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-ink-400 hover:bg-ink-100 disabled:opacity-50 dark:hover:bg-ink-800"
                     aria-label="Upload chart"
                   >

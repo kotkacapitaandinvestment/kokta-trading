@@ -1,3 +1,5 @@
+import { refusalText } from './usageText';
+
 export class ApiError extends Error {
   constructor(message, { status, code, fields, data } = {}) {
     super(message);
@@ -44,7 +46,9 @@ async function request(path, options = {}) {
     // The server gates app features until identity details are submitted;
     // the app shell listens for this and routes to the verification form.
     if (data?.code === 'kyc_required') window.dispatchEvent(new CustomEvent('kotka:kyc-required'));
-    throw new ApiError(friendlyMessage(res.status, data?.error), { status: res.status, code: data?.code ?? (typeof data?.error === 'string' && /^[a-z0-9_]+$/.test(data.error) ? data.error : undefined), fields: data?.fields, data });
+    // Usage limits: say when it resets in the reader's own time.
+    const message = data?.code === 'usage_limit' ? refusalText(data) : friendlyMessage(res.status, data?.error);
+    throw new ApiError(message, { status: res.status, code: data?.code ?? (typeof data?.error === 'string' && /^[a-z0-9_]+$/.test(data.error) ? data.error : undefined), fields: data?.fields, data });
   }
   return data;
 }

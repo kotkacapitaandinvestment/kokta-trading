@@ -6,7 +6,8 @@ import { asyncHandler } from '../lib/asyncHandler.js';
 import { TOOL_DEFINITIONS, executeToolCall, toolStatus, serializeToolResult } from '../lib/aiTools.js';
 import { groundingCalls } from '../lib/aiGrounding.js';
 import { connection, openStreamWithFallback } from '../lib/aiModels.js';
-import { usageSnapshot, reserveAiUse, settleAiUse, tonePreference } from '../lib/aiUsage.js';
+import { tonePreference } from '../lib/aiUsage.js';
+import { reserveUsage, settleUsage, usageSnapshot, withUsageContext, clientRequestKey, DUPLICATE_REQUEST } from '../lib/usage/index.js';
 import { limit } from '../lib/rateLimit.js';
 import { cleanImage } from '../lib/imageSafety.js';
 import { CONTACT } from '../lib/contact.js';
@@ -110,7 +111,9 @@ function writeEvent(res, event) {
 }
 
 aiRouter.get('/usage', asyncHandler(async (req, res) => {
-  res.json(await usageSnapshot(req.userId));
+  const [usage] = await usageSnapshot(req.userId, { role: req.userRole, features: ['kotka_ai'] });
+  // usageToday/usageLimit: the older app's fields, for copies still open in a browser.
+  res.json({ ...usage, usageToday: usage.periods.day.used, usageLimit: usage.periods.day.limit, limitKind: usage.periods.day.limit === null ? null : 'fair_use' });
 }));
 
 aiRouter.get('/conversations', asyncHandler(async (req, res) => {
@@ -157,7 +160,12 @@ aiRouter.patch('/conversations/:id', asyncHandler(async (req, res) => {
   res.json({ conversation });
 }));
 
-aiRouter.post('/conversations/:id/messages', limit('aiBurst', { message: 'You’re sending messages quickly. Please wait a moment.' }), asyncHandler(async (req, res) => {
+// One message is one Kotka AI request, whatever tools it looks things up
+// with: 'chart_analysis' when it goes to the vision model (a chart in this
+// message or earlier in the chat), otherwise 'chat'.
+aiRouter.post('/conversations/:id/messages', limit('aiBurst', { message: 'You’re sending messages quickly. Please wait a moment.' }), asyncHandler((req, res) => withUsageContext(() => sendMessage(req, res))));
+
+async function sendMessage(req, res) {
   const conversation = await loadOwnedConversation(req.params.id, req.userId);
   if (!conversation) return res.status(404).json({ error: 'We couldn’t find that chat. It may have been deleted.' });
 
@@ -169,22 +177,24 @@ aiRouter.post('/conversations/:id/messages', limit('aiBurst', { message: 'You’
   const timeframe = TIMEFRAMES.includes(req.body?.timeframe) ? req.body.timeframe : '15m';
   if (!content.trim() && !image) return res.status(400).json({ error: 'A message or image is required.' });
 
-  const { usage, reservation } = await reserveAiUse(req.userId);
-  if (!reservation) {
-    return res.status(429).json({ error: 'daily_limit_reached', ...usage });
-  }
-
-  await prisma.aIMessage.create({
-    data: { conversationId: conversation.id, role: 'user', content, image },
-  });
-
   // Recent history only, and only the newest chart image in full: keeps each
   // request bounded however long a chat gets.
-  const priorMessages = (await prisma.aIMessage.findMany({
+  const history = (await prisma.aIMessage.findMany({
     where: { conversationId: conversation.id },
     orderBy: { createdAt: 'desc' },
-    take: HISTORY_MESSAGES,
+    take: HISTORY_MESSAGES - 1,
   })).reverse();
+  const action = image || history.some((m) => m.image) ? 'chart_analysis' : 'chat';
+
+  const usage = await reserveUsage({ userId: req.userId, feature: 'kotka_ai', action, requestKey: clientRequestKey(req, 'kotka_ai', action), role: req.userRole });
+  if (!usage.ok) return res.status(usage.status).json(usage.body);
+  if (!usage.reservation) return res.status(409).json(DUPLICATE_REQUEST);
+  const { reservation } = usage;
+
+  const userMessage = await prisma.aIMessage.create({
+    data: { conversationId: conversation.id, role: 'user', content, image },
+  });
+  const priorMessages = [...history, userMessage];
   const lastImageAt = priorMessages.findLastIndex((m) => m.image);
   priorMessages.forEach((m, i) => {
     if (m.image && i !== lastImageAt) {
@@ -197,7 +207,6 @@ aiRouter.post('/conversations/:id/messages', limit('aiBurst', { message: 'You’
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('X-Accel-Buffering', 'no');
 
-  const startedAt = Date.now();
   const integration = await prisma.integration.findUnique({ where: { provider: 'nvidia' } });
   const hasImage = priorMessages.some((m) => m.image);
 
@@ -207,7 +216,7 @@ aiRouter.post('/conversations/:id/messages', limit('aiBurst', { message: 'You’
     writeEvent(res, { type: 'delta', text: reply });
     const saved = await prisma.aIMessage.create({ data: { conversationId: conversation.id, role: 'assistant', content: reply } });
     await prisma.aIConversation.update({ where: { id: conversation.id }, data: { updatedAt: new Date() } });
-    await settleAiUse(reservation, 'unavailable', 'none', startedAt);
+    await settleUsage(reservation, 'released', { metadata: { reason: 'unavailable' } });
     writeEvent(res, { type: 'done', messageId: saved.id });
     return res.end();
   }
@@ -339,7 +348,7 @@ aiRouter.post('/conversations/:id/messages', limit('aiBurst', { message: 'You’
     if (!full.trim()) throw new Error('NVIDIA API error (502): the model returned an empty reply');
     const saved = await prisma.aIMessage.create({ data: { conversationId: conversation.id, role: 'assistant', content: full } });
     await prisma.aIConversation.update({ where: { id: conversation.id }, data: { updatedAt: new Date() } });
-    await settleAiUse(reservation, 'nvidia', model, startedAt);
+    await settleUsage(reservation, 'consumed', { model });
     writeEvent(res, { type: 'done', messageId: saved.id });
   } catch (err) {
     console.error('NVIDIA streaming completion failed:', err.message);
@@ -347,14 +356,15 @@ aiRouter.post('/conversations/:id/messages', limit('aiBurst', { message: 'You’
       const reply = 'Kotka AI is having a moment. Please try again in a minute.';
       writeEvent(res, { type: 'delta', text: reply });
       const saved = await prisma.aIMessage.create({ data: { conversationId: conversation.id, role: 'assistant', content: reply } });
-      await settleAiUse(reservation, 'error', model ?? 'none', startedAt);
+      await settleUsage(reservation, 'failed', { model });
       writeEvent(res, { type: 'done', messageId: saved.id });
     } else {
       const saved = await prisma.aIMessage.create({ data: { conversationId: conversation.id, role: 'assistant', content: full } });
-      await settleAiUse(reservation, 'nvidia', model ?? 'unknown', startedAt);
+      // The trader got a partial reply, so the model's work counts.
+      await settleUsage(reservation, 'consumed', { model, metadata: { partial: true } });
       writeEvent(res, { type: 'error', message: 'Stream interrupted, but the partial reply was saved.' });
       writeEvent(res, { type: 'done', messageId: saved.id });
     }
   }
   res.end();
-}));
+}

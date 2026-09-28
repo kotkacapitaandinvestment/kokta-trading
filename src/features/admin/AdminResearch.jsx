@@ -206,7 +206,6 @@ function SettingsCard({ data, canEdit, onSaved }) {
             <option value="premium">Premium and above (once paid plans are on)</option>
           </Select>
           <Input label="Update reports every (hours)" hint="How often reports update automatically." type="number" min={1} max={168} value={form.refreshHours} onChange={(e) => set('refreshHours', e.target.value)} disabled={!canEdit} />
-          <Input label="Updates each trader can ask for per day" hint="0 means traders can’t update reports themselves." type="number" min={0} value={form.userRefreshLimitPerDay} onChange={(e) => set('userRefreshLimitPerDay', e.target.value)} disabled={!canEdit} />
           <Input label="Upcoming events to show (days ahead)" hint="How far ahead reports list rate decisions and data releases." type="number" min={7} max={120} value={form.catalystHorizonDays} onChange={(e) => set('catalystHorizonDays', e.target.value)} disabled={!canEdit} />
         </div>
         <Input

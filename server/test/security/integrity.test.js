@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import { startServer, stopServer, makeUser, signIn, client, prisma } from './helpers.js';
 import { app } from '../../src/app.js';
 import { executeToolCall } from '../../src/lib/aiTools.js';
-import { reserveAiUse, usageSnapshot } from '../../src/lib/aiUsage.js';
+import { reserveUsage, usageSnapshot } from '../../src/lib/usage/index.js';
 
 let alice, bob, aliceC;
 before(async () => {
@@ -63,10 +63,11 @@ test("Kotka AI tools only ever read the caller's own journal", async () => {
 });
 
 test('the daily Kotka AI cap holds under parallel requests', async () => {
-  const { usageLimit } = await usageSnapshot(bob.id);
-  if (usageLimit === null) return; // uncapped in this environment
-  await prisma.aIUsageLog.createMany({ data: Array.from({ length: usageLimit - 1 }, () => ({ userId: bob.id, source: 'nvidia', model: 'test', latencyMs: 1 })) });
-  const results = await Promise.all(Array.from({ length: 6 }, () => reserveAiUse(bob.id)));
+  const [ai] = await usageSnapshot(bob.id, { features: ['kotka_ai'] });
+  const limit = ai.periods.day.limit;
+  if (limit === null) return; // uncapped in this environment
+  await prisma.usageRecord.createMany({ data: Array.from({ length: limit - 1 }, () => ({ userId: bob.id, feature: 'kotka_ai', action: 'chat', status: 'consumed' })) });
+  const results = await Promise.all(Array.from({ length: 6 }, () => reserveUsage({ userId: bob.id, feature: 'kotka_ai', action: 'chat' })));
   assert.equal(results.filter((r) => r.reservation).length, 1);
 });
 

@@ -89,18 +89,31 @@ const SENTENCE = {
   'research.assessment_created': 'added a source assessment',
   'research.assessment_updated': 'edited a source assessment',
   'research.assessment_deleted': 'deleted a source assessment',
+  'usage.limit_created': 'added a usage limit',
+  'usage.limit_updated': 'changed a usage limit',
+  'usage.limit_removed': 'removed a usage limit',
+  'usage.feature_paused': 'paused a feature for everyone',
+  'usage.feature_resumed': 'resumed a paused feature',
+  'usage.override_created': 'gave someone their own usage limits',
+  'usage.override_updated': 'changed someone’s own usage limits',
+  'usage.override_ended': 'ended someone’s own usage limits',
+  'usage.reset': 'reset someone’s usage',
+  'usage.settings_updated': 'changed Usage Control settings',
 };
 const SECURITY = new Set(['auth.sign_in_failed', 'auth.sign_in_blocked', 'auth.sign_in_refused', 'account.password_changed', 'account.deleted', 'auth.password_reset', 'auth.recovery_code_used', 'account.mfa_disabled', 'account.sessions_revoked']);
 
 const words = (k) => String(k).replace(/([a-z])([A-Z])/g, '$1 $2').replace(/_/g, ' ').toLowerCase().replace(/^\w/, (c) => c.toUpperCase());
-const SETTING = { dailyLossLimit: 'Daily loss limit', defaultRisk: 'Risk per trade', baseCurrency: 'Base currency', kycRequired: 'Verification required', signupsOpen: 'Sign-ups open', paidPlansEnabled: 'Paid plans', aiFairUseDailyLimit: 'Daily Kotka AI limit', aiDailyLimitFree: 'Free-plan Kotka AI limit', supportEmail: 'Support email' };
+const SETTING = { dailyLossLimit: 'Daily loss limit', defaultRisk: 'Risk per trade', baseCurrency: 'Base currency', kycRequired: 'Verification required', signupsOpen: 'Sign-ups open', paidPlansEnabled: 'Paid plans', aiFairUseDailyLimit: 'Daily Kotka AI limit', aiDailyLimitFree: 'Free-plan Kotka AI limit', supportEmail: 'Support email', usageStaffExempt: 'Staff not held to usage limits', daily: 'Daily', weekly: 'Weekly', monthly: 'Monthly', enabled: 'Limit on', warnAtPct: 'Warn at %', expiresAt: 'Ends', reason: 'Reason' };
 const SERVICE = { nvidia: 'Kotka AI', massive: 'market prices', finnhub: 'market news', fred: 'economic data', paystack: 'payments', cronjob: 'scheduled updates' };
 const fmt = (v) => (typeof v === 'boolean' ? (v ? 'on' : 'off') : v == null || v === '' ? 'not set' : String(v));
 const UNIT = { dailyLossLimit: 'R', defaultRisk: '%' };
 // Roles, statuses and plans as admins see them elsewhere.
 const VALUE = { trader: 'Trader', premium: 'Premium', moderator: 'Moderator', admin: 'Admin', super_admin: 'Super Admin', active: 'Active', suspended: 'Suspended', banned: 'Banned', free: 'Free' };
 const plainValue = (v) => VALUE[v] ?? fmt(v);
-const withUnit = (k, v) => (v == null || v === '' || typeof v === 'boolean' || !UNIT[k] ? fmt(v) : `${v}${UNIT[k]}`);
+// An empty usage limit means there's no limit, not that it's missing.
+const LIMIT_KEYS = new Set(['daily', 'weekly', 'monthly']);
+const lim = (v) => (v == null || v === '' ? 'no limit' : String(v));
+const withUnit = (k, v) => (LIMIT_KEYS.has(k) ? lim(v) : v == null || v === '' || typeof v === 'boolean' || !UNIT[k] ? fmt(v) : `${v}${UNIT[k]}`);
 const changes = (obj) => Object.entries(obj ?? {}).filter(([, v]) => v && typeof v === 'object' && 'to' in v).map(([k, v]) => `${SETTING[k] ?? words(k)}: ${withUnit(k, v.from)} → ${withUnit(k, v.to)}`).join(' · ');
 
 function detailText(log) {
@@ -164,6 +177,24 @@ function detailText(log) {
       return d.title ? `“${d.title}”` : '';
     case 'account.deleted':
       return d.email ?? '';
+    case 'usage.limit_created':
+      return [d.label, `daily ${lim(d.daily)} · weekly ${lim(d.weekly)} · monthly ${lim(d.monthly)}`].join(' · ');
+    case 'usage.limit_updated':
+    case 'usage.override_updated':
+      return [d.label, changes(d.changes)].filter(Boolean).join(' · ');
+    case 'usage.limit_removed':
+      return d.label ?? '';
+    case 'usage.feature_paused':
+    case 'usage.feature_resumed':
+      return [d.label, d.note ? `“${d.note}”` : null].filter(Boolean).join(' · ');
+    case 'usage.override_created':
+      return [d.label, `daily ${lim(d.daily)} · weekly ${lim(d.weekly)} · monthly ${lim(d.monthly)}`, d.expiresAt ? `until ${new Date(d.expiresAt).toLocaleDateString()}` : null, d.reason ? `“${d.reason}”` : null].filter(Boolean).join(' · ');
+    case 'usage.override_ended':
+      return d.label ?? '';
+    case 'usage.reset':
+      return [d.label, d.period === 'day' ? 'today' : d.period === 'week' ? 'this week' : 'this month', d.reason ? `“${d.reason}”` : null].filter(Boolean).join(' · ');
+    case 'usage.settings_updated':
+      return changes(d);
     default:
       return '';
   }
@@ -178,7 +209,7 @@ const AREAS = [
   { value: 'journal.', label: 'Trading journal' },
   { value: 'goals.', label: 'Goal Room' },
   { value: 'community.joined,community.username_,community.posted,community.idea_posted,community.post_deleted,community.reported,community.blocked_user,community.muted_user', label: 'Community' },
-  { value: 'user.,platform.,integration.,research.,announcement.,kyc.viewed,kyc.approved,kyc.rejected,community.post_removed,community.message_removed,community.room_,community.event_,community.remove,community.restore,community.mute,community.unmute,community.suspend,community.ban,community.reinstate,community.dismiss,community.post_featured,community.post_unfeatured', label: 'Admin actions' },
+  { value: 'user.,platform.,integration.,research.,announcement.,usage.,kyc.viewed,kyc.approved,kyc.rejected,community.post_removed,community.message_removed,community.room_,community.event_,community.remove,community.restore,community.mute,community.unmute,community.suspend,community.ban,community.reinstate,community.dismiss,community.post_featured,community.post_unfeatured', label: 'Admin actions' },
 ];
 
 function ago(at) {

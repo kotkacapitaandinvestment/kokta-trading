@@ -1,4 +1,5 @@
 import { prisma } from '../prisma.js';
+import { noteSourceFetch } from '../usage/context.js';
 
 // Two-layer cache for raw upstream source data: an in-process map (warm
 // serverless instances) in front of the ResearchSourceCache table (shared
@@ -14,15 +15,21 @@ export async function cachedSource(key, ttlMs, fetcher, { bypass = false } = {})
 
   if (!bypass) {
     const hit = memory.get(key);
-    if (hit && hit.expiresAt > now) return { data: hit.payload, fetchedAt: hit.fetchedAt, cached: true };
+    if (hit && hit.expiresAt > now) {
+      noteSourceFetch(key, { cached: true });
+      return { data: hit.payload, fetchedAt: hit.fetchedAt, cached: true };
+    }
 
     const row = await prisma.researchSourceCache.findUnique({ where: { key } }).catch(() => null);
     if (row && row.expiresAt.getTime() > now) {
       memory.set(key, { payload: row.payload, fetchedAt: row.fetchedAt.toISOString(), expiresAt: row.expiresAt.getTime() });
+      noteSourceFetch(key, { cached: true });
       return { data: row.payload, fetchedAt: row.fetchedAt.toISOString(), cached: true };
     }
   }
 
+  // Counted as an upstream call whether or not it succeeds.
+  noteSourceFetch(key, { cached: false });
   const payload = await fetcher();
   const fetchedAt = new Date();
   const expiresAt = new Date(now + ttlMs);

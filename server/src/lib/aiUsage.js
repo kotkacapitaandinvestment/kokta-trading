@@ -1,71 +1,7 @@
-// Shared Kotka AI accounting: every answered request (chat, journal review,
-// Community actions) is one AIUsageLog row with source 'nvidia', and the
-// daily cap counts those.
-//
-// To stop parallel requests from all slipping under the cap, a request first
-// reserves a row ('pending') under a per-user database lock, then settles it
-// as 'nvidia' (answered) or 'error' (not counted) when it finishes. A pending
-// row counts toward the cap while the answer is being written.
+// Kotka AI helpers shared by chat, journal reviews and Community actions.
+// Usage accounting for all of them lives in lib/usage/.
 
 import { prisma } from './prisma.js';
-import { loadAppSettings, aiDailyLimitFor, PAID_ROLES } from './appSettings.js';
-
-// 'abandoned' = a reservation never settled (e.g. the function was stopped);
-// it still counts, so a lost update can never make an answer free.
-const COUNTED = ['nvidia', 'pending', 'abandoned'];
-
-// Daily limits reset at midnight UTC.
-export function startOfUtcDay(d = new Date()) {
-  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
-}
-
-async function limitFor(userId) {
-  const [user, settings] = await Promise.all([prisma.user.findUnique({ where: { id: userId }, select: { role: true } }), loadAppSettings()]);
-  const role = user?.role ?? 'trader';
-  const usageLimit = aiDailyLimitFor(role, settings);
-  const onFreePlan = settings.paidPlansEnabled && !PAID_ROLES.includes(role);
-  return { usageLimit, limitKind: usageLimit === null ? null : onFreePlan ? 'plan' : 'fair_use', paidPlansEnabled: settings.paidPlansEnabled };
-}
-
-const countToday = (db, userId) => db.aIUsageLog.count({ where: { userId, source: { in: COUNTED }, createdAt: { gte: startOfUtcDay() } } });
-
-// usageLimit is null when uncapped. limitKind says why a cap applies: 'plan'
-// (free tier, only once paid plans are switched on) or 'fair_use' (everyone,
-// to protect the shared model quota).
-export async function usageSnapshot(userId) {
-  const [limits, usageToday] = await Promise.all([limitFor(userId), countToday(prisma, userId)]);
-  return { usageToday, ...limits };
-}
-
-export const limitReached = (u) => u.usageLimit !== null && u.usageToday >= u.usageLimit;
-
-// Reserves one request against today's cap. Returns { usage, reservation }
-// where reservation is null when the cap is reached.
-export async function reserveAiUse(userId) {
-  const limits = await limitFor(userId);
-  return prisma.$transaction(async (tx) => {
-    // Serialises this user's reservations across every server instance.
-    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`kotka-ai:${userId}`}))`;
-    // Reservations older than 10 minutes were never settled; mark them so
-    // they stop looking in progress (they keep counting).
-    await tx.aIUsageLog.updateMany({ where: { userId, source: 'pending', createdAt: { lt: new Date(Date.now() - 10 * 60e3) } }, data: { source: 'abandoned' } });
-    const usageToday = await countToday(tx, userId);
-    const usage = { usageToday, ...limits };
-    if (limitReached(usage)) return { usage, reservation: null };
-    const row = await tx.aIUsageLog.create({ data: { userId, source: 'pending', model: 'pending', latencyMs: 0 } });
-    return { usage: { ...usage, usageToday: usageToday + 1 }, reservation: row.id };
-  }, { maxWait: 15000, timeout: 20000 });
-}
-
-// source: 'nvidia' (answered, counted), 'error' / 'unavailable' / 'cached'
-// (not counted). Awaited before the response ends: on serverless, work left
-// running after the response may never finish.
-export async function settleAiUse(reservation, source, model, startedAt) {
-  if (!reservation) return;
-  await prisma.aIUsageLog
-    .update({ where: { id: reservation }, data: { source, model: String(model ?? 'none').slice(0, 120), latencyMs: Date.now() - startedAt } })
-    .catch((err) => console.error('Failed to settle AI usage:', err.message));
-}
 
 const TONES = {
   'Direct & challenging': 'Be direct and challenging: name weak reasoning plainly and push back hard on bias.',

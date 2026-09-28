@@ -50,10 +50,11 @@ export default function CryptoView({ symbol, onInstrumentChange }) {
   useEffect(() => {
     setData(null);
     setError(null);
-    api.get(`/research/crypto/${symbol}`).then(setData).catch(() => setError('Couldn’t load this page. Refresh to try again.'));
+    // A usage limit or a pause says so; anything else gets the fallback.
+    api.get(`/research/crypto/${symbol}`).then(setData).catch((err) => setError(['usage_limit', 'feature_paused', 'rate_limited'].includes(err.code) ? { refused: true, text: err.message } : { text: 'Couldn’t load this page. Refresh to try again.' }));
   }, [symbol]);
 
-  if (error) return <p className="rounded-2xl bg-white p-6 text-sm text-loss-500 dark:bg-ink-900">{error}</p>;
+  if (error) return <p className={`rounded-2xl bg-white p-6 text-sm dark:bg-ink-900 ${error.refused ? 'text-ink-600 dark:text-ink-300' : 'text-loss-500'}`}>{error.text}</p>;
   if (!data) return <div className="h-96 animate-pulse rounded-2xl bg-white dark:bg-ink-900" />;
   const m = data.market;
   const c = data.coin?.ok ? data.coin.data : null;

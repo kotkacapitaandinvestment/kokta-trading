@@ -19,7 +19,6 @@ export const DEFAULT_SETTINGS = {
   currencies: SUPPORTED_CURRENCY_CODES,
   pairs: DEFAULT_PAIRS,
   refreshHours: 12,
-  userRefreshLimitPerDay: 10,
   aiNarrative: true,
   model: '',
   catalystHorizonDays: 45,
@@ -48,7 +47,6 @@ export function sanitizeSettings(input, current) {
     out.pairs = [...new Set(input.pairs.map((p) => parseSubject(p)).filter((p) => p?.kind === 'pair' && out.currencies.includes(p.base) && out.currencies.includes(p.quote)).map((p) => p.subject))];
   }
   if (Number.isFinite(Number(input.refreshHours))) out.refreshHours = Math.min(168, Math.max(1, Math.round(Number(input.refreshHours))));
-  if (Number.isFinite(Number(input.userRefreshLimitPerDay))) out.userRefreshLimitPerDay = Math.min(500, Math.max(0, Math.round(Number(input.userRefreshLimitPerDay))));
   if (Number.isFinite(Number(input.catalystHorizonDays))) out.catalystHorizonDays = Math.min(120, Math.max(7, Math.round(Number(input.catalystHorizonDays))));
   if (typeof input.aiNarrative === 'boolean') out.aiNarrative = input.aiNarrative;
   if (typeof input.model === 'string') out.model = input.model.trim().slice(0, 120);
@@ -101,6 +99,5 @@ export function publicSettings(s) {
     currencies: s.currencies,
     pairs: s.pairs,
     refreshHours: s.refreshHours,
-    userRefreshLimitPerDay: s.userRefreshLimitPerDay,
   };
 }

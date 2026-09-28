@@ -22,6 +22,7 @@ import {
   MessagesSquare,
   UsersRound,
   Target,
+  Gauge,
 } from 'lucide-react';
 
 export const traderNav = [
@@ -48,6 +49,7 @@ export const adminNav = [
   { to: '/admin/community', label: 'Community', icon: UsersRound, moderator: true },
   { to: '/admin/announcements', label: 'Announcements', icon: Megaphone },
   { to: '/admin/research', label: 'Fundamental Research', icon: Landmark },
+  { to: '/admin/usage', label: 'Usage Control', icon: Gauge },
   { to: '/admin/ai-usage', label: 'AI Usage', icon: Cpu },
   { to: '/admin/trading-stats', label: 'Trading Statistics', icon: LineChart },
   { to: '/admin/journal-stats', label: 'Journal Statistics', icon: NotebookPen },

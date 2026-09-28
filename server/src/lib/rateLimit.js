@@ -3,7 +3,7 @@
 // - hit(): sliding window in Postgres (RateLimitHit), shared by every
 //   serverless instance. For actions that matter: writes, AI, account
 //   changes. A burst of parallel requests can overshoot by a few, which is
-//   fine for abuse limits (the AI quota uses a stricter lock, lib/aiUsage.js).
+//   fine for abuse limits (usage limits use a stricter lock, lib/usage/).
 // - memoryLimit(): per-instance counters for cheap, high-volume checks
 //   (every authenticated request, public pages). Weaker on serverless, but
 //   free, and backed by Vercel's and Cloudflare's own flood protection.

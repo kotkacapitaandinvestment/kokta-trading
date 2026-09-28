@@ -36,8 +36,8 @@ export default function AdminBilling() {
             </div>
             <p className="max-w-2xl text-sm leading-relaxed text-ink-600 dark:text-ink-300">
               {paid
-                ? 'Free accounts now get the free-plan Kotka AI limit, and any feature set to Premium is limited to Premium accounts. There’s no checkout yet, so a Super Admin gives someone Premium by changing their Role in Users.'
-                : 'Every trader has every feature. Kotka AI has a daily limit for everyone, and staff have no limit. No one is charged.'}
+                ? 'Any feature set to Premium is limited to Premium accounts. There’s no checkout yet, so a Super Admin gives someone Premium by changing their Role in Users.'
+                : 'Every trader has every feature. Features that cost something have usage limits for everyone, set in Usage Control. No one is charged.'}
             </p>
             <ul className="space-y-1.5 text-sm text-ink-600 dark:text-ink-300">
               <li>
@@ -47,7 +47,7 @@ export default function AdminBilling() {
             </ul>
             {user?.role === 'super_admin' ? (
               <p className="text-xs text-ink-400">
-                Switch paid plans and limits in <Link to="/admin/settings" className="font-medium text-accent-600 hover:underline dark:text-accent-400">Platform Settings</Link>.
+                Switch paid plans in <Link to="/admin/settings" className="font-medium text-accent-600 hover:underline dark:text-accent-400">Platform Settings</Link>, and usage limits in <Link to="/admin/usage?tab=limits" className="font-medium text-accent-600 hover:underline dark:text-accent-400">Usage Control</Link>.
               </p>
             ) : null}
           </div>
