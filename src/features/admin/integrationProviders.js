@@ -1,4 +1,4 @@
-import { Sparkles, CreditCard, Globe2, Landmark, CalendarClock } from 'lucide-react';
+import { Sparkles, CreditCard, Globe2, Landmark, CalendarClock, Mail } from 'lucide-react';
 
 export const INTEGRATION_PROVIDERS = [
   {
@@ -96,5 +96,28 @@ export const INTEGRATION_PROVIDERS = [
     description: 'Runs Kotka’s hourly update: refreshing research, news, events and reminders, and checking the AI models still work.',
     fallbackNote: 'With a key here, Kotka keeps the schedule set up for you. Without one, you paste the update link into cron-job.org yourself (Admin → Fundamental Research).',
     fields: [{ key: 'secret', label: 'Access key', type: 'password', placeholder: 'From cron-job.org → Console → Settings' }],
+  },
+  {
+    id: 'resend',
+    name: 'Resend',
+    category: 'Email',
+    icon: Mail,
+    description: 'Sends Kotka’s account emails from no-reply@kotkafinance.online: welcome and email confirmation, password resets, and security alerts.',
+    fallbackNote: 'Without it (or INBOX as a backup), people can’t reset a forgotten password by email and get no security alerts.',
+    fields: [{ key: 'secret', label: 'API key', type: 'password', placeholder: 'Starts with re_', hint: 'Resend → API Keys. The kotkafinance.online domain must be verified in Resend.' }],
+  },
+  {
+    id: 'inbox',
+    name: 'INBOX',
+    category: 'Email',
+    icon: Mail,
+    description: 'Keeps the Kotka newsletter list in INBOX up to date (only traders who opt in), and sends account emails through INBOX Notify if Resend is down.',
+    fallbackNote: 'INBOX’s API signs in with your INBOX account email and password; there’s no separate API key. They are stored encrypted like every other key.',
+    fields: [
+      { key: 'publicKey', label: 'INBOX account email', type: 'email', placeholder: 'The email you sign in to INBOX with' },
+      { key: 'secret', label: 'INBOX account password', type: 'password', placeholder: 'Your INBOX password' },
+      { key: 'config.listId', label: 'Newsletter list id', type: 'text', placeholder: 'Shown by Test connection once signed in', hint: 'The INBOX contact list opted-in traders are added to.' },
+      { key: 'config.senderEmail', label: 'Backup sender address (optional)', type: 'email', placeholder: 'e.g. no-reply@kotkafinance.online', hint: 'Must be a sender you’ve added and activated in INBOX Notify.' },
+    ],
   },
 ];

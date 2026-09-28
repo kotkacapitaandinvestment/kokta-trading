@@ -40,6 +40,8 @@ export async function stopServer() {
     await prisma.conversation.deleteMany({ where: { createdById: { in: ids } } }).catch(() => {});
     await prisma.user.deleteMany({ where: { id: { in: ids } } });
   }
+  // Accounts made through the sign-up API in tests.
+  await prisma.user.deleteMany({ where: { email: { contains: `.${RUN}.` } } }).catch(() => {});
   await prisma.authAttempt.deleteMany({ where: { email: { contains: `.${RUN}.` } } }).catch(() => {});
   await prisma.rateLimitHit.deleteMany({ where: { key: { contains: RUN } } }).catch(() => {});
   if (server) await new Promise((r) => server.close(r));

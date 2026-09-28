@@ -154,6 +154,8 @@ const PROVIDERS = [
   { key: 'cronjob', name: 'cron-job.org', role: 'Runs the hourly update: research, news, events, reminders and AI checks' },
   { key: 'paystack', name: 'Paystack', role: 'Payments (not used while paid plans are off)' },
   { key: 'finnhub', name: 'Finnhub', role: 'Market news headlines in Community' },
+  { key: 'resend', name: 'Resend', role: 'Account emails: welcome, email confirmation, password reset, security alerts' },
+  { key: 'inbox', name: 'INBOX', role: 'Newsletter list, and backup for account emails if Resend is down' },
 ];
 
 adminStatsRouter.get('/system', asyncHandler(async (req, res) => {

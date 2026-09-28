@@ -58,6 +58,13 @@ model User {
   mfaRecoveryHashes   String[]  @default([])
   mfaLastUsedStep     Int?
 
+  // Email: confirmed address, and the newsletter choice (opt-in only).
+  // newsletterContactId is the contact's id in the INBOX list.
+  emailVerifiedAt     DateTime?
+  newsletterOptIn     Boolean   @default(false)
+  newsletterOptInAt   DateTime?
+  newsletterContactId String?
+
   media               Media[]
   memberships         ConversationMember[]
   messages            Message[]
@@ -72,6 +79,7 @@ model User {
   notifications       Notification[]
   pushSubscriptions   PushSubscription[]
   sessions            Session[]
+  emailTokens         EmailToken[]
   goals               Goal[]
   goalCheckIns        GoalCheckIn[]
   achievements        Achievement[]
@@ -408,6 +416,20 @@ model Session {
   device     String?
 
   @@index([userId])
+}
+
+// Single-use links sent by email (password reset, email confirmation).
+// Only a SHA-256 hash of the token is stored.
+model EmailToken {
+  id        String    @id
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  purpose   String // reset | verify
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId, purpose])
 }
 
 // Sliding-window rate limits shared by every server instance.

@@ -9,6 +9,8 @@ import NotFound from '../features/marketing/NotFound';
 import Login from '../features/auth/Login';
 import Signup from '../features/auth/Signup';
 import ForgotPassword from '../features/auth/ForgotPassword';
+import ResetPassword from '../features/auth/ResetPassword';
+import VerifyEmail from '../features/auth/VerifyEmail';
 import VerifyIdentity from '../features/verification/VerifyIdentity';
 
 import Dashboard from '../features/dashboard/Dashboard';
@@ -62,6 +64,8 @@ export default function AppRoutes() {
       <Route path="/login" element={<Login />} />
       <Route path="/signup" element={<Signup />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
+      <Route path="/reset-password" element={<ResetPassword />} />
+      <Route path="/verify-email" element={<VerifyEmail />} />
       <Route path="/verify" element={<VerifyIdentity />} />
       <Route path="/achievement/:slug" element={<PublicAchievement />} />
 

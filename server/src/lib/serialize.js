@@ -14,6 +14,8 @@ export function toPublicUser(user) {
     memberSince: user.createdAt.toISOString().slice(0, 10),
     kycStatus: user.kyc?.status ?? 'none',
     mfaEnabled: !!user.mfaEnabledAt,
+    emailVerified: !!user.emailVerifiedAt,
+    newsletter: !!user.newsletterOptIn,
   };
 }
 

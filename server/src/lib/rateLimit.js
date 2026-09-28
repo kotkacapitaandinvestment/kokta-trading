@@ -34,6 +34,7 @@ export const LIMITS = {
   sessions: [30, 3600e3],
   profile: [30, 3600e3],
   conversationWrite: [120, 3600e3],
+  emailSend: [5, 3600e3],
 };
 
 function prune() {

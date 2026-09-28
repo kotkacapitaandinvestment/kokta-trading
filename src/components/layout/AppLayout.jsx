@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { Clock3, WifiOff } from 'lucide-react';
+import { Clock3, MailWarning, WifiOff } from 'lucide-react';
+import { api } from '../../lib/api';
+import { toast } from '../../lib/dialogs';
 import Sidebar from './Sidebar';
 import Topbar from './Topbar';
 import MobileNav from './MobileNav';
@@ -24,6 +26,32 @@ function VerificationBanner({ user, config }) {
       <Clock3 className="h-3.5 w-3.5 shrink-0" />
       <span className="min-w-0 flex-1">Your identity details are being reviewed. You have full access in the meantime.</span>
       <Link to="/verify" className="shrink-0 font-medium underline-offset-2 hover:underline">View</Link>
+    </div>
+  );
+}
+
+// Until the email address is confirmed; can be hidden for this visit.
+function EmailBanner({ user }) {
+  const [hidden, setHidden] = useState(false);
+  const [busy, setBusy] = useState(false);
+  if (!user || user.emailVerified !== false || hidden) return null;
+  const resend = async () => {
+    setBusy(true);
+    try {
+      const r = await api.post('/account/verify-email/resend', {});
+      toast(r.alreadyVerified ? 'Your email is already confirmed.' : `We’ve sent a new link to ${user.email}.`);
+    } catch (err) {
+      toast(err.message, { tone: 'error' });
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="flex items-center gap-2 border-b border-accent-500/20 bg-accent-50 px-4 py-2 text-xs text-accent-900 dark:bg-accent-500/10 dark:text-accent-200 lg:px-8">
+      <MailWarning className="h-3.5 w-3.5 shrink-0" />
+      <span className="min-w-0 flex-1">Please confirm your email, so you can reset your password if you ever forget it.</span>
+      <button type="button" disabled={busy} onClick={resend} className="shrink-0 font-medium underline-offset-2 hover:underline disabled:opacity-50">{busy ? 'Sending…' : 'Send confirmation link'}</button>
+      <button type="button" onClick={() => setHidden(true)} className="shrink-0 text-accent-700/70 hover:underline dark:text-accent-300/70">Later</button>
     </div>
   );
 }
@@ -87,6 +115,7 @@ export default function AppLayout() {
         <MobileNav items={traderNav} secondaryItems={traderNavSecondary} open={menuOpen} onOpenChange={setMenuOpen} />
         <ConnectionBanner />
         <VerificationBanner user={user} config={config} />
+        <EmailBanner user={user} />
         <main className="flex-1 overflow-y-auto scrollbar-thin px-4 py-5 sm:py-6 lg:px-8 lg:py-8">
           <div className="mx-auto max-w-7xl animate-fade-in">
             <Outlet />

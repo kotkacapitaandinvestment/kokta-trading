@@ -21,6 +21,16 @@ const SENTENCE = {
   'account.photo_changed': 'changed their profile photo',
   'account.photo_removed': 'removed their profile photo',
   'account.password_changed': 'changed their password',
+  'auth.password_reset_requested': 'asked for a password reset email',
+  'auth.password_reset': 'reset their password from an emailed link',
+  'auth.recovery_code_used': 'signed in with a two-step recovery code',
+  'account.email_verified': 'confirmed their email address',
+  'account.newsletter_on': 'subscribed to the newsletter',
+  'account.newsletter_off': 'unsubscribed from the newsletter',
+  'account.mfa_enabled': 'turned on two-step verification',
+  'account.mfa_disabled': 'turned off two-step verification',
+  'account.session_revoked': 'signed out one of their devices',
+  'account.sessions_revoked': 'signed out all their other devices',
   'account.deleted': 'deleted their account',
   'account.push_enabled': 'turned on push notifications',
   'account.push_disabled': 'turned off push notifications on a device',
@@ -80,7 +90,7 @@ const SENTENCE = {
   'research.assessment_updated': 'edited a source assessment',
   'research.assessment_deleted': 'deleted a source assessment',
 };
-const SECURITY = new Set(['auth.sign_in_failed', 'auth.sign_in_blocked', 'auth.sign_in_refused', 'account.password_changed', 'account.deleted']);
+const SECURITY = new Set(['auth.sign_in_failed', 'auth.sign_in_blocked', 'auth.sign_in_refused', 'account.password_changed', 'account.deleted', 'auth.password_reset', 'auth.recovery_code_used', 'account.mfa_disabled', 'account.sessions_revoked']);
 
 const words = (k) => String(k).replace(/([a-z])([A-Z])/g, '$1 $2').replace(/_/g, ' ').toLowerCase().replace(/^\w/, (c) => c.toUpperCase());
 const SETTING = { dailyLossLimit: 'Daily loss limit', defaultRisk: 'Risk per trade', baseCurrency: 'Base currency', kycRequired: 'Verification required', signupsOpen: 'Sign-ups open', paidPlansEnabled: 'Paid plans', aiFairUseDailyLimit: 'Daily Kotka AI limit', aiDailyLimitFree: 'Free-plan Kotka AI limit', supportEmail: 'Support email' };
@@ -162,7 +172,7 @@ function detailText(log) {
 const AREAS = [
   { value: '', label: 'Everything' },
   { value: 'auth.', label: 'Sign-ins' },
-  { value: 'auth.sign_in_failed,auth.sign_in_blocked,auth.sign_in_refused,account.password_changed,account.deleted', label: 'Security' },
+  { value: 'auth.sign_in_failed,auth.sign_in_blocked,auth.sign_in_refused,account.password_changed,account.deleted,auth.password_reset,auth.password_reset_requested,auth.recovery_code_used,account.mfa_enabled,account.mfa_disabled,account.session_revoked,account.sessions_revoked', label: 'Security' },
   { value: 'account.,settings.', label: 'Accounts' },
   { value: 'kyc.', label: 'Verification' },
   { value: 'journal.', label: 'Trading journal' },

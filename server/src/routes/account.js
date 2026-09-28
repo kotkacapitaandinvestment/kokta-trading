@@ -11,6 +11,9 @@ import { listSessions, revokeSession, revokeUserSessions } from '../lib/sessions
 import { encryptSecret, decryptSecret } from '../lib/crypto.js';
 import { newSecret, verifyCode, otpauthUri, newRecoveryCodes, hashRecovery } from '../lib/totp.js';
 import { limit } from '../lib/rateLimit.js';
+import { waitUntil } from '@vercel/functions';
+import { sendVerification, alertPasswordChanged, alertTwoStep } from '../lib/email/notices.js';
+import { subscribe, unsubscribe } from '../lib/email/inbox.js';
 
 // The signed-in user's own account: display name, password, sessions,
 // two-step verification, deletion.
@@ -58,6 +61,7 @@ accountRouter.post('/password', limit('passwordChange'), asyncHandler(async (req
   forgetUserAccess(user.id);
   await audit(req, 'account.password_changed', { targetType: 'user', targetId: user.id, actor: user, detail: { otherSessionsSignedOut: signedOut } });
   res.json({ ok: true, signedOut });
+  waitUntil(alertPasswordChanged(user, req, 'settings').catch(() => {}));
 }));
 
 // ── signed-in devices ──────────────────────────────────────────────────────
@@ -109,6 +113,7 @@ accountRouter.post('/mfa/enable', limit('mfa'), asyncHandler(async (req, res) =>
   forgetUserAccess(user.id);
   await audit(req, 'account.mfa_enabled', { targetType: 'user', targetId: user.id, actor: user });
   res.json({ recoveryCodes: codes });
+  waitUntil(alertTwoStep(user, true).catch(() => {}));
 }));
 
 accountRouter.post('/mfa/disable', limit('mfa'), asyncHandler(async (req, res) => {
@@ -122,6 +127,37 @@ accountRouter.post('/mfa/disable', limit('mfa'), asyncHandler(async (req, res) =
   await prisma.user.update({ where: { id: user.id }, data: { mfaEnabledAt: null, mfaSecretCipher: null, mfaLastUsedStep: null, mfaRecoveryHashes: [] } });
   await audit(req, 'account.mfa_disabled', { targetType: 'user', targetId: user.id, actor: user });
   res.json({ ok: true });
+  waitUntil(alertTwoStep(user, false).catch(() => {}));
+}));
+
+// ── email ──────────────────────────────────────────────────────────────────
+accountRouter.post('/verify-email/resend', limit('emailSend'), asyncHandler(async (req, res) => {
+  const user = await prisma.user.findUnique({ where: { id: req.userId }, select: { id: true, name: true, email: true, emailVerifiedAt: true } });
+  if (user.emailVerifiedAt) return res.json({ ok: true, alreadyVerified: true });
+  const sent = await sendVerification(user);
+  if (sent.error) return res.status(502).json({ error: 'We couldn’t send the email just now. Please try again in a few minutes.' });
+  res.json({ ok: true });
+}));
+
+// Newsletter (opt-in). The choice is saved even if the mailing list can't be
+// reached right now; it is synced the next time it changes.
+accountRouter.put('/newsletter', limit('profile'), asyncHandler(async (req, res) => {
+  if (typeof req.body?.optIn !== 'boolean') return res.status(400).json({ error: 'Choose on or off.' });
+  const optIn = req.body.optIn;
+  const user = await prisma.user.findUnique({ where: { id: req.userId }, select: { id: true, email: true, newsletterOptIn: true, newsletterContactId: true } });
+  let contactId = user.newsletterContactId;
+  try {
+    if (optIn && !user.newsletterOptIn) contactId = (await subscribe(user.email)) ?? contactId;
+    if (!optIn && user.newsletterContactId) {
+      await unsubscribe(user.newsletterContactId);
+      contactId = null;
+    }
+  } catch (err) {
+    console.error('Newsletter sync failed:', err.message);
+  }
+  const updated = await prisma.user.update({ where: { id: user.id }, data: { newsletterOptIn: optIn, newsletterOptInAt: optIn ? new Date() : null, newsletterContactId: contactId ? String(contactId) : null }, include: PUBLIC_USER_INCLUDE });
+  if (optIn !== user.newsletterOptIn) auditLater(req, optIn ? 'account.newsletter_on' : 'account.newsletter_off', { targetType: 'user', targetId: user.id });
+  res.json({ user: toPublicUser(updated) });
 }));
 
 // Permanent: cascades to the journal, AI history, settings and verification.
@@ -135,6 +171,8 @@ accountRouter.delete('/', limit('accountDelete'), asyncHandler(async (req, res) 
   }
   await audit(req, 'account.deleted', { targetType: 'user', targetId: user.id, actor: user, detail: { email: user.email, role: user.role } });
   await prisma.follow.deleteMany({ where: { targetType: 'user', targetId: user.id } });
+  // Off the newsletter list too.
+  if (user.newsletterContactId) await unsubscribe(user.newsletterContactId).catch(() => {});
   await prisma.user.delete({ where: { id: user.id } });
   forgetUserAccess(user.id);
   clearSessionCookie(res);

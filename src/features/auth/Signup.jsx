@@ -11,7 +11,7 @@ export default function Signup() {
   const { signup } = useAuth();
   const config = useAppConfig();
   const navigate = useNavigate();
-  const [form, setForm] = useState({ name: '', email: '', password: '' });
+  const [form, setForm] = useState({ name: '', email: '', password: '', newsletter: false });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
@@ -67,20 +67,28 @@ export default function Signup() {
           type="email"
           name="email"
           placeholder="you@example.com"
+          autoComplete="email"
           value={form.email}
           onChange={(e) => setForm({ ...form, email: e.target.value })}
+          hint="We’ll send a link to confirm it."
           required
         />
         <Input
           label="Password"
           type="password"
           name="password"
-          placeholder="Minimum 8 characters"
+          placeholder="At least 8 characters"
+          autoComplete="new-password"
           value={form.password}
           onChange={(e) => setForm({ ...form, password: e.target.value })}
+          hint="A few unrelated words together are easy to remember and hard to guess."
           minLength={8}
           required
         />
+        <label className="flex items-start gap-2.5 text-sm text-ink-600 dark:text-ink-300">
+          <input type="checkbox" checked={form.newsletter} onChange={(e) => setForm({ ...form, newsletter: e.target.checked })} className="mt-0.5 h-4 w-4 rounded accent-ink-900" />
+          <span>Send me Kotka news and product updates by email. You can stop them any time in Settings.</span>
+        </label>
         <Button type="submit" className="w-full" disabled={loading}>
           {loading ? 'Creating account…' : 'Create account'}
         </Button>

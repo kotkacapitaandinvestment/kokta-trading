@@ -13,6 +13,7 @@ import { useTheme } from '../../context/ThemeContext';
 import { api } from '../../lib/api';
 import PushSettings from './PushSettings';
 import { DevicesSection, TwoStepSection } from './SecuritySettings';
+import EmailSettings from './EmailSettings';
 import { uploadAvatar, removeAvatar } from '../../lib/avatar';
 import { useCommunity } from '../community/CommunityContext';
 
@@ -469,6 +470,7 @@ export default function Settings() {
 
           {['notifications', 'ai', 'trading'].includes(active) && !prefs ? <div className="h-40 animate-pulse rounded-xl bg-ink-50 dark:bg-ink-800" /> : null}
 
+          {active === 'notifications' ? <EmailSettings /> : null}
           {active === 'notifications' ? <PushSettings /> : null}
           {active === 'notifications' && prefs ? (
             <div>

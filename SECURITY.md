@@ -16,7 +16,17 @@ Email the Kotka team at the support address shown on the sign-in help page, with
   - Each code works once: the last-used time step is recorded and updated atomically.
   - 10 single-use recovery codes are shown once and stored hashed.
   - After the password step, the server issues a 5-minute challenge token. It is signed with a key derived only for that purpose, so it can never be used as a session.
-- **Password reset:** there is no email provider yet, so resets go through support (`ForgotPassword.jsx` says so).
+- **Password reset by email** (`server/src/routes/auth.js`, `server/src/lib/email/`):
+  - "Forgot password?" emails a single-use link that works for 30 minutes.
+  - The token exists only in the email; the database stores its SHA-256 hash. Asking again cancels older links.
+  - The reply is identical whether or not the email has an account, and the email is sent after responding, so neither the answer nor its timing reveals who has an account.
+  - Requests are limited to 3 per email per hour and 10 per IP per hour.
+  - The new password must meet the usual rules; a weak one is refused without using up the link.
+  - A successful reset changes the password, confirms the email and signs out every session, then emails the owner. Two-step verification still applies at the next sign-in.
+- **Email confirmation:** sign-up sends a welcome email with a 48-hour single-use confirmation link (stored hashed). Unconfirmed accounts see a reminder, with a rate-limited resend. Sign-up also refuses addresses whose domain can't receive email (DNS check; any lookup error lets the sign-up through).
+- **Security alerts** are emailed on: a sign-in from a device not seen on the account in the last 90 days, a password change or reset, and two-step verification being turned on or off.
+- **Email delivery:** account emails come from `no-reply@kotkafinance.online` through Resend (domain verified, with SPF/DKIM handled by Resend). INBOX Notify is the backup. Emails contain no tracking pixels or remote images, and every value in them is escaped. The INBOX API only signs in with the INBOX account email and password; they are stored encrypted in Connected services like every other key.
+- **Newsletter:** opt-in only (unticked at sign-up, switchable in Settings). Opted-in addresses are added to the INBOX list chosen in Connected services and removed when someone opts out or deletes their account.
 
 ## Sessions
 
@@ -24,7 +34,7 @@ Email the Kotka team at the support address shown on the sign-in help page, with
 - Every sign-in creates a new row in the `Session` table. Only a SHA-256 hash of the session id is stored.
 - Sessions are checked on every request (cached for 30 seconds per server instance) and can be revoked:
   - **Signing out** revokes that session.
-  - **Changing the password** revokes every other session.
+  - **Changing the password** revokes every other session; **resetting it by email** revokes all of them.
   - **Turning on two-step verification** revokes every other session.
   - **Suspending or banning an account** revokes all of its sessions.
   - **Settings → Password & security** lists signed-in devices and can sign any of them out.

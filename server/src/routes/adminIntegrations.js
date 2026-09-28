@@ -11,14 +11,25 @@ import { finnhubTestConnection } from '../lib/finnhub.js';
 import { massiveTestConnection } from '../lib/massive.js';
 import { fredTestConnection } from '../lib/research/sources/timeseries.js';
 import { cronJobOrgTestConnection } from '../lib/cronJobOrg.js';
+import { inboxTestConnection } from '../lib/email/inbox.js';
+
+// Resend: which sending domains are verified.
+async function resendTestConnection(key) {
+  const r = await fetch('https://api.resend.com/domains', { headers: { Authorization: `Bearer ${key}` }, signal: AbortSignal.timeout(15000) });
+  if (!r.ok) throw new Error(`Resend API error (${r.status})`);
+  const domains = (await r.json()).data ?? [];
+  const ours = domains.find((d) => d.name === 'kotkafinance.online');
+  if (!ours) return 'Connected, but kotkafinance.online isn’t added in Resend yet, so emails can’t be sent from it.';
+  return ours.status === 'verified' ? 'Connected. Sending from no-reply@kotkafinance.online (domain verified).' : `Connected, but kotkafinance.online is “${ours.status}” in Resend. Finish the DNS steps there before emails can go out.`;
+}
 import { asyncHandler } from '../lib/asyncHandler.js';
 
 export const adminIntegrationsRouter = Router();
 adminIntegrationsRouter.use(requireAuth, requireRole('super_admin'));
 
-const CONFIG_KEYS = { nvidia: ['model', 'chatFallbacks', 'visionModel', 'visionFallbacks', 'baseUrl'], paystack: [], finnhub: [], massive: [], fred: [], cronjob: [] };
+const CONFIG_KEYS = { nvidia: ['model', 'chatFallbacks', 'visionModel', 'visionFallbacks', 'baseUrl'], paystack: [], finnhub: [], massive: [], fred: [], cronjob: [], resend: [], inbox: ['listId', 'senderEmail'] };
 
-const SERVICE_NAME = { nvidia: 'NVIDIA', paystack: 'Paystack', finnhub: 'Finnhub', massive: 'Massive', fred: 'FRED', cronjob: 'cron-job.org' };
+const SERVICE_NAME = { nvidia: 'NVIDIA', paystack: 'Paystack', finnhub: 'Finnhub', massive: 'Massive', fred: 'FRED', cronjob: 'cron-job.org', resend: 'Resend', inbox: 'INBOX' };
 
 const TEST_CONNECTIONS = {
   nvidia: async (row) => {
@@ -50,6 +61,8 @@ const TEST_CONNECTIONS = {
   massive: async (row) => massiveTestConnection(decryptSecret(row.secretCipher)),
   fred: async (row) => fredTestConnection(decryptSecret(row.secretCipher)),
   cronjob: async (row) => cronJobOrgTestConnection(decryptSecret(row.secretCipher)),
+  resend: async (row) => resendTestConnection(decryptSecret(row.secretCipher)),
+  inbox: async (row) => inboxTestConnection(row),
 };
 
 function toPublicIntegration(row, extras = {}) {
@@ -144,7 +157,8 @@ adminIntegrationsRouter.post('/:provider/test', asyncHandler(async (req, res) =>
     // Provider errors are technical ("… API error (401): {…}"); say what to do instead.
     const status = Number(String(err?.message).match(/\((\d{3})\)|HTTP (\d{3})/)?.slice(1).find(Boolean));
     const name = SERVICE_NAME[provider] ?? 'the service';
-    const error = status === 401 || status === 403 ? `${name} refused the key. Check you copied the whole key, save it again and retry.` : `Couldn’t reach ${name} just now. Try again in a moment.`;
+    const refused = provider === 'inbox' ? 'INBOX refused the login. Check the INBOX account email and password, save them again and retry.' : `${name} refused the key. Check you copied the whole key, save it again and retry.`;
+    const error = status === 401 || status === 403 ? refused : `Couldn’t reach ${name} just now. Try again in a moment.`;
     res.status(502).json({ ok: false, error });
   }
 }));
