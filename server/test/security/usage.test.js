@@ -26,11 +26,13 @@ const mock = http.createServer((req, res) => {
       return res.end('{"error":"stand-in failure"}');
     }
     const usage = { prompt_tokens: 120, completion_tokens: 30, total_tokens: 150 };
-    if (JSON.parse(body || '{}').stream) {
+    const sent = JSON.parse(body || '{}');
+    if (sent.stream) {
       res.writeHead(200, { 'Content-Type': 'text/event-stream' });
       res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: 'What does your plan say about this setup?' } }] })}\n\n`);
       res.write(`data: ${JSON.stringify({ choices: [{ delta: {}, finish_reason: 'stop' }] })}\n\n`);
-      res.write(`data: ${JSON.stringify({ choices: [], usage })}\n\n`);
+      // Like NVIDIA: a streamed reply only ends with token counts when asked.
+      if (sent.stream_options?.include_usage) res.write(`data: ${JSON.stringify({ choices: [], usage })}\n\n`);
       return res.end('data: [DONE]\n\n');
     }
     res.writeHead(200, { 'Content-Type': 'application/json' });

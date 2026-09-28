@@ -278,6 +278,7 @@ async function sendMessage(req, res) {
           maxTokens: 1000,
           topP: settings.topP,
           extraBody: settings.extraBody,
+          includeUsage: settings.streamUsage,
         });
 
       const handle = (event) => {

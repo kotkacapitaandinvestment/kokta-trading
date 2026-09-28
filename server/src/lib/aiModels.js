@@ -17,14 +17,19 @@ import { prisma } from './prisma.js';
 import { decryptSecret } from './crypto.js';
 import { nvidiaChatCompletion, NVIDIA_DEFAULT_BASE_URL } from './nvidia.js';
 
+// streamUsage: the model accepts stream_options.include_usage and then ends
+// a streamed reply with its token counts (tested live on 2026-09-28: same
+// answers and tool calls with and without it). Only set it after that test;
+// models without it stream as before, and their chat tokens aren't recorded.
 export const MODEL_PROFILES = {
   // Reasoning is off so thinking text never reaches traders; ~1-3s, tools OK.
-  'nvidia/nemotron-3-super-120b-a12b': { extraBody: { chat_template_kwargs: { enable_thinking: false } } },
-  'nvidia/nemotron-3-ultra-550b-a55b': { extraBody: { chat_template_kwargs: { enable_thinking: false } } },
-  'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning': { extraBody: { chat_template_kwargs: { enable_thinking: false } } },
+  'nvidia/nemotron-3-super-120b-a12b': { extraBody: { chat_template_kwargs: { enable_thinking: false } }, streamUsage: true },
+  'nvidia/nemotron-3-ultra-550b-a55b': { extraBody: { chat_template_kwargs: { enable_thinking: false } }, streamUsage: true },
+  'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning': { extraBody: { chat_template_kwargs: { enable_thinking: false } }, streamUsage: true },
   // Rejects any custom top_p; thinking mode intermittently returns no answer.
+  // Not yet tested with streamUsage (it timed out on 2026-09-28).
   'moonshotai/kimi-k3': { topP: null, extraBody: { chat_template_kwargs: { thinking: false } } },
-  'meta/llama-3.2-11b-vision-instruct': {},
+  'meta/llama-3.2-11b-vision-instruct': { streamUsage: true },
   'meta/llama-3.2-90b-vision-instruct': {},
 };
 
@@ -59,7 +64,7 @@ const PIXEL = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1P
 
 export function requestSettings(model) {
   const p = MODEL_PROFILES[model] ?? {};
-  return { topP: p.topP === undefined ? 0.9 : p.topP, extraBody: p.extraBody ?? {} };
+  return { topP: p.topP === undefined ? 0.9 : p.topP, extraBody: p.extraBody ?? {}, streamUsage: !!p.streamUsage };
 }
 
 export function classifyModelError(err) {

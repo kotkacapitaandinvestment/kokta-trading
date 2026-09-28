@@ -35,12 +35,14 @@ export async function nvidiaChatCompletion({ apiKey, baseUrl, model, messages, m
   return data.choices?.[0]?.message?.content ?? '';
 }
 
+// includeUsage asks the model to end the stream with its token counts (only
+// for models vetted for it, see MODEL_PROFILES.streamUsage in aiModels.js).
 // Yields { type: 'text', text } for content deltas, and — if the model
 // requests one or more function calls — a single { type: 'tool_calls',
 // toolCalls: [{id, name, arguments}] } event once the stream finishes.
 // `arguments` arrives fragmented as partial JSON strings across many chunks
 // (keyed by index) and must be concatenated; this accumulates that for you.
-export async function* nvidiaChatCompletionStream({ apiKey, baseUrl, model, messages, maxTokens = 600, tools, topP = 0.9, extraBody = {} }) {
+export async function* nvidiaChatCompletionStream({ apiKey, baseUrl, model, messages, maxTokens = 600, tools, topP = 0.9, extraBody = {}, includeUsage = false }) {
   const res = await fetch(`${baseUrl}/chat/completions`, {
     method: 'POST',
     headers: {
@@ -55,6 +57,7 @@ export async function* nvidiaChatCompletionStream({ apiKey, baseUrl, model, mess
       ...(topP === null ? {} : { top_p: topP }),
       max_tokens: maxTokens,
       stream: true,
+      ...(includeUsage ? { stream_options: { include_usage: true } } : {}),
       ...(tools?.length ? { tools, tool_choice: 'auto' } : {}),
       ...extraBody,
     }),
