@@ -4,7 +4,7 @@ How Kotka protects accounts, trading data and conversations, and how to report a
 
 ## Reporting a vulnerability
 
-Email the Kotka team at the support address shown on the sign-in help page, with "Security" in the subject. Include what you found, how to reproduce it, and what an attacker could do. Please don't access other people's data, disrupt the service or run automated scanners against production. We aim to reply within 3 working days.
+Email support@kotkafinance.online with "Security" in the subject. Include what you found, how to reproduce it, and what an attacker could do. Please don't access other people's data, disrupt the service or run automated scanners against production. We aim to reply within 3 working days.
 
 ## Authentication
 

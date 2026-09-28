@@ -9,6 +9,8 @@ import Button from '../../components/ui/Button';
 import Badge from '../../components/ui/Badge';
 import Modal from '../../components/ui/Modal';
 import { useAuth } from '../../context/AuthContext';
+import { useAppConfig } from '../../context/AppConfigContext';
+import { mailto } from '../../lib/contact';
 import { useTheme } from '../../context/ThemeContext';
 import { api } from '../../lib/api';
 import PushSettings from './PushSettings';
@@ -208,13 +210,14 @@ function PasswordSection() {
 const KYC_COPY = {
   none: { tone: 'neutral', label: 'Not submitted', icon: AlertCircle, text: 'You have not submitted your identity details yet.' },
   pending: { tone: 'warning', label: 'In review', icon: Clock3, text: 'We’re reviewing your details. You have full access in the meantime.' },
-  approved: { tone: 'profit', label: 'Verified', icon: BadgeCheck, text: 'Your identity is verified. To change verified details, contact support.' },
+  approved: { tone: 'profit', label: 'Verified', icon: BadgeCheck, text: 'Your identity is verified.', help: true },
   rejected: { tone: 'loss', label: 'Needs changes', icon: AlertCircle, text: 'We need you to correct a few details.' },
 };
 
 function VerificationSection() {
   const [kyc, setKyc] = useState(null);
   const [error, setError] = useState(null);
+  const { supportEmail } = useAppConfig();
 
   useEffect(() => {
     api.get('/kyc').then(({ kyc }) => setKyc(kyc)).catch((err) => setError(err.message));
@@ -233,7 +236,10 @@ function VerificationSection() {
           <copy.icon className="h-3.5 w-3.5" />
           {copy.label}
         </Badge>
-        <p className="text-sm text-ink-600 dark:text-ink-300">{copy.text}</p>
+        <p className="text-sm text-ink-600 dark:text-ink-300">
+          {copy.text}
+          {copy.help ? <> To change verified details, email <a className="font-medium text-accent-600 hover:underline dark:text-accent-400" href={mailto(supportEmail, 'Change my verified details')}>{supportEmail}</a>.</> : null}
+        </p>
       </div>
       {kyc.status === 'rejected' && kyc.reviewNote ? (
         <p className="rounded-xl border border-loss-500/25 bg-loss-50 p-3 text-sm text-loss-600 dark:bg-loss-500/10 dark:text-loss-400">{kyc.reviewNote}</p>

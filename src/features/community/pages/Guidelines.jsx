@@ -1,4 +1,6 @@
 import { ShieldCheck } from 'lucide-react';
+import { useAppConfig } from '../../../context/AppConfigContext';
+import { mailto } from '../../../lib/contact';
 
 const RULES = [
   ['Debate ideas, not people', 'Challenge the reasoning, the data or the risk. Personal attacks, harassment and bullying are removed.'],
@@ -12,6 +14,7 @@ const RULES = [
 ];
 
 export default function Guidelines() {
+  const { supportEmail } = useAppConfig();
   return (
     <div className="mx-auto max-w-3xl space-y-6">
       <header className="rounded-2xl border border-ink-100 bg-white p-6 dark:border-ink-800 dark:bg-ink-900">
@@ -31,6 +34,7 @@ export default function Guidelines() {
         <h2 className="font-semibold text-ink-900 dark:text-ink-50">How moderation works</h2>
         <p className="mt-2">Report anything that breaks these rules from its menu. Messages that look like scams are flagged automatically and shown with a warning. Moderators can remove content, pause someone's posting, and administrators can suspend or ban accounts. Every action is logged.</p>
         <p className="mt-2">You can mute or block any trader from their profile. Blocking stops them messaging you and hides their content.</p>
+        <p className="mt-2">Something urgent, like a threat, or someone who has lost money to a scam here? Email <a className="font-medium text-accent-600 hover:underline dark:text-accent-400" href={mailto(supportEmail, 'Urgent Community report')}>{supportEmail}</a> with a link to it.</p>
       </section>
     </div>
   );

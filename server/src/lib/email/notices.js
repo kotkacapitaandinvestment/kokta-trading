@@ -5,38 +5,41 @@
 import dns from 'node:dns/promises';
 import { prisma } from '../prisma.js';
 import { CANONICAL_ORIGIN } from '../origins.js';
-import { loadAppSettings } from '../appSettings.js';
+import { supportAddress } from '../appSettings.js';
+import { CONTACT } from '../contact.js';
 import { deviceName, clientIp } from '../requestMeta.js';
 import { sendEmail } from './send.js';
 import { createEmailToken } from './tokens.js';
 import { welcomeEmail, verifyEmail, passwordResetEmail, passwordChangedEmail, newSignInEmail, twoStepEmail } from './templates.js';
 
-async function send(user, tpl, extra = {}) {
-  const settings = await loadAppSettings().catch(() => ({}));
-  return sendEmail({ to: user.email, ...tpl, replyTo: settings.supportEmail || undefined, ...extra });
+// Replies go to support (the welcome email's go to hello@), and every
+// email's footer names the support address.
+async function send(user, build, extra = {}) {
+  const support = await supportAddress();
+  return sendEmail({ to: user.email, ...build(support), replyTo: support, ...extra });
 }
 
 export async function sendWelcome(user) {
   const token = await createEmailToken(user.id, 'verify');
-  return send(user, welcomeEmail({ name: user.name, verifyUrl: `${CANONICAL_ORIGIN}/verify-email?token=${token}` }));
+  return send(user, (support) => welcomeEmail({ name: user.name, verifyUrl: `${CANONICAL_ORIGIN}/verify-email?token=${token}`, support }), { replyTo: CONTACT.hello });
 }
 
 export async function sendVerification(user) {
   const token = await createEmailToken(user.id, 'verify');
-  return send(user, verifyEmail({ name: user.name, verifyUrl: `${CANONICAL_ORIGIN}/verify-email?token=${token}` }));
+  return send(user, (support) => verifyEmail({ name: user.name, verifyUrl: `${CANONICAL_ORIGIN}/verify-email?token=${token}`, support }));
 }
 
 export async function sendPasswordReset(user) {
   const token = await createEmailToken(user.id, 'reset');
-  return send(user, passwordResetEmail({ name: user.name, resetUrl: `${CANONICAL_ORIGIN}/reset-password?token=${token}` }));
+  return send(user, (support) => passwordResetEmail({ name: user.name, resetUrl: `${CANONICAL_ORIGIN}/reset-password?token=${token}`, support }));
 }
 
 export function alertPasswordChanged(user, req, via) {
-  return send(user, passwordChangedEmail({ name: user.name, device: deviceName(req), via }));
+  return send(user, (support) => passwordChangedEmail({ name: user.name, device: deviceName(req), via, support }));
 }
 
 export function alertTwoStep(user, on) {
-  return send(user, twoStepEmail({ name: user.name, on }));
+  return send(user, (support) => twoStepEmail({ name: user.name, on, support }));
 }
 
 // A sign-in from a device not seen on this account in the last 90 days.
@@ -47,7 +50,7 @@ export async function alertIfNewDevice(user, req, sessionId) {
   const since = new Date(Date.now() - 90 * 86400e3);
   const history = await prisma.session.findMany({ where: { userId: user.id, id: { not: sessionId }, createdAt: { gte: since } }, select: { device: true }, take: 200 });
   if (!history.length || history.some((s) => s.device === device)) return null;
-  return send(user, newSignInEmail({ name: user.name, device, ip: clientIp(req) }));
+  return send(user, (support) => newSignInEmail({ name: user.name, device, ip: clientIp(req), support }));
 }
 
 // Does the address's domain accept email? Refuses only when the domain

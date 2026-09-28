@@ -7,6 +7,7 @@ import Input from '../../components/ui/Input';
 import Button from '../../components/ui/Button';
 import Badge from '../../components/ui/Badge';
 import { api } from '../../lib/api';
+import { CONTACT } from '../../lib/contact';
 
 function Toggle({ checked, onChange, label, hint, disabled }) {
   return (
@@ -144,13 +145,14 @@ export default function AdminSettings() {
       </Card>
 
       <Card>
-        <CardHeader title="Support" subtitle="Shown on the sign-in help page and the verification form." />
+        <CardHeader title="Support" subtitle="Where traders are sent for account help: the sign-in pages, the account menu, verification, account notices and replies to Kotka emails." />
         <CardBody>
           <div className="max-w-sm">
             <Input
               label="Support email"
               type="email"
-              placeholder="support@yourdomain.com"
+              placeholder={CONTACT.support}
+              hint={`Leave blank to use ${CONTACT.support}.`}
               value={draft.supportEmail}
               onChange={(e) => set('supportEmail', e.target.value)}
               disabled={disabled}

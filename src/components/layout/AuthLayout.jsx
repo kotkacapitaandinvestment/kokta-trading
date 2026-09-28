@@ -1,7 +1,10 @@
 import BrandMark from '../ui/BrandMark';
 import { Link } from 'react-router-dom';
+import { useAppConfig } from '../../context/AppConfigContext';
+import { mailto } from '../../lib/contact';
 
 export default function AuthLayout({ title, subtitle, children }) {
+  const { supportEmail } = useAppConfig();
   return (
     <div className="flex min-h-screen bg-white dark:bg-ink-950">
       <div className="relative hidden w-1/2 flex-col justify-between overflow-hidden bg-ink-950 p-12 text-white lg:flex">
@@ -35,6 +38,9 @@ export default function AuthLayout({ title, subtitle, children }) {
           <h1 className="text-2xl font-semibold tracking-tight text-ink-900 dark:text-ink-50">{title}</h1>
           {subtitle ? <p className="mt-1.5 text-sm text-ink-500 dark:text-ink-400">{subtitle}</p> : null}
           <div className="mt-8">{children}</div>
+          <p className="mt-10 text-center text-xs text-ink-400">
+            Trouble getting in? Email <a className="font-medium text-accent-600 hover:underline dark:text-accent-400" href={mailto(supportEmail)}>{supportEmail}</a>
+          </p>
         </div>
       </div>
     </div>

@@ -7,6 +7,7 @@ import Button from '../../components/ui/Button';
 import { useAuth } from '../../context/AuthContext';
 import { useAppConfig } from '../../context/AppConfigContext';
 import { CHECKLIST_ITEMS } from '../checklist/items';
+import { CONTACT, mailto } from '../../lib/contact';
 
 // The landing page is dark-locked (brand black and gold) regardless of the
 // app theme, so it uses explicit colours rather than dark: variants.
@@ -46,6 +47,7 @@ function Nav({ user, signupsOpen }) {
           <a href="#routine" className="transition-colors hover:text-white">The routine</a>
           <a href="#research" className="transition-colors hover:text-white">Research</a>
           <a href="#mentor" className="transition-colors hover:text-white">Kotka AI</a>
+          <a href="#contact" className="transition-colors hover:text-white">Contact</a>
         </div>
         <div className="flex items-center gap-2">
           {home ? (
@@ -356,7 +358,7 @@ function Closing({ signupsOpen, paidPlansEnabled }) {
 
 export default function Landing() {
   const { user } = useAuth();
-  const { signupsOpen, paidPlansEnabled } = useAppConfig();
+  const { signupsOpen, paidPlansEnabled, supportEmail } = useAppConfig();
   useReveal();
 
   return (
@@ -370,16 +372,35 @@ export default function Landing() {
         <Mentor />
         <Closing signupsOpen={signupsOpen} paidPlansEnabled={paidPlansEnabled} />
       </main>
-      <footer className="border-t border-white/5">
-        <div className="mx-auto flex max-w-[1400px] flex-col gap-6 px-5 py-10 sm:px-8 md:flex-row md:items-center md:justify-between">
-          <div className="flex items-center gap-3">
-            <BrandMark size={26} />
-            <span className="text-[12px] font-semibold tracking-[0.3em] text-white">KOTKA</span>
-            <span className="text-xs text-ink-500">Discipline is Freedom.</span>
+      <footer id="contact" className="scroll-mt-16 border-t border-white/5">
+        <div className="mx-auto max-w-[1400px] px-5 py-12 sm:px-8">
+          <div className="grid grid-cols-1 gap-10 lg:grid-cols-12">
+            <div className="flex items-center gap-3 self-start lg:col-span-4">
+              <BrandMark size={26} />
+              <span className="text-[12px] font-semibold tracking-[0.3em] text-white">KOTKA</span>
+              <span className="text-xs text-ink-500">Discipline is Freedom.</span>
+            </div>
+            <dl className="grid grid-cols-1 gap-x-10 gap-y-6 sm:grid-cols-2 lg:col-span-8 xl:grid-cols-4">
+              {[
+                ['Help with your account', supportEmail],
+                ['Questions about Kotka', CONTACT.info],
+                ['Feedback and ideas', CONTACT.hello],
+                ['Partnerships and press', CONTACT.contact],
+              ].map(([label, address]) => (
+                <div key={label} className="min-w-0">
+                  <dt className="text-xs text-ink-500">{label}</dt>
+                  <dd className="mt-1.5">
+                    <a href={mailto(address)} className="break-all text-sm text-ink-200 transition-colors hover:text-accent-400">{address}</a>
+                  </dd>
+                </div>
+              ))}
+            </dl>
           </div>
-          <p className="max-w-xl text-xs leading-relaxed text-ink-500 md:text-right">
-            Kotka is an educational and analytical tool. It does not give investment advice or trade signals, and trading carries a risk of loss. &copy; {new Date().getFullYear()} Kotka Trading.
-          </p>
+          <div className="mt-10 border-t border-white/5 pt-6">
+            <p className="max-w-3xl text-xs leading-relaxed text-ink-500">
+              Kotka is an educational and analytical tool. It does not give investment advice or trade signals, and trading carries a risk of loss. &copy; {new Date().getFullYear()} Kotka Trading.
+            </p>
+          </div>
         </div>
       </footer>
     </div>

@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
 import Button from '../../components/ui/Button';
+import { CONTACT, mailto } from '../../lib/contact';
 
 export default function NotFound() {
   return (
@@ -12,6 +13,9 @@ export default function NotFound() {
       <Button as={Link} to="/" className="mt-6">
         Back to home
       </Button>
+      <p className="mt-6 text-xs text-ink-400">
+        Can’t find what you need? Email <a className="font-medium text-accent-600 hover:underline dark:text-accent-400" href={mailto(CONTACT.info)}>{CONTACT.info}</a>
+      </p>
     </div>
   );
 }

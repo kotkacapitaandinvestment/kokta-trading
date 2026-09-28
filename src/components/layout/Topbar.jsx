@@ -1,11 +1,13 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Bell, Moon, Sun, ChevronDown, LogOut, ShieldCheck, User as UserIcon, Download, Share } from 'lucide-react';
+import { Bell, Moon, Sun, ChevronDown, LogOut, ShieldCheck, User as UserIcon, Download, Share, LifeBuoy, MessageCircle } from 'lucide-react';
 import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
 import { useCommunity } from '../../features/community/CommunityContext';
 import { useInstallPrompt } from '../../lib/pwa';
 import BrandMark from '../ui/BrandMark';
+import { useAppConfig } from '../../context/AppConfigContext';
+import { CONTACT, mailto } from '../../lib/contact';
 
 export default function Topbar({ title, right }) {
   const { theme, toggleTheme } = useTheme();
@@ -15,6 +17,7 @@ export default function Topbar({ title, right }) {
   const [open, setOpen] = useState(false);
   const [iosSteps, setIosSteps] = useState(false);
   const installer = useInstallPrompt();
+  const { supportEmail } = useAppConfig();
   const navigate = useNavigate();
 
   return (
@@ -111,6 +114,20 @@ export default function Topbar({ title, right }) {
                     ) : null}
                   </>
                 ) : null}
+                <a
+                  href={mailto(supportEmail, 'Help with my Kotka account')}
+                  onClick={() => setOpen(false)}
+                  className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-ink-600 hover:bg-ink-50 dark:text-ink-300 dark:hover:bg-ink-700"
+                >
+                  <LifeBuoy className="h-4 w-4" /> Get help
+                </a>
+                <a
+                  href={mailto(CONTACT.hello, 'Feedback on Kotka')}
+                  onClick={() => setOpen(false)}
+                  className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-ink-600 hover:bg-ink-50 dark:text-ink-300 dark:hover:bg-ink-700"
+                >
+                  <MessageCircle className="h-4 w-4" /> Share feedback
+                </a>
                 <div className="my-1 h-px bg-ink-100 dark:bg-ink-700" />
                 <button
                   onClick={logout}

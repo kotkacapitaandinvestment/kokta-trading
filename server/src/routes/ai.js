@@ -9,6 +9,7 @@ import { connection, openStreamWithFallback } from '../lib/aiModels.js';
 import { usageSnapshot, reserveAiUse, settleAiUse, tonePreference } from '../lib/aiUsage.js';
 import { limit } from '../lib/rateLimit.js';
 import { cleanImage } from '../lib/imageSafety.js';
+import { CONTACT } from '../lib/contact.js';
 
 export const aiRouter = Router();
 aiRouter.use(requireAuth);
@@ -40,6 +41,7 @@ const APP_MAP = `Kotka's sections, and the tools that read them:
 - Events: official release and central-bank calendar for USD and EUR (get_economic_calendar).
 - News: wire stories and Fed/ECB releases tagged to markets (get_market_news).
 - Community: market rooms, sentiment and trade ideas from other traders (get_community_view).
+- Contacting Kotka: help with an account (signing in, verification, a suspended account, safety) at ${CONTACT.support}; feedback and ideas at ${CONTACT.hello}; general questions at ${CONTACT.info}; partnerships and press at ${CONTACT.contact}.
 
 Using Kotka's data:
 - For any question about markets, prices, research, scores, central banks, events, news, sentiment, or the trader's own trades and stats, use the tool results. Never answer those from memory or general knowledge.

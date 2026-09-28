@@ -1,5 +1,5 @@
 import { prisma } from '../lib/prisma.js';
-import { loadAppSettings, ADMIN_ROLES } from '../lib/appSettings.js';
+import { loadAppSettings, supportAddress, ADMIN_ROLES } from '../lib/appSettings.js';
 import { readToken, liveSession, startSession, clearSessionCookie, pruneSessions } from '../lib/sessions.js';
 import { memoryHit } from '../lib/rateLimit.js';
 
@@ -86,7 +86,7 @@ export function requireAuth(req, res, next) {
     if (memoryHit(`api:${payload.sub}`, PER_USER_PER_MINUTE, 60e3)) return res.status(429).json({ error: 'You’re going a bit fast. Please wait a moment and try again.', code: 'rate_limited' });
     if (!access.active) {
       clearSessionCookie(res);
-      return res.status(403).json({ error: 'This account is paused. Please contact support for help.' });
+      return res.status(403).json({ error: `This account is paused. For help, email ${await supportAddress()}.` });
     }
     if (await kycBlocks(req, access)) {
       return res.status(403).json({ error: 'Verify your identity to continue.', code: 'kyc_required' });

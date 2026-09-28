@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { prisma } from '../lib/prisma.js';
 import { requireAuth, forgetUserAccess } from '../middleware/auth.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
-import { loadAppSettings } from '../lib/appSettings.js';
+import { loadAppSettings, supportAddress } from '../lib/appSettings.js';
 import { validateKycDetails, sealDetails, kycView } from '../lib/kyc.js';
 import { audit } from '../lib/audit.js';
 import { limit } from '../lib/rateLimit.js';
@@ -23,7 +23,7 @@ kycRouter.get('/', asyncHandler(async (req, res) => {
 kycRouter.post('/', limit('kyc'), asyncHandler(async (req, res) => {
   const existing = await prisma.kycProfile.findUnique({ where: { userId: req.userId } });
   if (existing?.status === 'approved') {
-    return res.status(409).json({ error: 'Your identity is already verified. Contact support to change verified details.' });
+    return res.status(409).json({ error: `Your identity is already verified. To change verified details, email ${await supportAddress()}.` });
   }
   const { details, errors } = validateKycDetails(req.body ?? {});
   if (errors) return res.status(400).json({ error: 'Some details need attention.', fields: errors });

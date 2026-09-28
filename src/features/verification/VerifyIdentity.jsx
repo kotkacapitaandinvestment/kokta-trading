@@ -7,6 +7,7 @@ import Input, { Select } from '../../components/ui/Input';
 import Button from '../../components/ui/Button';
 import { useAuth } from '../../context/AuthContext';
 import { useAppConfig } from '../../context/AppConfigContext';
+import { mailto } from '../../lib/contact';
 import { api } from '../../lib/api';
 import { COUNTRIES } from '../../lib/countries';
 
@@ -65,6 +66,7 @@ function FormSection({ index, step, children }) {
 }
 
 function StatusPanel({ kyc, onEdit }) {
+  const { supportEmail } = useAppConfig();
   const pending = kyc.status === 'pending';
   const Icon = pending ? Clock3 : BadgeCheck;
   return (
@@ -81,9 +83,11 @@ function StatusPanel({ kyc, onEdit }) {
         <div className="min-w-0">
           <h2 className="text-base font-semibold text-ink-900 dark:text-ink-50">{pending ? 'Your details are in review' : 'Your identity is verified'}</h2>
           <p className="mt-1 text-sm leading-relaxed text-ink-500 dark:text-ink-400">
-            {pending
-              ? 'You have full access while we check them. We will let you know here if anything needs correcting.'
-              : 'Nothing else is needed. To change verified details, contact support.'}
+            {pending ? (
+              'You have full access while we check them. We will let you know here if anything needs correcting.'
+            ) : (
+              <>Nothing else is needed. To change verified details, email <a className="font-medium text-accent-600 hover:underline dark:text-accent-400" href={mailto(supportEmail, 'Change my verified details')}>{supportEmail}</a>.</>
+            )}
           </p>
           <p className="mt-3 text-xs text-ink-400">
             Submitted {new Date(kyc.submittedAt).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}

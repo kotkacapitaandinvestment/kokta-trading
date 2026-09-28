@@ -2,6 +2,7 @@
 // while paidPlansEnabled is off; the free-tier AI limit only applies once it
 // is switched on, and a fair-use cap protects the model quota either way.
 
+import { CONTACT } from './contact.js';
 import { prisma } from './prisma.js';
 
 export const APP_DEFAULTS = {
@@ -79,8 +80,16 @@ export function publicAppConfig(s) {
     paidPlansEnabled: s.paidPlansEnabled,
     signupsOpen: s.signupsOpen,
     kycRequired: s.kycRequired,
-    supportEmail: s.supportEmail || null,
+    // Falls back to Kotka's support address when no override is set.
+    supportEmail: s.supportEmail || CONTACT.support,
   };
+}
+
+// Where people are sent for account help: the Platform Settings override,
+// or Kotka's support address.
+export async function supportAddress() {
+  const s = await loadAppSettings().catch(() => null);
+  return s?.supportEmail || CONTACT.support;
 }
 
 export const ADMIN_ROLES = ['admin', 'super_admin'];

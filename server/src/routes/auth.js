@@ -4,7 +4,7 @@ import { requireAuth, clearSessionCookie, sessionUserId } from '../middleware/au
 import { toPublicUser, PUBLIC_USER_INCLUDE } from '../lib/serialize.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 import { auditLater } from '../lib/audit.js';
-import { loadAppSettings } from '../lib/appSettings.js';
+import { loadAppSettings, supportAddress } from '../lib/appSettings.js';
 import { loginBlocked, signupBlocked, recordAttempt } from '../lib/authThrottle.js';
 import { startSession, revokeSession, readToken, hashSid, signPurposeToken, readPurposeToken } from '../lib/sessions.js';
 import { hashPassword, checkPassword, needsRehash, passwordProblem, MAX_LENGTH } from '../lib/passwords.js';
@@ -114,7 +114,8 @@ authRouter.post('/login', asyncHandler(async (req, res) => {
 
   if (user.status !== 'active') {
     auditLater(req, 'auth.sign_in_refused', { targetType: 'user', targetId: user.id, actor: user, detail: { reason: `Account ${user.status}` } });
-    return res.status(403).json({ error: user.status === 'banned' ? 'This account has been closed. Contact support for help.' : 'This account has been suspended. Contact support for help.' });
+    const support = await supportAddress();
+    return res.status(403).json({ error: user.status === 'banned' ? `This account has been closed. If you think this is a mistake, email ${support}.` : `This account has been suspended. For help, email ${support}.` });
   }
 
   // Upgrade older, cheaper hashes now that we have the password.
