@@ -8,7 +8,7 @@ import AdminTable from './components/AdminTable';
 import { api } from '../../lib/api';
 import { useAuth } from '../../context/AuthContext';
 import { useAppConfig } from '../../context/AppConfigContext';
-import { confirmDialog } from '../../lib/dialogs';
+import { confirmDialog, promptDialog, toast } from '../../lib/dialogs';
 
 const statusTone = { active: 'profit', suspended: 'warning', banned: 'loss' };
 const kycTone = { approved: 'profit', pending: 'warning', rejected: 'loss', none: 'neutral' };
@@ -32,6 +32,7 @@ export default function AdminUsers() {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState(null);
+  const [deletingId, setDeletingId] = useState(null);
   const [error, setError] = useState(null);
   const isSuper = me?.role === 'super_admin';
 
@@ -57,8 +58,40 @@ export default function AdminUsers() {
     }
   };
 
+  // Permanent: you type the account's email to confirm.
+  const deleteUser = async (u) => {
+    const typed = await promptDialog({
+      title: `Delete ${u.name}’s account permanently?`,
+      message: 'This removes the account and everything in it: journal, checklists, AI conversations, goals, Community posts and messages, and verification details. It can’t be undone. The audit log keeps a record that the account was deleted.',
+      label: `Type ${u.email} to confirm`,
+      placeholder: u.email,
+      confirmLabel: 'Delete permanently',
+      danger: true,
+      maxLength: 320,
+    });
+    if (typed == null) return;
+    if (typed.trim().toLowerCase() !== u.email.toLowerCase()) {
+      setError(`${u.email}: the email you typed didn’t match, so nothing was deleted.`);
+      return;
+    }
+    setBusyId(u.id);
+    setDeletingId(u.id);
+    setError(null);
+    try {
+      await api.delete(`/admin/users/${u.id}`, { confirm: typed.trim() });
+      setUsers((prev) => prev.filter((x) => x.id !== u.id));
+      toast(`${u.email} was deleted.`);
+    } catch (err) {
+      setError(`${u.email}: ${err.message}`);
+    } finally {
+      setBusyId(null);
+      setDeletingId(null);
+    }
+  };
+
   // Mirrors the server's rules so buttons that would be refused aren't shown.
   const canManage = (u) => u.id !== me?.id && (isSuper || RANK[u.role] < RANK[me?.role]);
+  const canDelete = (u) => isSuper && u.id !== me?.id && u.role !== 'super_admin';
 
   const columns = [
     {
@@ -130,6 +163,11 @@ export default function AdminUsers() {
             ) : null}
             </>
             ) : null}
+            {canDelete(u) ? (
+              <Button size="sm" variant="dangerGhost" disabled={busyId === u.id} onClick={() => deleteUser(u)}>
+                {deletingId === u.id ? 'Deleting…' : 'Delete'}
+              </Button>
+            ) : null}
           </div>
         ),
     },
@@ -140,7 +178,7 @@ export default function AdminUsers() {
       <PageHeader
         eyebrow="Admin"
         title="Users"
-        description="Every account on Kotka. Suspending or banning someone signs them out within a minute."
+        description={isSuper ? 'Every account on Kotka. Suspending or banning someone signs them out within a minute; deleting removes the account for good.' : 'Every account on Kotka. Suspending or banning someone signs them out within a minute.'}
         actions={
           <Button as={Link} to="/admin/verifications" variant="secondary" size="sm">
             Review verifications

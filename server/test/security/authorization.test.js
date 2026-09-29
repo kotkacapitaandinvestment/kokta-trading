@@ -51,6 +51,42 @@ test('super admins can change roles, but only to real roles', async () => {
   assert.equal((await supC.patch(`/api/admin/users/${other.id}`, { role: 'trader' })).status, 200);
 });
 
+test('only super admins delete accounts: email typed to confirm, never themselves or another super admin, never with money in the wallet', async () => {
+  const victim = await makeUser('Victim');
+  const victimC = await signIn(victim);
+  const entry = await victimC.post('/api/journal', { date: '2026-09-01', market: 'EUR/USD', strategy: 'Breakout' });
+  assert.equal(entry.status, 201);
+  const url = `/api/admin/users/${victim.id}`;
+  assert.equal((await traderC.delete(url, { confirm: victim.email })).status, 403);
+  assert.equal((await modC.delete(url, { confirm: victim.email })).status, 403);
+  assert.equal((await adminC.delete(url, { confirm: victim.email })).status, 403, 'admins can suspend or ban, not delete');
+  assert.equal((await supC.delete(url, {})).status, 400, 'the email must be typed');
+  assert.equal((await supC.delete(url, { confirm: other.email })).status, 400, 'and it must be this account’s');
+  assert.equal((await supC.delete(`/api/admin/users/${sup.id}`, { confirm: sup.email })).status, 403, 'not your own account');
+  const sup2 = await makeUser('Super2', { role: 'super_admin' });
+  assert.equal((await supC.delete(`/api/admin/users/${sup2.id}`, { confirm: sup2.email })).status, 409, 'demote a super admin first');
+  assert.equal((await supC.delete('/api/admin/users/nobody-here', { confirm: 'x@y.z' })).status, 404);
+  // Money in the Trading Game wallet blocks it.
+  const wallet = await prisma.wallet.create({ data: { userId: victim.id, lockedKobo: 50000n } });
+  try {
+    const blocked = await supC.delete(url, { confirm: victim.email });
+    assert.equal(blocked.status, 409);
+    assert.match(blocked.json.error, /₦500/);
+    await prisma.wallet.update({ where: { id: wallet.id }, data: { lockedKobo: 0n } });
+    // Case doesn't matter in the typed email.
+    const gone = await supC.delete(url, { confirm: victim.email.toUpperCase() });
+    assert.equal(gone.status, 200, JSON.stringify(gone.json));
+  } finally {
+    await prisma.wallet.deleteMany({ where: { id: wallet.id } });
+  }
+  assert.equal(await prisma.user.count({ where: { id: victim.id } }), 0);
+  assert.equal(await prisma.journalEntry.count({ where: { id: entry.json.entry.id } }), 0, 'their content goes with the account');
+  assert.equal((await victimC.get('/api/auth/me')).status, 401, 'and they are signed out');
+  const log = await prisma.auditLog.findFirst({ where: { action: 'user.deleted', targetId: victim.id } });
+  assert.equal(log?.actorId, sup.id, 'the audit log records who deleted whom');
+  assert.equal(log?.detail?.email, victim.email);
+});
+
 test('journal entries belong to their owner', async () => {
   const mine = await traderC.post('/api/journal', { date: '2026-09-01', market: 'EUR/USD', strategy: 'Breakout', positionStatus: 'open' });
   assert.equal(mine.status, 201);

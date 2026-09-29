@@ -8,6 +8,8 @@ const variants = {
   accent: 'bg-accent-500 text-ink-950 hover:bg-accent-600',
   ghost: 'text-ink-600 hover:bg-ink-100 dark:text-ink-300 dark:hover:bg-ink-800',
   danger: 'bg-loss-500 text-white hover:bg-loss-600',
+  // A quiet destructive action in a row of buttons (e.g. Delete).
+  dangerGhost: 'text-loss-600 hover:bg-loss-50 dark:text-loss-400 dark:hover:bg-loss-500/10',
   // For use on the always-dark brand panels (dashboard, landing).
   onDark: 'bg-white/10 text-white hover:bg-white/15',
   ghostOnDark: 'text-ink-300 hover:bg-white/10 hover:text-white',

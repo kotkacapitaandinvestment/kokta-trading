@@ -26,6 +26,7 @@ export const LIMITS = {
   communityAi: [15, 10 * 60e3],
   passwordChange: [5, 3600e3],
   accountDelete: [5, 3600e3],
+  userDelete: [30, 3600e3], // a Super Admin permanently deleting accounts
   mfa: [6, 15 * 60e3],
   mfaSetup: [10, 3600e3],
   kyc: [10, 3600e3],
