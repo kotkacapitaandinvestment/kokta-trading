@@ -7,7 +7,8 @@ import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import { startServer, stopServer, makeUser, signIn, client, prisma, runTag } from './helpers.js';
 import { encryptSecret } from '../../src/lib/crypto.js';
-import { generateMarket, candlesUpTo, TEMPLATE_KEYS } from '../../src/lib/game/market.js';
+import { generateMarket, candlesUpTo, candleRange, TEMPLATE_KEYS } from '../../src/lib/game/market.js';
+import { PAIR_SYMBOLS } from '../../src/lib/game/pairs.js';
 import { simulate, defaultTradingRules } from '../../src/lib/game/trading.js';
 import { scorePlayer } from '../../src/lib/game/scoring.js';
 import { money, advance, sweep, marketFor } from '../../src/lib/game/matches.js';
@@ -141,23 +142,61 @@ after(async () => {
 
 // ── The engine (no database) ────────────────────────────────────────────────
 
-test('the synthetic market is deterministic, and the same scenario and seed replay exactly', () => {
+const mk = (o) => generateMarket({ durationSec: 900, candleSec: 15, historyCandles: 80, symbol: 'KTK/NGN', backgroundTicks: 3600, ...o });
+
+test('the synthetic market is deterministic, and the same scenario, pair and seed replay exactly', () => {
   for (const scenario of TEMPLATE_KEYS) {
-    const x = generateMarket({ scenario, seed: 424242, durationSec: 900, candleSec: 15, historyCandles: 80 });
-    const y = generateMarket({ scenario, seed: 424242, durationSec: 900, candleSec: 15, historyCandles: 80 });
-    const z = generateMarket({ scenario, seed: 424243, durationSec: 900, candleSec: 15, historyCandles: 80 });
+    const x = mk({ scenario, seed: 424242 });
+    const y = mk({ scenario, seed: 424242 });
+    const z = mk({ scenario, seed: 424243 });
     assert.equal(x.hash, y.hash, scenario);
     assert.notEqual(x.hash, z.hash, `${scenario}: a different seed gives a different path`);
-    assert.equal(x.prices.length, 80 * 15 + 900);
+    assert.notEqual(mk({ scenario, seed: 424242, symbol: 'KGD/USD' }).hash, x.hash, 'a different pair, a different path');
+    assert.equal(x.prices.length, 3600 + 80 * 15 + 900);
     assert.ok(x.prices.every((p) => p > 0 && Number.isFinite(p)));
     const candles = candlesUpTo(x, x.prices.length - 1);
-    assert.equal(candles.length, 80 + 60);
+    assert.equal(candles.length, (3600 + 1200) / 15 + 60);
     assert.ok(candles.every((k) => k.h >= Math.max(k.o, k.c) && k.l <= Math.min(k.o, k.c)));
   }
+  // Older matches (version 1) still regenerate exactly as they were made.
+  const old = generateMarket({ scenario: 'bull_trend', seed: 2024, durationSec: 900, candleSec: 15, historyCandles: 80, version: 1 });
+  assert.equal(old.prices.length, 2100);
+  assert.equal(old.decimals, 2);
+});
+
+test('every Kotka pair generates at its own precision, and timeframes agree with each other', () => {
+  for (const symbol of PAIR_SYMBOLS) {
+    const m = mk({ scenario: 'range', seed: 9, symbol });
+    const dp = m.decimals;
+    assert.ok(m.prices.every((p) => Math.abs(p * 10 ** dp - Math.round(p * 10 ** dp)) < 1e-6), `${symbol} rounds to ${dp} dp`);
+  }
+  const m = mk({ scenario: 'breakout', seed: 31 });
+  const upToAbs = m.historyTicks + 299;
+  // Each 1-minute candle is exactly its sixty 1-second candles.
+  const one = candleRange(m, 1, { limit: 1000, upToAbs }).candles.filter((c) => c.t >= 0 && c.t < 300);
+  const min = candleRange(m, 60, { limit: 1000, upToAbs }).candles.filter((c) => c.t >= 0 && c.t < 300);
+  assert.equal(min.length, 5);
+  for (const c of min) {
+    const parts = one.filter((x) => x.t >= c.t && x.t < c.t + 60);
+    assert.equal(parts.length, 60);
+    assert.equal(c.c, parts.at(-1).c);
+    assert.equal(c.h, Math.max(...parts.map((x) => x.h)));
+    assert.equal(c.l, Math.min(...parts.map((x) => x.l)));
+    assert.equal(c.v, parts.reduce((s, x) => s + x.v, 0));
+  }
+  // Nothing past the visible tick, at any timeframe, and history pages join up.
+  for (const tf of [1, 5, 15, 30, 60, 180, 300, 900, 1800, 3600]) {
+    const r = candleRange(m, tf, { limit: 1000, upToAbs: m.historyTicks + 120 });
+    assert.ok(r.candles.every((c) => c.t <= 120), `tf ${tf}`);
+  }
+  const page1 = candleRange(m, 60, { limit: 10, upToAbs: m.historyTicks - 1 });
+  const page2 = candleRange(m, 60, { beforeT: page1.candles[0].t, limit: 10, upToAbs: m.historyTicks - 1 });
+  assert.equal(page2.candles.at(-1).t + 60, page1.candles[0].t, 'older page ends where the newer begins');
+  assert.equal(page2.more, true);
 });
 
 test('same trade, different process, different score', () => {
-  const market = generateMarket({ scenario: 'bull_trend', seed: 2024, durationSec: 900, candleSec: 15, historyCandles: 80 });
+  const market = mk({ scenario: 'bull_trend', seed: 2024 });
   const rules = defaultTradingRules();
   const p = market.prices[market.historyTicks + 120];
   const disciplined = [{ seq: 1, tick: 120, type: 'open', payload: { side: 'long', sizePct: 200, stop: +(p * 0.99).toFixed(2), target: +(p * 1.03).toFixed(2), thesis } }, { seq: 2, tick: 700, type: 'close', payload: {} }];
@@ -172,7 +211,7 @@ test('same trade, different process, different score', () => {
 });
 
 test('stops fill from the market path, and the end of the match closes what is open', () => {
-  const market = generateMarket({ scenario: 'bear_trend', seed: 99, durationSec: 900, candleSec: 15, historyCandles: 80 });
+  const market = mk({ scenario: 'bear_trend', seed: 99 });
   const p = market.prices[market.historyTicks + 10];
   const sim = simulate({ market, actions: [{ seq: 1, tick: 10, type: 'open', payload: { side: 'long', sizePct: 100, stop: +(p * 0.997).toFixed(2), thesis } }], capital: 100000, rules: defaultTradingRules(), final: true });
   assert.equal(sim.trades.length, 1);
@@ -211,20 +250,45 @@ test('a ₦500 duel: stakes lock, both trade the same market, it settles once wi
 
   // Same market for both: identical candles.
   const va = await aC.get(`/api/game/matches/${id}/state`);
-  const vb = await bC.get(`/api/game/matches/${id}/state`);
-  assert.deepEqual(va.json.candles.slice(0, 20), vb.json.candles.slice(0, 20));
+  const ca = await aC.get(`/api/game/matches/${id}/candles?tf=15&before=0`);
+  const cb = await bC.get(`/api/game/matches/${id}/candles?tf=15&before=0`);
+  assert.deepEqual(ca.json.candles.map((x) => [x.t, x.o, x.h, x.l, x.c, x.v]), cb.json.candles.map((x) => [x.t, x.o, x.h, x.l, x.c, x.v]), 'identical market for both');
   // The future isn't sent: no candle beyond the current tick.
   const m = await prisma.gameMatch.findUnique({ where: { id } });
   const market = marketFor(m);
-  assert.ok(va.json.candles.at(-1).t <= va.json.tick, 'no future candles');
-  assert.ok(va.json.totalCandles <= market.historyTicks / m.candleSec + Math.ceil((va.json.tick + 1) / m.candleSec));
+  const latest = await aC.get(`/api/game/matches/${id}/candles?tf=1`);
+  const after = await aC.get(`/api/game/matches/${id}/state`);
+  assert.ok(latest.json.candles.at(-1).t <= latest.json.lastT, 'no candle beyond the visible second');
+  assert.ok(latest.json.lastT <= after.json.tick, 'and that second had already happened');
   assert.equal(va.json.price, market.prices[market.historyTicks + va.json.tick]);
 
   // A trades with a plan; B trades without one.
+  // The chart: candles at any timeframe, never beyond the tick; the live tick feed; the pair.
+  assert.ok(va.json.chart?.symbol, 'the match has a Kotka pair');
+  for (const tf of [1, 60]) {
+    const c = await aC.get(`/api/game/matches/${id}/candles?tf=${tf}`);
+    assert.equal(c.status, 200);
+    assert.ok(c.json.candles.length > 0);
+    assert.ok(c.json.candles.every((x) => x.t <= c.json.lastT), `tf ${tf}: no future candles`);
+  }
+  assert.equal((await aC.get(`/api/game/matches/${id}/candles?tf=7`)).status, 400, 'only the offered timeframes');
+  assert.equal((await cC.get(`/api/game/matches/${id}/candles?tf=60`)).status, 404, 'only players see the chart');
+  const feed = await aC.get(`/api/game/matches/${id}/state?ticksSince=${va.json.tick - 3}`);
+  assert.ok(Array.isArray(feed.json.ticks) && feed.json.ticks.every(([t]) => t > va.json.tick - 3 && t <= feed.json.tick));
+  // Drawings are saved per trader and nobody else's to read or write.
+  const layout = { drawings: [{ name: 'segment', points: [{ t: -120, value: 1 }, { t: 0, value: 2 }] }], timeframe: 60 };
+  assert.equal((await aC.put(`/api/game/charts/match:${id}`, { layout })).status, 200);
+  assert.deepEqual((await aC.get(`/api/game/charts/match:${id}`)).json.layout, layout);
+  assert.equal((await bC.get(`/api/game/charts/match:${id}`)).json.layout, null, 'B sees their own (empty) chart, not A’s');
+  assert.equal((await cC.put(`/api/game/charts/match:${id}`, { layout })).status, 404, 'not in the match');
+  assert.equal((await aC.put(`/api/game/charts/match:${id}`, { layout: { drawings: Array.from({ length: 301 }, () => ({})) } })).status, 413);
+
   const price = va.json.price;
-  const opened = await aC.post(`/api/game/matches/${id}/actions`, { type: 'open', payload: { side: 'long', sizePct: 100, stop: +(price * 0.99).toFixed(2), target: +(price * 1.02).toFixed(2), thesis } }, { 'Idempotency-Key': 'open-ada-00001' });
+  const opened = await aC.post(`/api/game/matches/${id}/actions`, { type: 'open', payload: { side: 'long', sizePct: 100, stop: +(price * 0.99).toFixed(2), target: +(price * 1.02).toFixed(2), thesis }, ticksSince: va.json.chart.lastT - 1 }, { 'Idempotency-Key': 'open-ada-00001' });
   assert.equal(opened.status, 200, JSON.stringify(opened.json));
   assert.ok(opened.json.me.position);
+  assert.ok(Array.isArray(opened.json.ticks) && opened.json.ticks.length >= 1 && opened.json.candles === undefined, 'the new chart gets one-second prices back, not candles');
+  assert.equal((await aC.post(`/api/game/matches/${id}/cancel`)).status, 409, 'a staked match can’t be ended early');
   const again = await aC.post(`/api/game/matches/${id}/actions`, { type: 'open', payload: { side: 'long', sizePct: 100, stop: +(price * 0.99).toFixed(2), thesis } }, { 'Idempotency-Key': 'open-ada-00001' });
   assert.equal(again.status, 200, 'a replayed request is recognised');
   assert.equal(await prisma.gameAction.count({ where: { matchId: id, userId: a.id } }), 1, 'and not stored twice');
@@ -374,6 +438,18 @@ test('stakes need a verified identity; practice does not', async () => {
   const m = await untilSettled(p.json.match.id);
   assert.equal(m.status, 'SETTLED');
   assert.equal(await prisma.walletEntry.count({ where: { matchId: m.id } }), 0, 'practice never touches money');
+  // Choosing a pair; only offered pairs.
+  const chosen = await pendingC.post('/api/game/matches', { mode: 'practice', symbol: 'KGD/USD' });
+  assert.equal(chosen.status, 201);
+  assert.equal((await prisma.gameMatch.findUnique({ where: { id: chosen.json.match.id } })).symbol, 'KGD/USD');
+  assert.equal((await aC.post('/api/game/matches', { mode: 'practice', symbol: 'EUR/USD' })).status, 400, 'real-world symbols are not Kotka pairs');
+  // One match at a time, but a practice can be ended early (to switch pair).
+  assert.equal((await pendingC.post('/api/game/matches', { mode: 'practice' })).json?.code, 'in_match');
+  assert.equal((await pendingC.post(`/api/game/matches/${chosen.json.match.id}/cancel`)).status, 200);
+  assert.equal((await prisma.gameMatch.findUnique({ where: { id: chosen.json.match.id } })).status, 'ABANDONED');
+  const next = await pendingC.post('/api/game/matches', { mode: 'practice', symbol: 'KEU/USD' });
+  assert.equal(next.status, 201);
+  await prisma.gameMatch.deleteMany({ where: { id: { in: [chosen.json.match.id, next.json.match.id] } } });
   // Stake rules.
   for (const stake of [naira(499), naira(750), naira(1_000_000), -500, 'abc']) assert.equal((await aC.post('/api/game/matches', { mode: 'duel', stakeKobo: stake, open: true })).status, 400, String(stake));
 });

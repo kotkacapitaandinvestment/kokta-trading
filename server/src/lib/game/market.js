@@ -13,8 +13,12 @@
 
 import crypto from 'node:crypto';
 import { rng, mix } from './rng.js';
+import { pairOf } from './pairs.js';
 
-export const GENERATOR_VERSION = 1;
+// 1: one unnamed market, 2-decimal prices, only the scenario's own history.
+// 2: a Kotka pair (its level, precision and volatility) and a long
+//    background history before the scenario. Old matches keep version 1.
+export const GENERATOR_VERSION = 2;
 
 export const TEMPLATES = [
   { key: 'bull_trend', name: 'Bullish trend', lesson: 'In an uptrend, pullbacks towards the moving average are usually better entries than chasing a candle that has already run.' },
@@ -39,6 +43,35 @@ export function scenarioCode(templateKey, seed) {
 }
 
 const round2 = (v) => Math.round(v * 100) / 100;
+const roundTo = (dp) => (v) => Math.round(v * 10 ** dp) / 10 ** dp;
+
+// History before the scenario, built backwards from the scenario's opening
+// price so the two join exactly: stretches of trend, range, quiet and busy
+// markets, 15 to 90 minutes each.
+function background(noise, endPrice, n, s0) {
+  const prices = new Array(n);
+  const regimes = new Array(n);
+  let x = Math.log(endPrice);
+  let volMul = 1;
+  let i = n - 1;
+  while (i >= 0) {
+    const len = Math.min(i + 1, Math.round(noise.between(900, 5400)));
+    const kind = ['trend', 'trend', 'range', 'quiet', 'busy'][Math.floor(noise.next() * 5)];
+    const mu = kind === 'trend' ? noise.sign() * s0 * noise.between(0.004, 0.018) : 0;
+    const sigma = kind === 'quiet' ? 0.55 : kind === 'busy' ? 1.7 : 1;
+    const anchor = x;
+    for (let k = 0; k < len; k++, i--) {
+      prices[i] = Math.exp(x);
+      regimes[i] = kind;
+      const z = noise.normal();
+      volMul = 0.985 * volMul + 0.015 * (0.55 + 0.9 * Math.min(Math.abs(z), 3));
+      // Stepping back in time: undo one step of the forward process.
+      x -= mu + sigma * s0 * volMul * z;
+      if (kind === 'range') x += 0.004 * (anchor - x);
+    }
+  }
+  return { prices, regimes };
+}
 
 // A log-price random walk with volatility clustering, mean reversion to an
 // optional target, and jumps.
@@ -216,16 +249,21 @@ function trend(w, { v, H, M, mu, sc }, d) {
  * The full market for a match: prices and volumes per tick, events and
  * the scenario's levels. Pure and deterministic.
  */
-export function generateMarket({ scenario, seed, durationSec, candleSec, historyCandles, version = GENERATOR_VERSION }) {
-  if (version !== GENERATOR_VERSION) throw new Error(`Market generator version ${version} is not available.`);
+export function generateMarket({ scenario, seed, durationSec, candleSec, historyCandles, symbol = null, backgroundTicks = 0, version = GENERATOR_VERSION }) {
+  if (version !== 1 && version !== 2) throw new Error(`Market generator version ${version} is not available.`);
   if (!BUILD[scenario]) throw new Error(`Unknown market scenario: ${scenario}`);
+  const pair = version >= 2 ? pairOf(symbol) : null;
+  if (version >= 2 && !pair) throw new Error(`Unknown Kotka pair: ${symbol}`);
+  const B = version >= 2 ? Math.max(0, Math.floor(backgroundTicks)) : 0;
+  const decimals = pair?.decimals ?? 2;
+  const roundP = version >= 2 ? roundTo(decimals) : round2;
   const H = historyCandles * candleSec;
   const M = durationSec;
   const v = rng(mix('variant', scenario, seed % 100));
-  const noise = rng(mix('noise', scenario, seed));
-  const s0 = v.between(0.0003, 0.00048);
+  const noise = rng(version >= 2 ? mix('noise', scenario, symbol, seed) : mix('noise', scenario, seed));
+  const s0 = v.between(0.0003, 0.00048) * (pair?.vol ?? 1);
   const mu = v.between(1.6, 2.6) * 1e-5 * (1 + s0 * 1000);
-  const startPrice = round2(v.between(500, 5000));
+  const startPrice = pair ? roundP(pair.level * v.between(0.85, 1.15)) : round2(v.between(500, 5000));
   const w = walker(noise, startPrice, s0);
   // Fixed durations in the templates are written for a 15-minute match; scale them to this one.
   const k = M / 900;
@@ -240,9 +278,17 @@ export function generateMarket({ scenario, seed, durationSec, candleSec, history
   }
   built.events = built.events.filter((e) => e.tick < H + M);
 
-  const prices = w.prices.map(round2);
+  // Version 2: the long history before the scenario.
+  if (B) {
+    const bg = background(rng(mix('background', symbol, seed)), startPrice, B, s0);
+    w.prices.unshift(...bg.prices);
+    w.regimes.unshift(...bg.regimes);
+    w.shocks.unshift(...new Array(B).fill(0));
+    for (const e of built.events) e.tick += B;
+  }
+  const prices = w.prices.map(roundP);
   // Synthetic volume: busier when price moves, spikes around events.
-  const base = v.between(800, 2000);
+  const base = pair ? pair.volume * v.between(0.7, 1.3) : v.between(800, 2000);
   const eventTicks = new Set();
   for (const e of built.events) for (let t = e.tick; t < e.tick + 20; t++) eventTicks.add(t);
   const volumes = prices.map((p, i) => {
@@ -251,14 +297,17 @@ export function generateMarket({ scenario, seed, durationSec, candleSec, history
     return Math.round(base * (0.6 + 0.8 * noise.next()) * surge);
   });
 
-  const hash = crypto.createHash('sha256').update(JSON.stringify({ version, scenario, seed, durationSec, candleSec, historyCandles, prices })).digest('hex');
+  const hashed = version >= 2 ? { version, scenario, seed, symbol, backgroundTicks: B, durationSec, candleSec, historyCandles, prices } : { version, scenario, seed, durationSec, candleSec, historyCandles, prices };
+  const hash = crypto.createHash('sha256').update(JSON.stringify(hashed)).digest('hex');
   return {
     version,
     scenario,
     seed,
+    symbol,
+    decimals,
     code: scenarioCode(scenario, seed),
     candleSec,
-    historyTicks: H,
+    historyTicks: B + H,
     matchTicks: M,
     startPrice,
     prices,
@@ -291,6 +340,42 @@ export function candlesUpTo(market, upTo) {
     out.push({ i: start / candleSec, t: start - historyTicks, o: start ? prices[start - 1] : prices[0], h: Math.max(h, start ? prices[start - 1] : h), l: Math.min(l, start ? prices[start - 1] : l), c: prices[end], v: vol, forming: end < start + candleSec - 1 });
   }
   return out;
+}
+
+/**
+ * Candles of any length (tf seconds), aligned to match time (t = 0 at the
+ * start; history is negative), never beyond absolute tick `upToAbs`.
+ * Returns the `limit` candles before `beforeT` (a candle start, exclusive),
+ * or the latest ones, and whether older ones exist.
+ */
+export function candleRange(market, tf, { beforeT = null, limit = 300, upToAbs }) {
+  const { prices, volumes, historyTicks: Hh } = market;
+  const lastAbs = Math.min(upToAbs, prices.length - 1);
+  const firstT = -Hh;
+  const lastT = lastAbs - Hh;
+  const firstBucket = Math.floor(firstT / tf);
+  let endBucket = Math.floor(lastT / tf);
+  if (beforeT != null) endBucket = Math.min(endBucket, Math.floor(beforeT / tf) - 1);
+  const startBucket = Math.max(firstBucket, endBucket - limit + 1);
+  const out = [];
+  for (let b = startBucket; b <= endBucket; b++) {
+    const t0 = Math.max(b * tf, firstT);
+    const t1 = Math.min(b * tf + tf - 1, lastT);
+    if (t1 < t0) continue;
+    const a0 = t0 + Hh;
+    const a1 = t1 + Hh;
+    const open = a0 > 0 ? prices[a0 - 1] : prices[a0];
+    let h = open;
+    let l = open;
+    let v = 0;
+    for (let i = a0; i <= a1; i++) {
+      if (prices[i] > h) h = prices[i];
+      if (prices[i] < l) l = prices[i];
+      v += volumes[i];
+    }
+    out.push({ t: b * tf, o: open, h, l, c: prices[a1], v });
+  }
+  return { candles: out, more: startBucket > firstBucket };
 }
 
 // A fresh scenario and seed for a new match (server-side randomness only).

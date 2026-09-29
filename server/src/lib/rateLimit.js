@@ -41,6 +41,7 @@ export const LIMITS = {
   depositCheck: [60, 3600e3],
   withdrawal: [10, 3600e3],
   payoutSetup: [10, 3600e3],
+  chartSave: [240, 3600e3],
 };
 
 function prune() {

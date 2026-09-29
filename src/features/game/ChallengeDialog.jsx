@@ -38,10 +38,11 @@ export function MoneySummary({ stakeKobo, rules, className }) {
   );
 }
 
-export default function ChallengeDialog({ open, onClose, rules, available, onCreated, presetOpponent = null }) {
+export default function ChallengeDialog({ open, onClose, rules, available, onCreated, presetOpponent = null, pairs = [] }) {
   const steps = [1, 2, 3, 4, 10, 20].map((n) => rules.minStakeKobo + (n - 1) * rules.stakeStepKobo).filter((k) => k <= rules.maxStakeKobo);
   const [stake, setStake] = useState(rules.minStakeKobo);
   const [duration, setDuration] = useState(rules.defaultDurationSec);
+  const [symbol, setSymbol] = useState('');
   const [mode, setMode] = useState(presetOpponent ? 'direct' : 'open');
   const [q, setQ] = useState('');
   const [found, setFound] = useState([]);
@@ -61,7 +62,7 @@ export default function ChallengeDialog({ open, onClose, rules, available, onCre
     setBusy(true);
     setError(null);
     try {
-      const r = await api.post('/game/matches', { mode: 'duel', stakeKobo: stake, durationSec: duration, ...(mode === 'direct' ? { opponentId: opponent?.id } : { open: true }) });
+      const r = await api.post('/game/matches', { mode: 'duel', stakeKobo: stake, durationSec: duration, ...(symbol ? { symbol } : {}), ...(mode === 'direct' ? { opponentId: opponent?.id } : { open: true }) });
       onCreated(r.match.id);
     } catch (err) {
       setError(err.message);
@@ -86,11 +87,23 @@ export default function ChallengeDialog({ open, onClose, rules, available, onCre
         </div>
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Select label="Kotka pair" value={symbol} onChange={(e) => setSymbol(e.target.value)}>
+            <option value="">Surprise me (random pair)</option>
+            {[...new Set(pairs.map((p) => p.category))].map((c) => (
+              <optgroup key={c} label={c}>
+                {pairs.filter((p) => p.category === c).map((p) => (
+                  <option key={p.symbol} value={p.symbol}>{p.symbol} · {p.name}</option>
+                ))}
+              </optgroup>
+            ))}
+          </Select>
           <Select label="Match length" value={duration} onChange={(e) => setDuration(Number(e.target.value))}>
             {rules.durations.map((d) => (
               <option key={d} value={d}>{minutes(d)}</option>
             ))}
           </Select>
+        </div>
+        <div>
           <div>
             <p className="mb-1.5 text-sm font-medium text-ink-700 dark:text-ink-200">Opponent</p>
             <div className="flex gap-1 rounded-lg bg-ink-50 p-1 dark:bg-ink-800">

@@ -7,43 +7,46 @@ import EmptyState from '../../components/ui/EmptyState';
 import { api } from '../../lib/api';
 import { confirmDialog, toast } from '../../lib/dialogs';
 import { useAuth } from '../../context/AuthContext';
-import GameChart from './GameChart';
+import KotkaChart from './pro/LazyChart';
 import LiveMatch from './LiveMatch';
 import MatchResult from './MatchResult';
 import { MoneySummary } from './ChallengeDialog';
 import { naira, minutes, mmss, STATUS_LABEL } from './format';
+import { usePairSwitch } from './pairs';
 
 const POLL = { ACTIVE: 1000, COUNTDOWN: 1000, LOCKED: 1000, READY: 2500, WAITING_FOR_OPPONENT: 4000, COMPLETED: 1500, SCORING: 1500, SETTLEMENT: 1500 };
 
-// Keeps every candle seen so far and replaces the one still forming.
-function mergeCandles(prev = [], next = []) {
-  if (!next.length) return prev;
-  const from = next[0].i;
-  return [...prev.filter((c) => c.i < from), ...next];
-}
-
+// Polls the match. The chart gets each new one-second price (`ticks`)
+// since the last one we saw; after a long gap the server says to reload.
 export function useMatch(id) {
   const [state, setState] = useState(null);
   const [error, setError] = useState(null);
   const offset = useRef(0);
-  const candles = useRef([]);
+  const lastTick = useRef(null);
+  const epoch = useRef(0);
+  const loaded = useRef(false);
   const apply = useCallback((view) => {
     offset.current = new Date(view.serverNow).getTime() - Date.now();
-    if (view.candles) {
-      candles.current = mergeCandles(candles.current, view.candles);
-      view = { ...view, candles: candles.current };
+    if (view.chart) {
+      if (view.ticksReset) {
+        epoch.current += 1;
+        lastTick.current = view.chart.lastT;
+      } else if (view.ticks?.length) lastTick.current = Math.max(lastTick.current ?? -Infinity, view.ticks.at(-1)[0]);
+      else if (lastTick.current == null) lastTick.current = view.chart.lastT;
     }
-    setState(view);
+    loaded.current = true;
+    setState({ ...view, feedEpoch: epoch.current });
   }, []);
   const load = useCallback(() => {
-    const since = candles.current.length ? candles.current.at(-1).i : 0;
+    const q = lastTick.current != null ? `?ticksSince=${lastTick.current}` : '';
     // Only the first load can fail the page; a missed poll is simply retried.
-    return api.get(`/game/matches/${id}/state?since=${since}`).then(apply).catch((err) => {
-      if (!candles.current.length) setError(err.message);
+    return api.get(`/game/matches/${id}/state${q}`).then(apply).catch((err) => {
+      if (!loaded.current) setError(err.message);
     });
   }, [id, apply]);
   useEffect(() => {
-    candles.current = [];
+    lastTick.current = null;
+    loaded.current = false;
     setState(null);
     load();
   }, [id, load]);
@@ -54,8 +57,8 @@ export function useMatch(id) {
     return () => clearInterval(t);
   }, [state?.match.status, load]);
   const now = () => Date.now() + offset.current;
-  const since = () => (candles.current.length ? candles.current.at(-1).i : 0);
-  return { state, error, reload: load, apply, now, since };
+  const ticksSince = () => lastTick.current;
+  return { state, error, reload: load, apply, now, ticksSince };
 }
 
 function useClock(ms = 250) {
@@ -86,6 +89,7 @@ function Players({ view }) {
 function Lobby({ view, meId, now, reload }) {
   useClock(500);
   const navigate = useNavigate();
+  const pairSwitch = usePairSwitch(view.match);
   const m = view.match;
   const [busy, setBusy] = useState(false);
   const mine = view.players.find((p) => p.userId === meId);
@@ -137,13 +141,14 @@ function Lobby({ view, meId, now, reload }) {
 
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
         <div className="space-y-6 xl:col-span-2">
-          {view.candles?.length ? (
-            <Card>
-              <CardHeader title="The market so far" subtitle="Both players see exactly this. The match continues it from the start line." />
-              <CardBody>
-                <GameChart candles={view.candles} candleSec={m.candleSec} show={{ ma20: true, ma50: true, levels: true, volume: true, rsi: true }} height={380} />
-              </CardBody>
-            </Card>
+          {view.chart ? (
+            <div>
+              <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
+                <h2 className="text-sm font-semibold text-ink-900 dark:text-ink-50">{m.pair?.symbol} · the market so far</h2>
+                <p className="text-xs text-ink-500 dark:text-ink-400">Both players see exactly this. Scroll back through the history, and draw your levels before the start.</p>
+              </div>
+              <KotkaChart matchId={m.id} info={view.chart} pair={m.pair} feed={view.ticks} feedEpoch={view.feedEpoch} durationSec={m.durationSec} defaultTf={m.candleSec} height={520} {...pairSwitch} />
+            </div>
           ) : null}
           {view.players.length ? (
             <Card>
@@ -186,7 +191,7 @@ const CLOSED = {
 export default function MatchPage() {
   const { id } = useParams();
   const { user } = useAuth();
-  const { state, error, reload, apply, now, since } = useMatch(id);
+  const { state, error, reload, apply, now, ticksSince } = useMatch(id);
 
   if (error) return <EmptyState icon={Swords} title="We couldn’t open this match" description={error} action={<Button as={Link} to="/app/game">Back to the Trading Game</Button>} />;
   if (!state) return <div className="h-[32rem] animate-pulse rounded-2xl bg-white dark:bg-ink-900" />;
@@ -207,7 +212,7 @@ export default function MatchPage() {
     );
   }
   if (m.status === 'SETTLED' && state.report) return <div>{back}<MatchResult view={state} /></div>;
-  if (m.status === 'ACTIVE') return <div>{back}<LiveMatch view={state} now={now} apply={apply} since={since} /></div>;
+  if (m.status === 'ACTIVE') return <div>{back}<LiveMatch view={state} now={now} apply={apply} ticksSince={ticksSince} /></div>;
   if (['COMPLETED', 'SCORING', 'SETTLEMENT'].includes(m.status)) {
     return (
       <div>

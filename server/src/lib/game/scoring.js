@@ -19,7 +19,7 @@ export const DEFAULT_SCORING = { goodRiskPct: 2, maxRiskPct: 5, highLeveragePct:
 
 const clamp = (v) => Math.max(0, Math.min(100, v));
 const r1 = (v) => Math.round(v * 10) / 10;
-const fmt = (p) => Number(p).toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const fmtAt = (p, dp) => Number(p).toLocaleString('en-NG', { minimumFractionDigits: dp, maximumFractionDigits: dp });
 const mmss = (tick) => `${String(Math.floor(tick / 60)).padStart(2, '0')}:${String(tick % 60).padStart(2, '0')}`;
 
 // Indicators on completed candles, indexed by candle.
@@ -135,6 +135,7 @@ function assessTrade(tr, market, ctx, cfg, rules) {
  */
 export function scorePlayer({ market, sim, rules, weights = DEFAULT_WEIGHTS, scoring = DEFAULT_SCORING }) {
   const cfg = { ...DEFAULT_SCORING, ...scoring };
+  const fmt = (v) => fmtAt(v, market.decimals ?? 2);
   const ctx = context(market);
   const trades = sim.trades;
   const assess = trades.map((tr) => assessTrade(tr, market, ctx, cfg, rules));

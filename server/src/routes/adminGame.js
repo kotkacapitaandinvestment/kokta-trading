@@ -8,6 +8,7 @@ import { loadGameSettings, sanitizeGameSettings, saveGameSettings, gameSettingsM
 import { post, walletFor, walletView, entryView, kobo, HOUSE_WALLET } from '../lib/game/wallet.js';
 import { refundMatch, disputeMatch, summary, peopleFor, GameError, LIVE, TX } from '../lib/game/matches.js';
 import { TEMPLATES } from '../lib/game/market.js';
+import { PAIRS, publicPair } from '../lib/game/pairs.js';
 import * as pay from '../lib/game/payments/index.js';
 
 // Trading Game administration. Mounted behind requireAuth + requireRole('admin', 'super_admin').
@@ -56,6 +57,7 @@ adminGameRouter.get('/settings', asyncHandler(async (req, res) => {
     meta: gameSettingsMeta(),
     canEdit: req.user.role === 'super_admin',
     markets: TEMPLATES.map((t) => ({ key: t.key, name: t.name })),
+    pairs: PAIRS.map(publicPair),
     providers: { whop: !!providers.whop, whopWebhook: !!providers.whop?.webhookSecret, paystack: !!providers.paystack },
     webhooks: { whop: `${CANONICAL_ORIGIN}/api/game/webhooks/whop`, paystack: `${CANONICAL_ORIGIN}/api/game/webhooks/paystack` },
   });

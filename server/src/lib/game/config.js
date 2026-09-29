@@ -3,6 +3,7 @@
 
 import { prisma } from '../prisma.js';
 import { TEMPLATE_KEYS } from './market.js';
+import { PAIR_SYMBOLS } from './pairs.js';
 import { DEFAULT_WEIGHTS, DEFAULT_SCORING } from './scoring.js';
 import { defaultTradingRules } from './trading.js';
 
@@ -39,6 +40,8 @@ export const GAME_DEFAULTS = {
   noTradeRefund: true, // neither player traded: stakes back in full, no fee
   revealScenario: false,
   scenarios: TEMPLATE_KEYS,
+  pairs: PAIR_SYMBOLS, // Kotka pairs people can choose
+  backgroundHours: 12, // market history before each match, for the chart
   weights: DEFAULT_WEIGHTS,
   scoring: DEFAULT_SCORING,
   trading: defaultTradingRules(),
@@ -94,6 +97,7 @@ const RULES = {
   directChallengeMinutes: [5, 1440],
   lobbyMinutes: [2, 60],
   maxOpenChallenges: [1, 20],
+  backgroundHours: [1, 48],
 };
 
 // Returns { settings } or { error }.
@@ -131,6 +135,11 @@ export function sanitizeGameSettings(input, current) {
     const list = Array.isArray(input.scenarios) ? input.scenarios.filter((s) => TEMPLATE_KEYS.includes(s)) : [];
     if (!list.length) return { error: 'Choose at least one kind of market.' };
     out.scenarios = list;
+  }
+  if (input.pairs !== undefined) {
+    const list = Array.isArray(input.pairs) ? input.pairs.filter((p) => PAIR_SYMBOLS.includes(p)) : [];
+    if (!list.length) return { error: 'Offer at least one Kotka pair.' };
+    out.pairs = list;
   }
   if (input.weights !== undefined) {
     const w = {};
@@ -190,5 +199,6 @@ export function publicGameRules(s) {
     directChallengeMinutes: s.directChallengeMinutes,
     lobbyMinutes: s.lobbyMinutes,
     countdownSec: s.countdownSec,
+    pairs: s.pairs,
   };
 }

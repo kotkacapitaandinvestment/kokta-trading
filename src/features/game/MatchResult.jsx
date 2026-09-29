@@ -7,7 +7,8 @@ import Button from '../../components/ui/Button';
 import Badge from '../../components/ui/Badge';
 import { api } from '../../lib/api';
 import { toast } from '../../lib/dialogs';
-import GameChart from './GameChart';
+import KotkaChart from './pro/LazyChart';
+import { usePairSwitch } from './pairs';
 import { naira, pct, mmss, SUBSCORES, OUTCOME_LABEL, virtual } from './format';
 
 function Bar({ value, tone }) {
@@ -37,16 +38,16 @@ export default function MatchResult({ view }) {
   const [busy, setBusy] = useState(false);
 
   // Replay: reveal the match second by second.
-  const all = view.candles ?? [];
+  const pairSwitch = usePairSwitch(m);
   const [at, setAt] = useState(m.durationSec - 1);
   const [playing, setPlaying] = useState(false);
   const [focus, setFocus] = useState(null);
   useEffect(() => {
     if (!playing) return undefined;
-    const t = setInterval(() => setAt((x) => (x >= m.durationSec - 1 ? (setPlaying(false), x) : x + m.candleSec)), 120);
+    const end = m.durationSec - 1;
+    const t = setInterval(() => setAt((x) => (x >= end ? (setPlaying(false), end) : Math.min(end, x + m.candleSec))), 120);
     return () => clearInterval(t);
   }, [playing, m.durationSec, m.candleSec]);
-  const shown = useMemo(() => all.filter((c) => c.t <= at), [all, at]);
   const markers = useMemo(() => {
     const out = [];
     for (const [p, who] of [[me, 'me'], [them, 'them']]) {
@@ -86,7 +87,7 @@ export default function MatchResult({ view }) {
               <Trophy className="h-6 w-6" strokeWidth={1.75} />
             </span>
             <div>
-              <p className="text-xs font-semibold uppercase tracking-wider text-accent-600 dark:text-accent-400">{r.market.name} · {r.market.code}</p>
+              <p className="text-xs font-semibold uppercase tracking-wider text-accent-600 dark:text-accent-400">{m.pair?.symbol ? `${m.pair.symbol} · ` : ''}{r.market.name} · {r.market.code}</p>
               <h1 className="mt-1 text-2xl font-semibold tracking-tight text-ink-900 dark:text-ink-50">{title}</h1>
               <p className="mt-1 max-w-xl text-sm text-ink-500 dark:text-ink-400">{sub}</p>
               {me.xpAwarded ? <p className="mt-1 text-xs text-ink-400">+{me.xpAwarded} XP</p> : null}
@@ -169,10 +170,10 @@ export default function MatchResult({ view }) {
       <Card>
         <CardHeader title="Replay" subtitle="The whole market, with your trades (gold) and your opponent’s (blue)." action={<Badge tone="neutral">Seed {r.market.seed}</Badge>} />
         <CardBody className="space-y-4">
-          <GameChart candles={shown.length ? shown : all} candleSec={m.candleSec} show={{ ma20: true, ma50: true, volume: true, rsi: true }} markers={markers} highlightT={focus} height={440} />
+          <KotkaChart matchId={m.id} info={view.chart} pair={m.pair} until={at} durationSec={m.durationSec} defaultTf={m.candleSec} markers={markers} focusT={focus} height={560} {...pairSwitch} />
           <div className="flex items-center gap-3">
             <Button size="sm" variant="secondary" icon={playing ? Pause : Play} onClick={() => { if (!playing && at >= m.durationSec - 1) setAt(0); setPlaying((p) => !p); }}>{playing ? 'Pause' : 'Play'}</Button>
-            <input type="range" min={0} max={m.durationSec - 1} step={m.candleSec} value={at} onChange={(e) => { setPlaying(false); setAt(Number(e.target.value)); }} aria-label="Replay position" className="w-full accent-[#D1A85B]" />
+            <input type="range" min={0} max={m.durationSec - 1} step={1} value={at} onChange={(e) => { setPlaying(false); setAt(Number(e.target.value)); }} aria-label="Replay position" className="w-full accent-[#D1A85B]" />
             <span className="w-14 text-right font-mono text-xs tabular-nums text-ink-400">{mmss(at)}</span>
           </div>
           <ol className="divide-y divide-ink-100 text-sm dark:divide-ink-800">

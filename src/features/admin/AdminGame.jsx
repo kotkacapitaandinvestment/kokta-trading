@@ -367,6 +367,7 @@ function Settings() {
           <Input label="Candle length (seconds)" inputMode="numeric" value={draft.candleSec} disabled={!can} onChange={(e) => set('candleSec', Number(e.target.value || 0))} />
           <Input label="Market speed (×)" inputMode="decimal" value={draft.speed} disabled={!can} onChange={(e) => set('speed', Number(e.target.value || 1))} />
           <Input label="Countdown (seconds)" inputMode="numeric" value={draft.countdownSec} disabled={!can} onChange={(e) => set('countdownSec', Number(e.target.value || 0))} />
+          <Input label="Chart history before a match (hours)" hint="How far back players can scroll. 1 to 48." inputMode="numeric" value={draft.backgroundHours} disabled={!can} onChange={(e) => set('backgroundHours', Number(e.target.value || 0))} />
           <Input label="Spread (basis points)" inputMode="decimal" value={draft.trading.spreadBps} disabled={!can} onChange={(e) => set('trading', { ...draft.trading, spreadBps: Number(e.target.value || 0) })} />
           <Input label="Largest position (× capital)" inputMode="decimal" value={draft.trading.maxLeverage} disabled={!can} onChange={(e) => set('trading', { ...draft.trading, maxLeverage: Number(e.target.value || 1) })} />
           <Input label="Capital floor (% of start)" inputMode="decimal" value={draft.trading.stopOutPct} disabled={!can} onChange={(e) => set('trading', { ...draft.trading, stopOutPct: Number(e.target.value || 0) })} />
@@ -388,6 +389,19 @@ function Settings() {
             return (
               <button key={mk.key} type="button" disabled={!can} onClick={() => set('scenarios', on ? draft.scenarios.filter((x) => x !== mk.key) : [...draft.scenarios, mk.key])} className={clsx('rounded-full border px-3 py-1 text-xs', on ? 'border-ink-900 bg-ink-900 text-white dark:border-white dark:bg-white dark:text-ink-900' : 'border-ink-200 text-ink-500 dark:border-ink-700')}>
                 {mk.name}
+              </button>
+            );
+          })}
+        </CardBody>
+      </Card>
+      <Card>
+        <CardHeader title="Kotka pairs" subtitle="The synthetic markets players can choose. A match with no pair chosen gets one of these at random." />
+        <CardBody className="flex flex-wrap gap-2">
+          {(data.pairs ?? []).map((p) => {
+            const on = draft.pairs?.includes(p.symbol);
+            return (
+              <button key={p.symbol} type="button" disabled={!can} title={p.name} onClick={() => set('pairs', on ? draft.pairs.filter((x) => x !== p.symbol) : [...(draft.pairs ?? []), p.symbol])} className={clsx('rounded-full border px-3 py-1 text-xs', on ? 'border-ink-900 bg-ink-900 text-white dark:border-white dark:bg-white dark:text-ink-900' : 'border-ink-200 text-ink-500 dark:border-ink-700')}>
+                {p.symbol}
               </button>
             );
           })}

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Swords, Wallet, GraduationCap, Trophy, ShieldAlert, ArrowRight, History } from 'lucide-react';
+import { Swords, Wallet, GraduationCap, Trophy, ShieldAlert, ArrowRight, History, CandlestickChart } from 'lucide-react';
 import PageHeader from '../../components/ui/PageHeader';
 import Card, { CardHeader, CardBody } from '../../components/ui/Card';
 import Button from '../../components/ui/Button';
@@ -11,6 +11,7 @@ import { confirmDialog, toast } from '../../lib/dialogs';
 import { useAuth } from '../../context/AuthContext';
 import ChallengeDialog, { MoneySummary } from './ChallengeDialog';
 import { naira, minutes, STATUS_LABEL, SUBSCORES } from './format';
+import { startPractice } from './pairs';
 
 function MatchRow({ m, meId, onChanged }) {
   const navigate = useNavigate();
@@ -32,7 +33,7 @@ function MatchRow({ m, meId, onChanged }) {
           {m.mode === 'practice' ? 'Practice match' : invitedMe ? `${m.creator?.name} challenged you` : other ? `You vs ${other.name}` : 'Open challenge'}
         </p>
         <p className="text-xs text-ink-400">
-          {m.mode === 'practice' ? 'No stake' : `${naira(m.stakeKobo)} each · winner gets ${naira(m.prizeKobo)}`} · {minutes(m.durationSec)} · {STATUS_LABEL[m.status]}
+          {m.pair?.symbol ? `${m.pair.symbol} · ` : ''}{m.mode === 'practice' ? 'No stake' : `${naira(m.stakeKobo)} each · winner gets ${naira(m.prizeKobo)}`} · {minutes(m.durationSec)} · {STATUS_LABEL[m.status]}
         </p>
       </div>
       <div className="flex gap-2">
@@ -62,14 +63,7 @@ export default function GameHome() {
   if (!data) return <div className="h-96 animate-pulse rounded-2xl bg-white dark:bg-ink-900" />;
   const { rules, wallet, profile } = data;
 
-  const practice = async () => {
-    try {
-      const r = await api.post('/game/matches', { mode: 'practice' });
-      navigate(`/app/game/matches/${r.match.id}`);
-    } catch (err) {
-      toast(err.message, { tone: 'error' });
-    }
-  };
+  const practice = (symbol = null) => startPractice(navigate, symbol).catch((err) => toast(err.message, { tone: 'error' }));
   const join = async (m) => {
     if (!data.identityVerified) return toast('Verify your identity to play for a stake.', { tone: 'error' });
     const ok = await confirmDialog({
@@ -147,7 +141,7 @@ export default function GameHome() {
 
       <div className="flex flex-wrap gap-3">
         <Button icon={Swords} onClick={() => setDialog(true)} disabled={!data.identityVerified || !rules.matchesEnabled}>New challenge</Button>
-        <Button variant="secondary" icon={GraduationCap} onClick={practice}>Practice (free)</Button>
+        <Button variant="secondary" icon={GraduationCap} onClick={() => practice()}>Practice (free)</Button>
       </div>
 
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
@@ -174,7 +168,7 @@ export default function GameHome() {
                   <li key={m.id} className="flex flex-wrap items-center justify-between gap-3 py-3">
                     <div>
                       <p className="text-sm font-medium text-ink-800 dark:text-ink-100">{m.creator?.name}</p>
-                      <p className="text-xs text-ink-400">{naira(m.stakeKobo)} each · winner gets {naira(m.prizeKobo)} · {minutes(m.durationSec)}</p>
+                      <p className="text-xs text-ink-400">{m.pair?.symbol ? `${m.pair.symbol} · ` : ''}{naira(m.stakeKobo)} each · winner gets {naira(m.prizeKobo)} · {minutes(m.durationSec)}</p>
                     </div>
                     <Button size="sm" onClick={() => join(m)} disabled={m.stakeKobo > wallet.availableKobo}>
                       {m.stakeKobo > wallet.availableKobo ? 'Not enough balance' : 'Accept'}
@@ -188,6 +182,30 @@ export default function GameHome() {
           </CardBody>
         </Card>
       </div>
+
+      {data.pairs?.length ? (
+        <Card>
+          <CardHeader title="Kotka pairs" subtitle="Synthetic markets made by Kotka. They don’t follow any real price, so nobody can look the answer up. Practise on any of them for free." action={<CandlestickChart className="h-4 w-4 text-ink-300" />} />
+          <CardBody className="space-y-4">
+            {[...new Set(data.pairs.map((p) => p.category))].map((c) => (
+              <div key={c}>
+                <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-ink-400">{c}</p>
+                <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
+                  {data.pairs.filter((p) => p.category === c).map((p) => (
+                    <li key={p.symbol} className="flex items-center justify-between gap-2 rounded-xl border border-ink-100 px-3 py-2 dark:border-ink-800">
+                      <span className="min-w-0">
+                        <span className="block text-sm font-semibold text-ink-900 dark:text-ink-50">{p.symbol}</span>
+                        <span className="block truncate text-xs text-ink-400">{p.name}</span>
+                      </span>
+                      <Button size="sm" variant="ghost" onClick={() => practice(p.symbol)}>Practise</Button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </CardBody>
+        </Card>
+      ) : null}
 
       <Card>
         <CardHeader title="How the winner is decided" subtitle="The Kotka Performance Score, out of 100. Profit alone doesn’t win." />
@@ -204,7 +222,7 @@ export default function GameHome() {
         </CardBody>
       </Card>
 
-      {dialog ? <ChallengeDialog open onClose={() => setDialog(false)} rules={rules} available={wallet.availableKobo} onCreated={(id) => navigate(`/app/game/matches/${id}`)} /> : null}
+      {dialog ? <ChallengeDialog open onClose={() => setDialog(false)} rules={rules} pairs={data.pairs ?? []} available={wallet.availableKobo} onCreated={(id) => navigate(`/app/game/matches/${id}`)} /> : null}
     </div>
   );
 }

@@ -1,29 +1,13 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import clsx from 'clsx';
 import { TrendingUp, TrendingDown, Clock3 } from 'lucide-react';
 import Card, { CardHeader, CardBody } from '../../components/ui/Card';
 import Button from '../../components/ui/Button';
 import { confirmDialog, toast } from '../../lib/dialogs';
 import { CHART_COLORS } from '../../lib/chartColors';
-import GameChart from './GameChart';
+import KotkaChart from './pro/LazyChart';
+import { usePairSwitch } from './pairs';
 import { virtual, price as fmt, pct, mmss, REASONS, requestKey } from './format';
-
-const TOGGLES = [
-  ['ma20', 'MA 20'],
-  ['ma50', 'MA 50'],
-  ['levels', 'Support / resistance'],
-  ['volume', 'Volume'],
-  ['rsi', 'RSI'],
-  ['macd', 'MACD'],
-];
-const PREF_KEY = 'kotka.game.chart';
-function loadPrefs() {
-  try {
-    return { ma20: true, ma50: true, levels: true, volume: true, rsi: true, macd: false, ...JSON.parse(localStorage.getItem(PREF_KEY) ?? '{}') };
-  } catch {
-    return { ma20: true, ma50: true, levels: true, volume: true, rsi: true, macd: false };
-  }
-}
 
 const num = (v) => (v === '' || v == null ? null : Number(v));
 const inputCls = 'h-9 w-full rounded-lg border border-ink-200 bg-white px-2.5 text-sm tabular-nums outline-none focus:border-ink-400 dark:border-ink-700 dark:bg-ink-800 dark:text-ink-100';
@@ -36,7 +20,7 @@ function Chip({ on, children, onClick }) {
   );
 }
 
-function OrderTicket({ price, equity, rules, busy, onOpen }) {
+function OrderTicket({ price, dp, equity, rules, busy, onOpen }) {
   const [side, setSide] = useState('long');
   const [size, setSize] = useState(100);
   const [stop, setStop] = useState('');
@@ -51,8 +35,8 @@ function OrderTicket({ price, equity, rules, busy, onOpen }) {
   const t = num(target);
   const risk = s != null ? (size * Math.abs(price - s)) / price : null;
   const rr = s != null && t != null ? Math.abs(t - price) / Math.max(Math.abs(price - s), 1e-9) : null;
-  const setStopPct = (p) => setStop((price * (long ? 1 - p / 100 : 1 + p / 100)).toFixed(2));
-  const setTargetR = (r) => s != null && setTarget((price + (long ? 1 : -1) * r * Math.abs(price - s)).toFixed(2));
+  const setStopPct = (p) => setStop((price * (long ? 1 - p / 100 : 1 + p / 100)).toFixed(dp));
+  const setTargetR = (r) => s != null && setTarget((price + (long ? 1 : -1) * r * Math.abs(price - s)).toFixed(dp));
   const ready = reasons.length > 0;
 
   return (
@@ -118,13 +102,13 @@ function OrderTicket({ price, equity, rules, busy, onOpen }) {
       </div>
 
       <Button className="w-full" disabled={busy || !ready} onClick={() => onOpen({ side, sizePct: size, stop: s, target: t, thesis: { view, reasons, confidence } })}>
-        {!ready ? 'Choose at least one reason' : `${long ? 'Buy' : 'Sell'} at about ${fmt(price)}`}
+        {!ready ? 'Choose at least one reason' : `${long ? 'Buy' : 'Sell'} at about ${fmt(price, dp)}`}
       </Button>
     </div>
   );
 }
 
-function PositionPanel({ pos, rules, busy, act }) {
+function PositionPanel({ pos, dp, rules, busy, act }) {
   const [stop, setStop] = useState(pos.stop ?? '');
   const [target, setTarget] = useState(pos.target ?? '');
   useEffect(() => {
@@ -150,7 +134,7 @@ function PositionPanel({ pos, rules, busy, act }) {
         <p className={clsx('text-lg font-semibold tabular-nums', pos.unrealised >= 0 ? 'text-profit-600 dark:text-profit-400' : 'text-loss-500')}>{pos.unrealised >= 0 ? '+' : '−'}{virtual(Math.abs(pos.unrealised))}</p>
       </div>
       <dl className="grid grid-cols-2 gap-2 text-xs">
-        <div><dt className="text-ink-400">Average entry</dt><dd className="tabular-nums text-ink-800 dark:text-ink-100">{fmt(pos.avgPrice)}</dd></div>
+        <div><dt className="text-ink-400">Average entry</dt><dd className="tabular-nums text-ink-800 dark:text-ink-100">{fmt(pos.avgPrice, dp)}</dd></div>
         <div><dt className="text-ink-400">Risk to stop</dt><dd className={clsx('tabular-nums', pos.riskPct == null ? 'text-loss-500' : 'text-ink-800 dark:text-ink-100')}>{pos.riskPct == null ? 'No stop' : `${pos.riskPct}%`}</dd></div>
       </dl>
       <div className="grid grid-cols-2 gap-3">
@@ -175,22 +159,16 @@ function PositionPanel({ pos, rules, busy, act }) {
   );
 }
 
-export default function LiveMatch({ view, now, apply, since }) {
+export default function LiveMatch({ view, now, apply, ticksSince }) {
   const m = view.match;
-  const [show, setShow] = useState(loadPrefs);
+  const dp = m.pair?.decimals ?? view.chart?.decimals ?? 2;
+  const pairSwitch = usePairSwitch(m);
   const [busy, setBusy] = useState(false);
   const [, tick] = useState(0);
   useEffect(() => {
     const t = setInterval(() => tick((n) => n + 1), 250);
     return () => clearInterval(t);
   }, []);
-  useEffect(() => {
-    try {
-      localStorage.setItem(PREF_KEY, JSON.stringify(show));
-    } catch {
-      /* preferences are optional */
-    }
-  }, [show]);
 
   const me = view.me ?? {};
   const pos = me.position;
@@ -200,7 +178,7 @@ export default function LiveMatch({ view, now, apply, since }) {
   const act = (type, payload) => {
     const key = requestKey();
     setBusy(true);
-    return fetch(`/api/game/matches/${m.id}/actions`, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json', 'Idempotency-Key': key }, body: JSON.stringify({ type, payload, clientTick: view.tick, since: since() }) })
+    return fetch(`/api/game/matches/${m.id}/actions`, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json', 'Idempotency-Key': key }, body: JSON.stringify({ type, payload, clientTick: view.tick, ticksSince: ticksSince() }) })
       .then(async (res) => {
         const data = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(data.error ?? 'That didn’t go through. Try again.');
@@ -210,14 +188,16 @@ export default function LiveMatch({ view, now, apply, since }) {
       .finally(() => setBusy(false));
   };
 
-  const lines = useMemo(() => {
+  // Entry, stop and target on the chart. Drag the stop or target line to move it.
+  const levels = useMemo(() => {
     if (!pos) return [];
     return [
-      { price: pos.avgPrice, color: CHART_COLORS.accentDeep, label: 'Entry' },
-      pos.stop != null && { price: pos.stop, color: CHART_COLORS.loss, label: 'Stop', dash: true },
-      pos.target != null && { price: pos.target, color: CHART_COLORS.profit, label: 'Target', dash: true },
+      { key: 'entry', price: pos.avgPrice, color: CHART_COLORS.accentDeep, label: 'Entry' },
+      pos.stop != null && { key: 'stop', price: pos.stop, color: CHART_COLORS.loss, label: 'Stop', dashed: true, draggable: true },
+      pos.target != null && { key: 'target', price: pos.target, color: CHART_COLORS.profit, label: 'Target', dashed: true, draggable: true },
     ].filter(Boolean);
-  }, [pos]);
+  }, [pos?.avgPrice, pos?.stop, pos?.target]); // eslint-disable-line react-hooks/exhaustive-deps
+  const onLevelDrag = useCallback((key, value) => (key === 'stop' || key === 'target' ? act('modify', { [key]: value }) : null), [act]);
   const markers = useMemo(() => (me.trades ?? []).flatMap((t) => [...t.entries.map((e) => ({ t: e.tick, price: e.price, kind: t.side === 'long' ? 'buy' : 'sell', who: 'me' })), ...t.exits.map((e) => ({ t: e.tick, price: e.price, kind: 'exit', who: 'me' }))]), [me.trades]);
 
   return (
@@ -225,7 +205,7 @@ export default function LiveMatch({ view, now, apply, since }) {
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         {[
           ['Time left', mmss(left), left < 60 ? 'text-loss-500' : ''],
-          ['Price', fmt(view.price), ''],
+          ['Price', fmt(view.price, dp), ''],
           ['Your capital', `${virtual(me.equity)} (${pct(me.returnPct)})`, me.returnPct >= 0 ? 'text-profit-600 dark:text-profit-400' : 'text-loss-500'],
           view.opponent ? ['Opponent', `${pct(view.opponent.returnPct)} · ${view.opponent.trades} trade${view.opponent.trades === 1 ? '' : 's'}`, ''] : ['Mode', 'Practice', ''],
         ].map(([k, v, tone]) => (
@@ -237,25 +217,19 @@ export default function LiveMatch({ view, now, apply, since }) {
       </div>
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1fr_340px]">
-        <Card>
-          <CardBody className="space-y-3">
-            <div className="flex flex-wrap gap-1.5">
-              {TOGGLES.map(([k, l]) => (
-                <Chip key={k} on={!!show[k]} onClick={() => setShow((s) => ({ ...s, [k]: !s[k] }))}>{l}</Chip>
-              ))}
-            </div>
-            <GameChart candles={view.candles ?? []} candleSec={m.candleSec} show={show} lines={lines} markers={markers} height={show.rsi && show.macd ? 560 : 480} />
-          </CardBody>
-        </Card>
+        <div className="min-w-0 space-y-1.5">
+          <KotkaChart matchId={m.id} info={view.chart} pair={m.pair} feed={view.ticks} feedEpoch={view.feedEpoch} durationSec={m.durationSec} defaultTf={m.candleSec} levels={levels} markers={markers} onLevelDrag={onLevelDrag} height={620} {...pairSwitch} />
+          {pos?.stop != null || pos?.target != null ? <p className="px-1 text-[11px] text-ink-400">Drag your stop or target line on the chart to move it.</p> : null}
+        </div>
         <Card>
           <CardHeader title={pos ? 'Your position' : 'New position'} subtitle={me.stoppedOut ? 'Your capital hit the floor, so no new positions this match.' : `Virtual capital only. Up to ${m.rules.maxLeverage}×.`} />
           <CardBody>
             {me.stoppedOut && !pos ? (
               <p className="text-sm text-ink-500 dark:text-ink-400">You can keep watching; your score is based on what you’ve done so far.</p>
             ) : pos ? (
-              <PositionPanel pos={pos} rules={m.rules} busy={busy} act={act} />
+              <PositionPanel pos={pos} dp={dp} rules={m.rules} busy={busy} act={act} />
             ) : (
-              <OrderTicket price={view.price} equity={me.equity} rules={m.rules} busy={busy} onOpen={(payload) => act('open', payload)} />
+              <OrderTicket price={view.price} dp={dp} equity={me.equity} rules={m.rules} busy={busy} onOpen={(payload) => act('open', payload)} />
             )}
           </CardBody>
         </Card>

@@ -6,7 +6,8 @@ import { limit } from '../lib/rateLimit.js';
 import { auditLater } from '../lib/audit.js';
 import { loadGameSettings, publicGameRules } from '../lib/game/config.js';
 import { walletFor, walletView, entryView, stakedToday } from '../lib/game/wallet.js';
-import { createMatch, joinMatch, confirmMatch, cancelMatch, act, matchView, lobby, history, rematch, GameError } from '../lib/game/matches.js';
+import { createMatch, joinMatch, confirmMatch, cancelMatch, act, matchView, chartCandles, lobby, history, rematch, GameError } from '../lib/game/matches.js';
+import { PAIRS, publicPair } from '../lib/game/pairs.js';
 import { profileFor } from '../lib/game/progression.js';
 import { TEMPLATES } from '../lib/game/market.js';
 import * as pay from '../lib/game/payments/index.js';
@@ -31,6 +32,7 @@ gameRouter.get('/home', asyncHandler(async (req, res) => {
     providers: p.list,
     identityVerified: kyc?.status === 'approved',
     markets: TEMPLATES.map((t) => ({ key: t.key, name: t.name })),
+    pairs: PAIRS.filter((p) => s.pairs.includes(p.symbol)).map(publicPair),
   });
 }));
 
@@ -103,14 +105,50 @@ gameRouter.post('/matches', limit('gameCreate'), asyncHandler(async (req, res) =
   const user = await me(req);
   const b = req.body ?? {};
   const mode = b.mode === 'practice' ? 'practice' : 'duel';
-  const m = await createMatch(user, { mode, stakeKobo: int(b.stakeKobo), durationSec: b.durationSec === undefined ? undefined : int(b.durationSec), opponentId: typeof b.opponentId === 'string' ? b.opponentId : null, open: b.open === true });
+  const m = await createMatch(user, { mode, stakeKobo: int(b.stakeKobo), durationSec: b.durationSec === undefined ? undefined : int(b.durationSec), opponentId: typeof b.opponentId === 'string' ? b.opponentId : null, open: b.open === true, symbol: typeof b.symbol === 'string' && b.symbol ? b.symbol : null });
   if (mode === 'duel') auditLater(req, 'game.challenge_created', { targetType: 'match', targetId: m.id, detail: { stakeKobo: Number(m.stakeKobo), open: m.isOpen } });
   res.status(201).json({ match: { id: m.id } });
 }));
 
 gameRouter.get('/matches/:id/state', asyncHandler(async (req, res) => {
-  const since = Math.max(0, int(req.query.since) || 0);
-  res.json(await matchView({ id: req.userId }, req.params.id, { since }));
+  const ticksSince = req.query.ticksSince !== undefined ? int(req.query.ticksSince) : NaN;
+  const since = req.query.since !== undefined ? Math.max(0, int(req.query.since) || 0) : null;
+  res.json(await matchView({ id: req.userId }, req.params.id, { since, ticksSince: Number.isInteger(ticksSince) ? ticksSince : null }));
+}));
+
+// Candles for the chart at any timeframe, older pages as you scroll back.
+gameRouter.get('/matches/:id/candles', asyncHandler(async (req, res) => {
+  const before = req.query.before !== undefined ? int(req.query.before) : null;
+  const until = req.query.until !== undefined ? int(req.query.until) : null;
+  res.json(await chartCandles({ id: req.userId }, req.params.id, { tf: int(req.query.tf), before: Number.isInteger(before) ? before : null, until: Number.isInteger(until) ? until : null, limit: int(req.query.limit) || 300 }));
+}));
+
+// The Kotka pairs (synthetic) people can trade.
+gameRouter.get('/pairs', asyncHandler(async (req, res) => {
+  const s = await loadGameSettings();
+  res.json({ pairs: PAIRS.filter((p) => s.pairs.includes(p.symbol)).map(publicPair) });
+}));
+
+// A trader's saved chart (drawings, timeframe, indicators) for one match.
+const SCOPE_RE = /^match:[a-z0-9]{10,40}$/;
+gameRouter.get('/charts/:scope', asyncHandler(async (req, res) => {
+  if (!SCOPE_RE.test(req.params.scope)) return res.status(400).json({ error: 'That chart doesn’t exist.' });
+  const row = await prisma.gameChartLayout.findUnique({ where: { userId_scope: { userId: req.userId, scope: req.params.scope } } });
+  res.json({ layout: row?.data ?? null });
+}));
+
+gameRouter.put('/charts/:scope', limit('chartSave'), asyncHandler(async (req, res) => {
+  if (!SCOPE_RE.test(req.params.scope)) return res.status(400).json({ error: 'That chart doesn’t exist.' });
+  const data = req.body?.layout;
+  if (!data || typeof data !== 'object' || Array.isArray(data)) return res.status(400).json({ error: 'Nothing to save.' });
+  const size = JSON.stringify(data).length;
+  if (size > 200_000) return res.status(413).json({ error: 'That chart has too many drawings to save. Remove a few and try again.' });
+  if (Array.isArray(data.drawings) && data.drawings.length > 300) return res.status(413).json({ error: 'Charts can hold up to 300 drawings.' });
+  const matchId = req.params.scope.slice('match:'.length);
+  const inMatch = await prisma.gamePlayer.findUnique({ where: { matchId_userId: { matchId, userId: req.userId } } });
+  if (!inMatch) return res.status(404).json({ error: 'That chart doesn’t exist.' });
+  await prisma.gameChartLayout.upsert({ where: { userId_scope: { userId: req.userId, scope: req.params.scope } }, update: { data }, create: { userId: req.userId, scope: req.params.scope, data } });
+  res.json({ ok: true });
 }));
 
 gameRouter.post('/matches/:id/join', limit('gameCreate'), asyncHandler(async (req, res) => {
@@ -134,7 +172,9 @@ gameRouter.post('/matches/:id/actions', limit('gameAction'), asyncHandler(async 
   const b = req.body ?? {};
   const key = req.get('idempotency-key');
   await act({ id: req.userId }, req.params.id, { type: String(b.type ?? ''), payload: b.payload ?? {}, requestKey: key && KEY_RE.test(key) ? key : null, clientTick: Number.isInteger(b.clientTick) ? b.clientTick : undefined });
-  res.json(await matchView({ id: req.userId }, req.params.id, { since: Math.max(0, int(b.since) || 0) }));
+  // The new chart asks for one-second prices; older app versions for candles.
+  const ticksSince = Number.isInteger(b.ticksSince) ? b.ticksSince : null;
+  res.json(await matchView({ id: req.userId }, req.params.id, ticksSince !== null ? { ticksSince } : { since: Math.max(0, int(b.since) || 0) }));
 }));
 
 gameRouter.post('/matches/:id/rematch', limit('gameCreate'), asyncHandler(async (req, res) => {

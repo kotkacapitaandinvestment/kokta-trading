@@ -15,7 +15,8 @@
 import crypto from 'node:crypto';
 import { prisma } from '../prisma.js';
 import { loadGameSettings } from './config.js';
-import { generateMarket, drawScenario, candlesUpTo, templateOf, GENERATOR_VERSION } from './market.js';
+import { generateMarket, drawScenario, candlesUpTo, candleRange, templateOf, GENERATOR_VERSION } from './market.js';
+import { pairOf, publicPair } from './pairs.js';
 import { simulate, validateAction } from './trading.js';
 import { scorePlayer } from './scoring.js';
 import { post, walletFor, HOUSE_WALLET, stakedToday, kobo } from './wallet.js';
@@ -44,12 +45,13 @@ const newCode = () => crypto.randomBytes(5).toString('base64url').replace(/[-_]/
 // Markets are regenerated from their seed; keep a few in memory.
 const markets = new Map();
 export function marketFor(match) {
-  const key = `${match.scenario}:${match.seed}:${match.generatorVersion}:${match.durationSec}:${match.candleSec}:${match.historyCandles}`;
+  const bgTicks = match.rules?.backgroundTicks ?? 0;
+  const key = `${match.scenario}:${match.seed}:${match.generatorVersion}:${match.symbol}:${bgTicks}:${match.durationSec}:${match.candleSec}:${match.historyCandles}`;
   let m = markets.get(key);
   if (!m) {
-    m = generateMarket({ scenario: match.scenario, seed: match.seed, durationSec: match.durationSec, candleSec: match.candleSec, historyCandles: match.historyCandles, version: match.generatorVersion });
+    m = generateMarket({ scenario: match.scenario, seed: match.seed, durationSec: match.durationSec, candleSec: match.candleSec, historyCandles: match.historyCandles, symbol: match.symbol, backgroundTicks: bgTicks, version: match.generatorVersion });
     markets.set(key, m);
-    if (markets.size > 50) markets.delete(markets.keys().next().value);
+    if (markets.size > 20) markets.delete(markets.keys().next().value);
   }
   return m;
 }
@@ -101,8 +103,11 @@ export function money(stakeKobo, feeBps) {
 
 // ── Creating and joining ───────────────────────────────────────────────────
 
-export async function createMatch(user, { mode = 'duel', stakeKobo = 0, durationSec, opponentId = null, open = false, rematchOfId = null }) {
+export async function createMatch(user, { mode = 'duel', stakeKobo = 0, durationSec, opponentId = null, open = false, rematchOfId = null, symbol = null }) {
   const s = await loadGameSettings();
+  if (symbol != null && !s.pairs.includes(symbol)) throw new GameError('Choose one of the Kotka pairs on offer.');
+  // No pair chosen: any of those on offer.
+  const pair = symbol ?? s.pairs[crypto.randomInt(s.pairs.length)];
   const duration = durationSec ?? s.defaultDurationSec;
   if (!s.durations.includes(duration)) throw new GameError('Choose one of the match lengths on offer.');
   const practice = mode === 'practice';
@@ -122,14 +127,16 @@ export async function createMatch(user, { mode = 'duel', stakeKobo = 0, duration
   await assertNotInLiveMatch(user.id);
 
   const { scenario, seed } = drawScenario(s.scenarios);
-  const market = generateMarket({ scenario, seed, durationSec: duration, candleSec: s.candleSec, historyCandles: s.historyCandles });
+  const backgroundTicks = Math.round(s.backgroundHours * 3600);
+  const market = generateMarket({ scenario, seed, durationSec: duration, candleSec: s.candleSec, historyCandles: s.historyCandles, symbol: pair, backgroundTicks });
   const at = now();
-  const rules = { trading: s.trading, weights: s.weights, scoring: s.scoring, drawTolerance: s.drawTolerance, noTradeRefund: s.noTradeRefund, revealScenario: s.revealScenario };
+  const rules = { trading: s.trading, weights: s.weights, scoring: s.scoring, drawTolerance: s.drawTolerance, noTradeRefund: s.noTradeRefund, revealScenario: s.revealScenario, backgroundTicks };
   const base = {
     code: newCode(),
     mode: practice ? 'practice' : 'duel',
     scenario,
     scenarioCode: market.code,
+    symbol: pair,
     seed,
     generatorVersion: GENERATOR_VERSION,
     marketHash: market.hash,
@@ -227,6 +234,11 @@ export async function cancelMatch(user, matchId) {
     if (!m) throw new GameError('We couldn’t find that match.', 404);
     const involved = m.creatorId === user.id || m.invitedUserId === user.id;
     if (!involved) throw new GameError('You’re not in this match.', 403);
+    // A practice match has no stake, so you can end it at any point (to switch pair, say).
+    if (m.mode === 'practice' && ['LOCKED', 'COUNTDOWN', 'ACTIVE'].includes(m.status)) {
+      await move(tx, m, ['LOCKED', 'COUNTDOWN', 'ACTIVE'], 'ABANDONED', {}, user.id, 'practice ended by the player');
+      return m;
+    }
     if (!['WAITING_FOR_OPPONENT', 'READY'].includes(m.status)) throw new GameError('This match can’t be cancelled any more.', 409);
     await releaseStakes(tx, m, 'stake_release', 'cancelled');
     await move(tx, m, ['WAITING_FOR_OPPONENT', 'READY'], 'CANCELLED', {}, user.id, m.creatorId === user.id ? 'cancelled by the creator' : 'declined');
@@ -562,6 +574,7 @@ export function summary(m, people = new Map()) {
     settledAt: m.settledAt,
     createdAt: m.createdAt,
     scenario: reveal ? { code: m.scenarioCode, name: tpl?.name ?? m.scenario, key: m.scenario } : null,
+    pair: publicPair(pairOf(m.symbol)) ?? { symbol: 'KTK', name: 'Kotka market', decimals: 2 },
     rules: { ...m.rules.trading, drawTolerance: m.rules.drawTolerance, noTradeRefund: m.rules.noTradeRefund, weights: m.rules.weights },
     result: m.result ?? null,
     rematchOfId: m.rematchOfId,
@@ -575,7 +588,33 @@ export async function peopleFor(ids) {
 
 // What a player sees, live. Only candles up to the current tick are sent:
 // the future of the market never leaves the server.
-export async function matchView(user, matchId, { since = 0 } = {}) {
+// The chart's clock: t (market seconds from the match start) ↔ real time.
+// Before the start time is known, a fixed stand-in keeps the lobby chart steady.
+export const chartBase = (m) => (m.startsAt ? m.startsAt.getTime() : Math.floor(m.createdAt.getTime() / 60000) * 60000);
+
+// The last tick anyone may see: none of the match before it starts, all of it once it has run.
+export function visibleTick(m, at = now()) {
+  if (!m.startsAt || at < m.startsAt) return -1;
+  return Math.min(tickAt(m, at), m.durationSec - 1);
+}
+
+export const TIMEFRAMES = [1, 5, 15, 30, 60, 180, 300, 900, 1800, 3600];
+
+// Candles for the chart, any timeframe, page by page. Players only.
+export async function chartCandles(user, matchId, { tf, before = null, limit = 300, until = null }) {
+  if (!TIMEFRAMES.includes(tf)) throw new GameError('That timeframe isn’t available.');
+  const m = await prisma.gameMatch.findUnique({ where: { id: matchId } });
+  const me = m && (await prisma.gamePlayer.findUnique({ where: { matchId_userId: { matchId, userId: user.id } } }));
+  if (!me) throw new GameError('We couldn’t find that match.', 404);
+  const market = marketFor(m);
+  let tick = visibleTick(m);
+  if (Number.isInteger(until) && until < tick) tick = Math.max(-1, until);
+  const { candles, more } = candleRange(market, tf, { beforeT: Number.isInteger(before) ? before : null, limit: Math.min(Math.max(limit, 1), 1000), upToAbs: market.historyTicks + tick });
+  const base = chartBase(m);
+  return { tf, more, baseMs: base, decimals: market.decimals, lastT: tick, candles: candles.map((c) => ({ ts: base + c.t * 1000, t: c.t, o: c.o, h: c.h, l: c.l, c: c.c, v: c.v })) };
+}
+
+export async function matchView(user, matchId, { since = null, ticksSince = null } = {}) {
   const m = await advance(matchId);
   if (!m) throw new GameError('We couldn’t find that match.', 404);
   const players = await prisma.gamePlayer.findMany({ where: { matchId } });
@@ -594,11 +633,25 @@ export async function matchView(user, matchId, { since = 0 } = {}) {
   const settled = m.status === 'SETTLED';
   const tick = ['ACTIVE'].includes(m.status) ? Math.min(tickAt(m), m.durationSec - 1) : settled ? m.durationSec - 1 : -1;
   const visibleTo = tick >= 0 ? H + tick : H - 1;
-  const candles = candlesUpTo(market, visibleTo);
   view.tick = tick;
   view.price = market.prices[visibleTo];
-  view.candles = candles.filter((c) => c.i >= Math.max(0, since - 1));
-  view.totalCandles = candles.length;
+  view.chart = { symbol: m.symbol, decimals: market.decimals, baseMs: chartBase(m), historyTicks: H, lastT: visibleTo - H, candleSec: m.candleSec, timeframes: TIMEFRAMES };
+  // New one-second prices since the client's last one (the live bar), capped.
+  if (Number.isInteger(ticksSince)) {
+    const from = Math.max(ticksSince + 1, -H);
+    const to = visibleTo - H;
+    if (to - from > 600) view.ticksReset = true;
+    else {
+      view.ticks = [];
+      for (let t = from; t <= to; t++) view.ticks.push([t, market.prices[H + t], market.volumes[H + t]]);
+    }
+  }
+  // Older app versions ask with `since` and draw their own candles.
+  if (since !== null) {
+    const candles = candlesUpTo(market, visibleTo);
+    view.candles = candles.filter((c) => c.i >= Math.max(0, since - 1));
+    view.totalCandles = candles.length;
+  }
 
   if (tick >= 0 && !settled) {
     const { sim } = await playerState(m, user.id, market, tick);
@@ -688,8 +741,8 @@ export async function rematch(user, matchId) {
   const m = await prisma.gameMatch.findUnique({ where: { id: matchId }, include: { players: true } });
   if (!m || !m.players.some((p) => p.userId === user.id)) throw new GameError('We couldn’t find that match.', 404);
   if (!FINAL.includes(m.status)) throw new GameError('Finish this match first.', 409);
-  if (m.mode === 'practice') return createMatch(user, { mode: 'practice', durationSec: m.durationSec });
+  if (m.mode === 'practice') return createMatch(user, { mode: 'practice', durationSec: m.durationSec, symbol: m.symbol ?? null });
   const other = m.players.find((p) => p.userId !== user.id);
   if (!other) throw new GameError('There’s no opponent to rematch.', 409);
-  return createMatch(user, { mode: 'duel', stakeKobo: kobo(m.stakeKobo), durationSec: m.durationSec, opponentId: other.userId, rematchOfId: m.id });
+  return createMatch(user, { mode: 'duel', stakeKobo: kobo(m.stakeKobo), durationSec: m.durationSec, opponentId: other.userId, rematchOfId: m.id, symbol: m.symbol ?? null });
 }

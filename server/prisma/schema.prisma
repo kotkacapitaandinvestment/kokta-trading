@@ -97,6 +97,7 @@ model User {
   gamePlayers       GamePlayer[]
   gameProfile       GameProfile?
   gameBadges        GameBadge[]
+  GameChartLayout   GameChartLayout[]
 
   @@index([name(ops: raw("gin_trgm_ops"))], type: Gin, map: "User_name_trgm")
 }
@@ -1255,6 +1256,7 @@ model GameMatch {
   status           String // CREATED | WAITING_FOR_OPPONENT | READY | LOCKED | COUNTDOWN | ACTIVE | COMPLETED | SCORING | SETTLEMENT | SETTLED | CANCELLED | EXPIRED | ABANDONED | DISPUTED | REFUNDED
   scenario         String
   scenarioCode     String
+  symbol           String? // the Kotka pair (generator version 2+)
   seed             Int
   generatorVersion Int
   marketHash       String
@@ -1365,4 +1367,19 @@ model GameBadge {
   awardedAt DateTime @default(now())
 
   @@unique([userId, badge])
+}
+
+// A trader's chart for one match (or their free chart): drawings, and the
+// timeframe, chart type and indicators they chose. Drawings are stored in
+// market time (seconds from the match start), so they stay put when the
+// timeframe changes.
+model GameChartLayout {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  scope     String // "match:<id>"
+  data      Json     @default("{}")
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, scope])
 }

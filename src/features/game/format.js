@@ -10,7 +10,7 @@ export const naira = (kobo, { sign = false } = {}) => {
 
 // Virtual capital: labelled so it's never mistaken for wallet money.
 export const virtual = (amount) => `₦${Number(amount ?? 0).toLocaleString('en-NG', { maximumFractionDigits: 0 })}`;
-export const price = (p) => (p == null ? '—' : Number(p).toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+export const price = (p, dp = 2) => (p == null ? '—' : Number(p).toLocaleString('en-NG', { minimumFractionDigits: dp, maximumFractionDigits: dp }));
 export const pct = (v, d = 2) => (v == null ? '—' : `${v > 0 ? '+' : ''}${Number(v).toFixed(d)}%`);
 export const mmss = (seconds) => {
   const neg = seconds < 0;

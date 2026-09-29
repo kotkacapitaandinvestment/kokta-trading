@@ -27,7 +27,7 @@ function fillPrice(price, side, opening, spreadBps) {
 }
 
 const round = (v, d = 2) => Math.round(v * 10 ** d) / 10 ** d;
-const fmt = (p) => p.toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const fmtAt = (p, dp) => Number(p).toLocaleString('en-NG', { minimumFractionDigits: dp, maximumFractionDigits: dp });
 
 /**
  * simulate({ market, actions, capital, rules, upTo, final })
@@ -39,6 +39,10 @@ const fmt = (p) => p.toLocaleString('en-NG', { minimumFractionDigits: 2, maximum
 export function simulate({ market, actions, capital, rules = defaultTradingRules(), upTo, final = false }) {
   const H = market.historyTicks;
   const M = market.matchTicks;
+  // Prices round to the pair's precision; money (P&L) to kobo.
+  const dp = market.decimals ?? 2;
+  const rp = (v) => round(v, dp);
+  const fmt = (v) => fmtAt(v, dp);
   const last = Math.min(upTo ?? M - 1, M - 1);
   const byTick = new Map();
   for (const a of actions) {
@@ -68,13 +72,13 @@ export function simulate({ market, actions, capital, rules = defaultTradingRules
     cash += pnl;
     pos.qty -= q;
     const tr = pos.trade;
-    tr.exits.push({ tick: t, price: round(px), qty: q, reason, pnl: round(pnl) });
+    tr.exits.push({ tick: t, price: rp(px), qty: q, reason, pnl: round(pnl) });
     tr.pnl += pnl;
     if (pos.qty <= EPS) {
       tr.closeTick = t;
       tr.exitReason = reason;
       const exitQty = tr.exits.reduce((s, e) => s + e.qty, 0);
-      tr.exitPrice = round(tr.exits.reduce((s, e) => s + e.price * e.qty, 0) / exitQty);
+      tr.exitPrice = rp(tr.exits.reduce((s, e) => s + e.price * e.qty, 0) / exitQty);
       tr.pnl = round(tr.pnl);
       tr.returnPct = round((tr.pnl / tr.equityAtOpen) * 100, 3);
       pos = null;
@@ -95,7 +99,7 @@ export function simulate({ market, actions, capital, rules = defaultTradingRules
       if (hitStop || hitTarget) {
         const reason = hitStop ? 'stop' : 'target';
         const { px } = exit(t, pos.qty, reason);
-        log.push({ tick: t, kind: reason, price: round(px), text: hitStop ? `Stop loss hit at ${fmt(px)}` : `Take profit hit at ${fmt(px)}` });
+        log.push({ tick: t, kind: reason, price: rp(px), text: hitStop ? `Stop loss hit at ${fmt(px)}` : `Take profit hit at ${fmt(px)}` });
       }
     }
 
@@ -115,9 +119,9 @@ export function simulate({ market, actions, capital, rules = defaultTradingRules
           n: trades.length + 1,
           side,
           openTick: t,
-          openPrice: round(px),
+          openPrice: rp(px),
           equityAtOpen: eq,
-          entries: [{ tick: t, price: round(px), qty, sizePct: pct }],
+          entries: [{ tick: t, price: rp(px), qty, sizePct: pct }],
           exits: [],
           stopAtOpen: stop,
           targetAtOpen: target,
@@ -139,7 +143,7 @@ export function simulate({ market, actions, capital, rules = defaultTradingRules
         };
         trades.push(trade);
         pos = { side, qty, avg: px, stop, target, stopSetAt: t, targetSetAt: t, trade };
-        log.push({ tick: t, kind: 'open', price: round(px), seq: a.seq, text: `${side === 'long' ? 'Long' : 'Short'} opened at ${fmt(px)} (${round(pct, 1)}% of capital)${stop != null ? `, stop ${fmt(stop)}` : ', no stop'}${target != null ? `, target ${fmt(target)}` : ''}` });
+        log.push({ tick: t, kind: 'open', price: rp(px), seq: a.seq, text: `${side === 'long' ? 'Long' : 'Short'} opened at ${fmt(px)} (${round(pct, 1)}% of capital)${stop != null ? `, stop ${fmt(stop)}` : ', no stop'}${target != null ? `, target ${fmt(target)}` : ''}` });
       } else if (a.type === 'increase' && pos) {
         const pct = Math.max(Number(pl.sizePct) || 0, 0);
         const px = fillPrice(p, pos.side, true, rules.spreadBps);
@@ -151,30 +155,30 @@ export function simulate({ market, actions, capital, rules = defaultTradingRules
         pos.avg = (pos.avg * pos.qty + px * q) / (pos.qty + q);
         pos.qty += q;
         pos.trade.increases += 1;
-        pos.trade.entries.push({ tick: t, price: round(px), qty: q, sizePct: pct });
+        pos.trade.entries.push({ tick: t, price: rp(px), qty: q, sizePct: pct });
         pos.trade.maxSizePct = Math.max(pos.trade.maxSizePct, ((pos.qty * px) / eq) * 100);
-        log.push({ tick: t, kind: 'increase', price: round(px), seq: a.seq, text: `Position increased at ${fmt(px)}${unrealised(p) < 0 ? ' while losing' : ''}` });
+        log.push({ tick: t, kind: 'increase', price: rp(px), seq: a.seq, text: `Position increased at ${fmt(px)}${unrealised(p) < 0 ? ' while losing' : ''}` });
       } else if (a.type === 'reduce' && pos) {
         const f = Math.min(Math.max(Number(pl.fraction) || 0, 0), 1);
         if (f <= 0) continue;
         pos.trade.reductions += 1;
         const { px } = exit(t, pos.qty * f, 'manual');
-        log.push({ tick: t, kind: 'reduce', price: round(px), seq: a.seq, text: `Position reduced by ${Math.round(f * 100)}% at ${fmt(px)}` });
+        log.push({ tick: t, kind: 'reduce', price: rp(px), seq: a.seq, text: `Position reduced by ${Math.round(f * 100)}% at ${fmt(px)}` });
       } else if (a.type === 'close' && pos) {
         const { px } = exit(t, pos.qty, 'manual');
-        log.push({ tick: t, kind: 'close', price: round(px), seq: a.seq, text: `Position closed at ${fmt(px)}` });
+        log.push({ tick: t, kind: 'close', price: rp(px), seq: a.seq, text: `Position closed at ${fmt(px)}` });
       } else if (a.type === 'modify' && pos) {
         if ('stop' in pl) {
           pos.stop = pl.stop ?? null;
           pos.stopSetAt = t;
           pos.trade.stops.push({ tick: t, stop: pos.stop });
-          log.push({ tick: t, kind: 'stop', price: round(p), seq: a.seq, text: pos.stop == null ? 'Stop loss removed' : `Stop loss moved to ${fmt(pos.stop)}` });
+          log.push({ tick: t, kind: 'stop', price: rp(p), seq: a.seq, text: pos.stop == null ? 'Stop loss removed' : `Stop loss moved to ${fmt(pos.stop)}` });
         }
         if ('target' in pl) {
           pos.target = pl.target ?? null;
           pos.targetSetAt = t;
           pos.trade.targets.push({ tick: t, target: pos.target });
-          log.push({ tick: t, kind: 'target', price: round(p), seq: a.seq, text: pos.target == null ? 'Take profit removed' : `Take profit moved to ${fmt(pos.target)}` });
+          log.push({ tick: t, kind: 'target', price: rp(p), seq: a.seq, text: pos.target == null ? 'Take profit removed' : `Take profit moved to ${fmt(pos.target)}` });
         }
       }
     }
@@ -184,7 +188,7 @@ export function simulate({ market, actions, capital, rules = defaultTradingRules
     if (pos && eq <= (rules.stopOutPct / 100) * capital) {
       const { px } = exit(t, pos.qty, 'stop_out');
       stoppedOut = true;
-      log.push({ tick: t, kind: 'stop_out', price: round(px), text: `Closed automatically: equity fell to ${rules.stopOutPct}% of starting capital` });
+      log.push({ tick: t, kind: 'stop_out', price: rp(px), text: `Closed automatically: equity fell to ${rules.stopOutPct}% of starting capital` });
       eq = equityAt(p);
     }
 
@@ -196,7 +200,7 @@ export function simulate({ market, actions, capital, rules = defaultTradingRules
   // 4. End of the match: anything still open closes at the last price.
   if (final && pos) {
     const { px } = exit(last, pos.qty, 'end');
-    log.push({ tick: last, kind: 'end', price: round(px), text: `Closed at the end of the match at ${fmt(px)}` });
+    log.push({ tick: last, kind: 'end', price: rp(px), text: `Closed at the end of the match at ${fmt(px)}` });
     equityCurve[last] = cash;
   }
 
@@ -214,7 +218,7 @@ export function simulate({ market, actions, capital, rules = defaultTradingRules
       ? {
           side: pos.side,
           qty: pos.qty,
-          avgPrice: round(pos.avg),
+          avgPrice: rp(pos.avg),
           stop: pos.stop,
           target: pos.target,
           notional: round(pos.qty * p),
