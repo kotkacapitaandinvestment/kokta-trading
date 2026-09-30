@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import clsx from 'clsx';
-import { ArrowLeft, ExternalLink, Landmark, Loader2, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { ExternalLink, Landmark, Loader2, CheckCircle2, AlertTriangle, Swords } from 'lucide-react';
 import PageHeader from '../../components/ui/PageHeader';
 import Card, { CardHeader, CardBody } from '../../components/ui/Card';
 import Button from '../../components/ui/Button';
@@ -12,6 +12,7 @@ import Input, { Select } from '../../components/ui/Input';
 import { api } from '../../lib/api';
 import { confirmDialog, toast } from '../../lib/dialogs';
 import { naira } from './format';
+import GameNav from './GameNav';
 
 const DEP_STATUS = { initiated: ['Waiting for payment', 'neutral'], succeeded: ['Added', 'profit'], failed: ['Didn’t go through', 'loss'], expired: ['Expired', 'neutral'] };
 const WD_STATUS = { requested: ['Waiting for review', 'warning'], processing: ['Sending', 'neutral'], paid: ['Paid', 'profit'], failed: ['Failed: money returned', 'loss'], rejected: ['Declined: money returned', 'loss'], cancelled: ['Cancelled', 'neutral'] };
@@ -183,8 +184,13 @@ export default function Wallet() {
 
   return (
     <div className="space-y-6">
-      <Link to="/app/game" className="inline-flex items-center gap-1 text-sm text-ink-500 hover:text-ink-900 dark:text-ink-400 dark:hover:text-ink-50"><ArrowLeft className="h-4 w-4" /> Trading Game</Link>
-      <PageHeader eyebrow="Trading Game" title="Wallet" description="Real money, held as Kotka Credits (1 credit = ₦1). The capital you trade with inside a match is virtual and separate." />
+      <GameNav />
+      <PageHeader
+        eyebrow="Kotka Trading"
+        title="Wallet"
+        description="Real money, held as Kotka Credits (1 credit = ₦1). The capital you trade with inside a match is virtual, has no cash value, and is separate from this."
+        actions={<Button as={Link} to="/app/game" icon={Swords}>Play</Button>}
+      />
 
       {checking ? (
         <div className={clsx('flex items-center gap-2 rounded-xl border p-3 text-sm', checking.status === 'succeeded' ? 'border-profit-500/30 bg-profit-50 text-profit-700 dark:bg-profit-500/10 dark:text-profit-400' : checking.status === 'failed' ? 'border-loss-500/30 bg-loss-50 text-loss-600 dark:bg-loss-500/10' : 'border-ink-200 text-ink-600 dark:border-ink-700 dark:text-ink-300')}>
@@ -195,7 +201,12 @@ export default function Wallet() {
       ) : null}
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        {[['Available', w.availableKobo, 'To stake or withdraw'], ['Locked in matches', w.lockedKobo, 'Returned or paid out when matches end'], ['Withdrawing', w.pendingWithdrawKobo, 'Set aside for requested withdrawals'], ['Total', w.totalKobo, 'All of the above']].map(([k, v, hint]) => (
+        {[
+          ['Competition credits', w.availableKobo + (w.promoAvailableKobo ?? 0), w.promoAvailableKobo ? `Includes ${naira(w.promoAvailableKobo)} promotional credits, which can’t be withdrawn` : 'Available to stake (1 credit = ₦1)'],
+          ['Withdrawable', w.availableKobo, 'Available money you can take out'],
+          ['Locked in matches', w.lockedKobo, 'Returned or paid out when matches end'],
+          ['Wallet balance', w.totalKobo, w.pendingWithdrawKobo ? `Includes ${naira(w.pendingWithdrawKobo)} withdrawing` : 'Everything above, together'],
+        ].map(([k, v, hint]) => (
           <Card key={k} className="p-5">
             <p className="text-[11px] font-medium uppercase tracking-wide text-ink-400">{k}</p>
             <p className="mt-2 text-2xl font-semibold tabular-nums tracking-tight text-ink-900 dark:text-ink-50">{naira(v)}</p>

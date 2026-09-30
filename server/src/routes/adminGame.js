@@ -10,6 +10,7 @@ import { refundMatch, disputeMatch, summary, peopleFor, GameError, LIVE, TX } fr
 import { TEMPLATES } from '../lib/game/market.js';
 import { PAIRS, publicPair } from '../lib/game/pairs.js';
 import * as pay from '../lib/game/payments/index.js';
+import { riskSignals } from '../lib/game/risk.js';
 
 // Trading Game administration. Mounted behind requireAuth + requireRole('admin', 'super_admin').
 // Admins can review withdrawals and mark disputes; super admins change
@@ -19,6 +20,12 @@ export const adminGameRouter = Router();
 const superOnly = (req, res, next) => (req.user.role === 'super_admin' ? next() : res.status(403).json({ error: 'Only a super admin can do that.' }));
 const since = (days) => new Date(Date.now() - days * 86400e3);
 const sum = async (where) => kobo((await prisma.walletEntry.aggregate({ where, _sum: { amountKobo: true } }))._sum.amountKobo);
+
+// Patterns worth a human look: repeated pairings, one-sided losses, fast cash-outs.
+adminGameRouter.get('/risk', asyncHandler(async (req, res) => {
+  const days = [7, 14, 30].includes(Number(req.query.days)) ? Number(req.query.days) : 14;
+  res.json(await riskSignals({ days }));
+}));
 
 adminGameRouter.get('/overview', asyncHandler(async (req, res) => {
   const d1 = since(1);

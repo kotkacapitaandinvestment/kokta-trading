@@ -9,6 +9,7 @@ import KotkaChart from './pro/LazyChart';
 import { usePairSwitch } from './pairs';
 import { virtual, price as fmt, pct, mmss, REASONS, requestKey } from './format';
 
+const EXIT = { target: 'target hit', stop: 'stopped', manual: 'closed', end: 'at the end', stop_out: 'capital floor' };
 const num = (v) => (v === '' || v == null ? null : Number(v));
 const inputCls = 'h-9 w-full rounded-lg border border-ink-200 bg-white px-2.5 text-sm tabular-nums outline-none focus:border-ink-400 dark:border-ink-700 dark:bg-ink-800 dark:text-ink-100';
 
@@ -202,16 +203,19 @@ export default function LiveMatch({ view, now, apply, ticksSince }) {
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
         {[
           ['Time left', mmss(left), left < 60 ? 'text-loss-500' : ''],
           ['Price', fmt(view.price, dp), ''],
-          ['Your capital', `${virtual(me.equity)} (${pct(me.returnPct)})`, me.returnPct >= 0 ? 'text-profit-600 dark:text-profit-400' : 'text-loss-500'],
-          view.opponent ? ['Opponent', `${pct(view.opponent.returnPct)} · ${view.opponent.trades} trade${view.opponent.trades === 1 ? '' : 's'}`, ''] : ['Mode', 'Practice', ''],
-        ].map(([k, v, tone]) => (
+          ['Virtual balance', `${virtual(me.equity)}`, '', pct(me.returnPct)],
+          ['Unrealised P/L', pos ? `${pos.unrealised >= 0 ? '+' : '−'}${virtual(Math.abs(pos.unrealised))}` : '—', pos ? (pos.unrealised >= 0 ? 'text-profit-600 dark:text-profit-400' : 'text-loss-500') : ''],
+          ['Exposure', pos ? `${pos.sizePct}%` : 'None', '', pos ? `${pos.side === 'long' ? 'Long' : 'Short'} · risk ${pos.riskPct == null ? 'no stop' : `${pos.riskPct}%`}` : 'No open position'],
+          view.opponent ? ['Opponent', pct(view.opponent.returnPct), '', `${view.opponent.trades} trade${view.opponent.trades === 1 ? '' : 's'} · ${view.opponent.inPosition ? 'in a position' : 'no position'}`] : ['Mode', 'Practice', '', 'No opponent'],
+        ].map(([k, v, tone, sub]) => (
           <div key={k} className="rounded-xl border border-ink-100 bg-white px-4 py-3 dark:border-ink-800 dark:bg-ink-900">
             <p className="flex items-center gap-1 text-[11px] uppercase tracking-wide text-ink-400">{k === 'Time left' ? <Clock3 className="h-3 w-3" /> : null}{k}</p>
             <p className={clsx('mt-1 text-lg font-semibold tabular-nums text-ink-900 dark:text-ink-50', tone)}>{v}</p>
+            {sub ? <p className="truncate text-[11px] text-ink-400">{sub}</p> : null}
           </div>
         ))}
       </div>
@@ -235,6 +239,37 @@ export default function LiveMatch({ view, now, apply, ticksSince }) {
         </Card>
       </div>
 
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+      <Card>
+        <CardHeader title="Trade history" subtitle="Your trades in this match. Profit and loss are virtual." />
+        <CardBody>
+          {me.trades?.length ? (
+            <div className="-mx-5 overflow-x-auto">
+              <table className="w-full min-w-[460px] text-sm">
+                <thead>
+                  <tr className="border-b border-ink-100 text-left text-[11px] uppercase tracking-wide text-ink-400 dark:border-ink-800">
+                    {['#', 'Side', 'Entry', 'Exit', 'Size', 'P/L'].map((h) => <th key={h} className="px-5 py-2 font-medium">{h}</th>)}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-ink-100 dark:divide-ink-800">
+                  {[...me.trades].reverse().map((t) => (
+                    <tr key={t.n}>
+                      <td className="px-5 py-2 tabular-nums text-ink-400">{t.n}</td>
+                      <td className={clsx('px-5 py-2 font-medium', t.side === 'long' ? 'text-profit-600 dark:text-profit-400' : 'text-loss-500')}>{t.side === 'long' ? 'Long' : 'Short'}</td>
+                      <td className="px-5 py-2 tabular-nums text-ink-700 dark:text-ink-200">{fmt(t.openPrice, dp)} <span className="text-xs text-ink-400">{mmss(t.openTick)}</span></td>
+                      <td className="px-5 py-2 tabular-nums text-ink-700 dark:text-ink-200">{t.closeTick != null ? <>{fmt(t.exitPrice, dp)} <span className="text-xs text-ink-400">{EXIT[t.exitReason] ?? mmss(t.closeTick)}</span></> : <span className="text-xs text-accent-600 dark:text-accent-400">Open</span>}</td>
+                      <td className="px-5 py-2 tabular-nums text-ink-600 dark:text-ink-300">{t.maxSizePct}%</td>
+                      <td className={clsx('px-5 py-2 tabular-nums', t.pnl >= 0 ? 'text-profit-600 dark:text-profit-400' : 'text-loss-500')}>{t.closeTick != null ? `${t.pnl >= 0 ? '+' : '−'}${virtual(Math.abs(t.pnl))}` : '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <p className="text-sm text-ink-500 dark:text-ink-400">No trades yet.</p>
+          )}
+        </CardBody>
+      </Card>
       <Card>
         <CardHeader title="Your decisions" subtitle="Everything you do is recorded for scoring and the replay." />
         <CardBody>
@@ -252,6 +287,7 @@ export default function LiveMatch({ view, now, apply, ticksSince }) {
           )}
         </CardBody>
       </Card>
+      </div>
     </div>
   );
 }

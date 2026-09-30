@@ -19,6 +19,28 @@ export const mmss = (seconds) => {
 };
 export const minutes = (sec) => `${Math.round(sec / 60)} min`;
 
+// What entering a competition means, shown before anyone commits money.
+export function stakeWords({ stakeKobo, startingCapital, feeBps }) {
+  return [
+    `You are staking ${naira(stakeKobo)} of your available balance.`,
+    `You will receive ${virtual(startingCapital)} in virtual trading capital for this match.`,
+    'Virtual trading capital has no cash value.',
+    `Kotka charges a ${feeBps / 100}% competition platform fee.`,
+  ];
+}
+
+// Stakes to offer: the usual amounts that the current rules allow.
+export function stakeOptions(rules) {
+  return [50_000, 100_000, 250_000, 500_000].filter((k) => k >= rules.minStakeKobo && k <= rules.maxStakeKobo && (k - rules.minStakeKobo) % rules.stakeStepKobo === 0);
+}
+export function stakeProblem(kobo, rules) {
+  if (!Number.isFinite(kobo) || kobo <= 0) return 'Enter an amount.';
+  if (kobo < rules.minStakeKobo) return `The smallest stake is ${naira(rules.minStakeKobo)}.`;
+  if (kobo > rules.maxStakeKobo) return `The largest stake is ${naira(rules.maxStakeKobo)}.`;
+  if ((kobo - rules.minStakeKobo) % rules.stakeStepKobo !== 0) return `Stakes go up in steps of ${naira(rules.stakeStepKobo)}.`;
+  return null;
+}
+
 export const STATUS_LABEL = {
   WAITING_FOR_OPPONENT: 'Waiting for an opponent',
   READY: 'In the lobby',

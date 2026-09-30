@@ -103,6 +103,15 @@ async function untilSettled(id) {
   throw new Error('match never settled');
 }
 const thesis = { view: 'bullish', reasons: ['trend'], confidence: 'medium' };
+// Notifications go out after the response; give them a moment to land.
+async function eventually(fn, tries = 20) {
+  for (let i = 0; i < tries; i++) {
+    const v = await fn();
+    if (v) return v;
+    await sleep(250);
+  }
+  return null;
+}
 
 before(async () => {
   base = await startServer();
@@ -208,6 +217,40 @@ test('same trade, different process, different score', () => {
   const B = scorePlayer({ market, sim: sb, rules });
   assert.ok(A.score > B.score + 5, `${A.score} vs ${B.score}`);
   assert.ok(B.findings.some((f) => f.key === 'no_stop'));
+});
+
+test('observed behaviour: early exits, uneven risk, switching approach every trade', () => {
+  const market = mk({ scenario: 'bull_trend', seed: 2024 });
+  const rules = defaultTradingRules();
+  const H = market.historyTicks;
+  const at = (t) => market.prices[H + t];
+  // A winner closed by hand, well short of its planned target.
+  const p = at(120);
+  const t1 = [...Array(market.matchTicks - 130).keys()].map((k) => k + 125).find((t) => at(t) > p * 1.003 && at(t) < p * 1.01);
+  assert.ok(t1, 'the market offers a small profit');
+  const early = simulate({ market, actions: [{ seq: 1, tick: 120, type: 'open', payload: { side: 'long', sizePct: 100, stop: +(p * 0.99).toFixed(2), target: +(p * 1.04).toFixed(2), thesis } }, { seq: 2, tick: t1, type: 'close', payload: {} }], capital: 100000, rules, final: true });
+  const E = scorePlayer({ market, sim: early, rules });
+  assert.ok(E.findings.some((f) => f.key === 'early_exit'), JSON.stringify(E.findings.map((f) => f.key)));
+  // Three trades: risk from 0.5% to 3%, and a new reason and direction each time.
+  const plan = [
+    [100, 'long', 0.005, ['trend'], 'bullish'],
+    [200, 'short', 0.01, ['reversal'], 'bearish'],
+    [300, 'long', 0.03, ['breakout'], 'bullish'],
+  ];
+  const actions = [];
+  let seq = 0;
+  for (const [t, side, d, reasons, view] of plan) {
+    const px = at(t);
+    actions.push({ seq: ++seq, tick: t, type: 'open', payload: { side, sizePct: 100, stop: +(side === 'long' ? px * (1 - d) : px * (1 + d)).toFixed(2), thesis: { view, reasons, confidence: 'medium' } } });
+    actions.push({ seq: ++seq, tick: t + 20, type: 'close', payload: {} });
+  }
+  const mixed = simulate({ market, actions, capital: 100000, rules, final: true });
+  assert.equal(mixed.trades.length, 3);
+  const M = scorePlayer({ market, sim: mixed, rules });
+  const keys = M.findings.map((f) => f.key);
+  assert.ok(keys.includes('inconsistent_risk'), JSON.stringify(keys));
+  assert.ok(keys.includes('strategy_switching'), JSON.stringify(keys));
+  assert.ok(M.findings.every((f) => !/you are|you feel|anxious|greedy|fear/i.test(f.text)), 'describes behaviour, never diagnoses');
 });
 
 test('stops fill from the market path, and the end of the match closes what is open', () => {
@@ -400,11 +443,110 @@ test('neither player trades: stakes back in full, no fee; a draw splits the priz
   await setGame(FAST);
 });
 
+test('Trading Arena: Quick Match pairs two traders on the same terms, and nobody else', async () => {
+  await fund(a, naira(1000));
+  await fund(b, naira(1000));
+  await fund(c, naira(1000));
+  const q = (cl, stake, secs = 60) => cl.post('/api/game/quick', { stakeKobo: stake, durationSec: secs });
+  assert.equal((await q(pendingC, naira(500))).status, 403, 'a verified identity is needed');
+  assert.equal((await q(aC, naira(750))).status, 400, 'stakes come in steps');
+  assert.equal((await q(aC, naira(500), 61)).status, 400, 'only the match lengths on offer');
+  // A searches; nobody's there, so A waits, with no money held yet.
+  assert.equal((await q(aC, naira(500))).json.status, 'searching');
+  assert.equal(Number((await balance(a)).lockedKobo), 0, 'nothing is held while searching');
+  assert.equal((await aC.get('/api/game/quick')).json.status, 'searching');
+  // C wants a different stake: not paired with A.
+  assert.equal((await q(cC, naira(1000))).json.status, 'searching');
+  const home = await bC.get('/api/game/home');
+  assert.ok(home.json.arena.stats.looking >= 2, JSON.stringify(home.json.arena.stats));
+  assert.equal(typeof home.json.arena.stats.online, 'number');
+  // The searching pages check in, as the app's do every few seconds.
+  await aC.get('/api/game/quick');
+  await cC.get('/api/game/quick');
+  // B searches on A's terms: paired, both stakes held, lobby open.
+  const found = await q(bC, naira(500));
+  assert.equal(found.json.status, 'matched', JSON.stringify(found.json));
+  const id = found.json.matchId;
+  try {
+  const m = await prisma.gameMatch.findUnique({ where: { id }, include: { players: true } });
+  assert.equal(m.status, 'READY');
+  assert.equal(m.rules.source, 'quick');
+  assert.deepEqual(m.players.map((p) => p.userId).sort(), [a.id, b.id].sort());
+  assert.equal(Number((await balance(a)).lockedKobo), naira(500));
+  assert.equal(Number((await balance(b)).lockedKobo), naira(500));
+  // A's searching screen hears about it; then the search is gone.
+  assert.deepEqual((await aC.get('/api/game/quick')).json, { status: 'matched', matchId: id });
+  assert.equal((await aC.get('/api/game/quick')).json.status, 'idle');
+  assert.ok(await eventually(() => prisma.notification.findFirst({ where: { userId: a.id, title: { startsWith: 'Opponent found' } } })), 'A is told');
+  assert.notEqual((await cC.get('/api/game/quick')).json.status, 'matched', 'C, on other terms, was not paired');
+  assert.equal((await cC.delete('/api/game/quick')).json.status, 'idle');
+  assert.equal((await q(aC, naira(500))).json.code, 'in_match', 'one match at a time');
+  // Leaving the lobby gives both stakes back and tells the other player.
+  assert.equal((await bC.post(`/api/game/matches/${id}/cancel`)).status, 200);
+  assert.equal(Number((await balance(a)).lockedKobo), 0);
+  assert.equal(Number((await balance(b)).lockedKobo), 0);
+  assert.ok(await eventually(() => prisma.notification.findFirst({ where: { userId: a.id, title: { contains: 'left the trading match' } } })), 'A is told B left');
+  } finally {
+    // Never leave the players in a lobby for the tests after this one.
+    await bC.post(`/api/game/matches/${id}/cancel`).catch(() => {});
+    await cC.delete('/api/game/quick').catch(() => {});
+  }
+});
+
+test('Quick Match takes an open challenge on the same terms; a search lapses when its page goes', async () => {
+  await fund(a, naira(500));
+  await fund(c, naira(500));
+  const posted = await cC.post('/api/game/matches', { mode: 'duel', stakeKobo: naira(500), open: true });
+  assert.equal(posted.status, 201);
+  const took = await aC.post('/api/game/quick', { stakeKobo: naira(500), durationSec: 60 });
+  try {
+    assert.deepEqual(took.json, { status: 'matched', matchId: posted.json.match.id });
+  } finally {
+    await aC.post(`/api/game/matches/${posted.json.match.id}/cancel`).catch(() => {});
+    await cC.post(`/api/game/matches/${posted.json.match.id}/cancel`).catch(() => {});
+  }
+  assert.equal((await prisma.gameMatch.findUnique({ where: { id: posted.json.match.id } })).status, 'CANCELLED');
+  // A searches, then the page stops checking in: B isn't paired with a ghost.
+  assert.equal((await aC.post('/api/game/quick', { stakeKobo: naira(500), durationSec: 60 })).json.status, 'searching');
+  await prisma.gameQueue.update({ where: { userId: a.id }, data: { expiresAt: new Date(Date.now() - 1000) } });
+  assert.equal((await bC.post('/api/game/quick', { stakeKobo: naira(500), durationSec: 60 })).json.status, 'searching');
+  assert.notEqual((await aC.get('/api/game/quick')).json.status, 'searching');
+  await bC.delete('/api/game/quick');
+});
+
+test('Ready to Trade, the leaderboard, Learn and public trader records', async () => {
+  assert.equal((await pendingC.post('/api/game/ready', { on: true })).status, 403, 'only verified traders');
+  assert.equal((await aC.post('/api/game/ready', { on: true })).json.ready, true);
+  assert.ok((await bC.get('/api/game/home')).json.arena.readyTraders.some((t) => t.person.id === a.id), 'others see A');
+  const own = (await aC.get('/api/game/home')).json.arena;
+  assert.ok(!own.readyTraders.some((t) => t.person.id === a.id), 'not in your own list');
+  assert.equal(own.me.ready, true);
+  assert.equal((await aC.post('/api/game/ready', { on: false })).json.ready, false);
+  const board = await aC.get('/api/game/leaderboard?period=all');
+  assert.equal(board.status, 200);
+  assert.ok(board.json.rows.every((r, i, all) => r.matches >= board.json.minMatches && (!i || all[i - 1].avgScore >= r.avgScore)));
+  const learn = await aC.get('/api/game/learn');
+  assert.equal(learn.status, 200);
+  assert.ok(learn.json.lessons.length >= 10 && learn.json.lessons.every((l) => l.lesson));
+  assert.ok(Array.isArray(learn.json.insights.insights) && learn.json.dna);
+  const record = await bC.get(`/api/game/traders/${a.username}`);
+  assert.equal(record.status, 200);
+  assert.ok(Array.isArray(record.json.recent) && record.json.dna && record.json.trader.self === false);
+  assert.ok(!('totalWonKobo' in record.json.profile) && !('totalStakedKobo' in record.json.profile), 'no money on a public record');
+});
+
 test('the server decides: no trading before the start, bad orders refused, future timing flagged', async () => {
   await fund(a, naira(500));
   await fund(b, naira(500));
   const id = await startDuel(aC, bC);
+  // Hold the start a minute away so this check can't race a slow run's countdown.
+  const planned = await prisma.gameMatch.findUnique({ where: { id } });
+  const lengthMs = planned.endsAt.getTime() - planned.startsAt.getTime();
+  const later = new Date(Date.now() + 60e3);
+  await prisma.gameMatch.update({ where: { id }, data: { startsAt: later, endsAt: new Date(later.getTime() + lengthMs) } });
   assert.equal((await aC.post(`/api/game/matches/${id}/actions`, { type: 'open', payload: { side: 'long', sizePct: 50, thesis } })).status, 409, 'not before the start');
+  const soon = new Date(Date.now() + 1000);
+  await prisma.gameMatch.update({ where: { id }, data: { startsAt: soon, endsAt: new Date(soon.getTime() + lengthMs) } });
   const m = await untilActive(id);
   const price = (await aC.get(`/api/game/matches/${id}/state`)).json.price;
   const bad = [
@@ -558,6 +700,10 @@ test('admin rights: traders see nothing, admins review, super admins change mone
   assert.equal((await aC.get('/api/admin/game/overview')).status, 403);
   assert.equal((await client().get('/api/admin/game/overview')).status, 401);
   assert.equal((await adminC.get('/api/admin/game/overview')).status, 200);
+  assert.equal((await aC.get('/api/admin/game/risk')).status, 403, 'risk signals are staff-only');
+  const risk = await adminC.get('/api/admin/game/risk?days=30');
+  assert.equal(risk.status, 200);
+  assert.ok(Array.isArray(risk.json.repeatedPairs) && Array.isArray(risk.json.oneSidedLosses) && Array.isArray(risk.json.quickCashOuts));
   assert.equal((await adminC.put('/api/admin/game/settings', { feeBps: 0 })).status, 403);
   assert.equal((await adminC.post('/api/admin/game/adjustments', { userId: a.id, amountKobo: 100000, reason: 'bonus please' })).status, 403);
   assert.equal((await superC.put('/api/admin/game/settings', { feeBps: 99999 })).status, 400);

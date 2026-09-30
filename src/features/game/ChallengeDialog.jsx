@@ -5,7 +5,8 @@ import Modal from '../../components/ui/Modal';
 import Button from '../../components/ui/Button';
 import { Select } from '../../components/ui/Input';
 import { api } from '../../lib/api';
-import { naira, virtual, minutes } from './format';
+import { naira, virtual, minutes, stakeWords } from './format';
+import StakePicker, { stakeReady } from './arena/StakePicker';
 
 // What entering costs and pays, shown before anyone commits money.
 export function MoneySummary({ stakeKobo, rules, className }) {
@@ -39,7 +40,6 @@ export function MoneySummary({ stakeKobo, rules, className }) {
 }
 
 export default function ChallengeDialog({ open, onClose, rules, available, onCreated, presetOpponent = null, pairs = [] }) {
-  const steps = [1, 2, 3, 4, 10, 20].map((n) => rules.minStakeKobo + (n - 1) * rules.stakeStepKobo).filter((k) => k <= rules.maxStakeKobo);
   const [stake, setStake] = useState(rules.minStakeKobo);
   const [duration, setDuration] = useState(rules.defaultDurationSec);
   const [symbol, setSymbol] = useState('');
@@ -72,18 +72,11 @@ export default function ChallengeDialog({ open, onClose, rules, available, onCre
   };
 
   return (
-    <Modal open={open} onClose={onClose} title="New challenge" width="max-w-xl">
+    <Modal open={open} onClose={onClose} title={presetOpponent ? `Challenge ${presetOpponent.name}` : 'New challenge'} width="max-w-xl">
       <div className="space-y-5">
         <div>
           <p className="mb-2 text-xs font-medium text-ink-500 dark:text-ink-400">Stake</p>
-          <div className="flex flex-wrap gap-2">
-            {steps.map((k) => (
-              <button key={k} type="button" onClick={() => setStake(k)} className={clsx('rounded-lg border px-3 py-1.5 text-sm tabular-nums transition-colors', stake === k ? 'border-ink-900 bg-ink-900 text-white dark:border-white dark:bg-white dark:text-ink-900' : 'border-ink-200 text-ink-700 hover:border-ink-400 dark:border-ink-700 dark:text-ink-200')}>
-                {naira(k)}
-              </button>
-            ))}
-          </div>
-          <p className={clsx('mt-2 text-xs', short ? 'text-loss-500' : 'text-ink-400')}>{short ? `You have ${naira(available)} available. Add money to your wallet first.` : `Available: ${naira(available)}`}</p>
+          <StakePicker rules={rules} value={stake} onChange={setStake} available={available} />
         </div>
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -147,6 +140,9 @@ export default function ChallengeDialog({ open, onClose, rules, available, onCre
         )}
 
         <MoneySummary stakeKobo={stake} rules={rules} />
+        <ul className="space-y-1 rounded-xl bg-ink-50 px-4 py-3 text-xs leading-relaxed text-ink-700 dark:bg-ink-800/60 dark:text-ink-200">
+          {stakeWords({ stakeKobo: stake, startingCapital: rules.startingCapital, feeBps: rules.feeBps }).map((line) => <li key={line}>{line}</li>)}
+        </ul>
 
         <label className="flex items-start gap-2 text-xs leading-relaxed text-ink-600 dark:text-ink-300">
           <input type="checkbox" checked={agreed} onChange={(e) => setAgreed(e.target.checked)} className="mt-0.5" />
@@ -156,7 +152,7 @@ export default function ChallengeDialog({ open, onClose, rules, available, onCre
         {error ? <p role="alert" className="text-sm text-loss-500">{error}</p> : null}
         <div className="flex justify-end gap-2">
           <Button variant="ghost" onClick={onClose}>Not now</Button>
-          <Button onClick={submit} disabled={busy || !agreed || short || (mode === 'direct' && !opponent)}>{busy ? 'Locking…' : `Lock ${naira(stake)} and ${mode === 'direct' ? 'send challenge' : 'post challenge'}`}</Button>
+          <Button onClick={submit} disabled={busy || !agreed || short || !stakeReady(stake, rules) || (mode === 'direct' && !opponent)}>{busy ? 'Locking…' : `Lock ${naira(stake)} and ${mode === 'direct' ? 'send challenge' : 'post challenge'}`}</Button>
         </div>
       </div>
     </Modal>

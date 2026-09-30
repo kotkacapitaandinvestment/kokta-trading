@@ -22,6 +22,7 @@ import { scorePlayer } from './scoring.js';
 import { post, walletFor, HOUSE_WALLET, stakedToday, kobo } from './wallet.js';
 import { awardProgress } from './progression.js';
 import { notify } from '../community/notify.js';
+import { avatarUrl } from '../media.js';
 
 export const LIVE = ['WAITING_FOR_OPPONENT', 'READY', 'LOCKED', 'COUNTDOWN', 'ACTIVE', 'COMPLETED', 'SCORING', 'SETTLEMENT'];
 export const FINAL = ['SETTLED', 'CANCELLED', 'EXPIRED', 'ABANDONED', 'DISPUTED', 'REFUNDED'];
@@ -79,14 +80,14 @@ const lockMatch = async (tx, id) => (await tx.$queryRaw`SELECT * FROM "GameMatch
 
 // ── Eligibility ────────────────────────────────────────────────────────────
 
-async function assertCanPlayForMoney(userId, s) {
+export async function assertCanPlayForMoney(userId, s) {
   if (!s.matchesEnabled) throw new GameError('Competitions are paused right now. Please try again later.', 503, 'matches_paused');
   const u = await prisma.user.findUnique({ where: { id: userId }, select: { status: true, kyc: { select: { status: true } } } });
   if (!u || u.status !== 'active') throw new GameError('Your account can’t enter competitions.', 403);
   if (u.kyc?.status !== 'approved') throw new GameError('Competitions with a stake need your identity to be verified first. You can play practice matches meanwhile.', 403, 'kyc_required_for_money');
 }
 
-function checkStake(stakeKobo, s) {
+export function checkStake(stakeKobo, s) {
   if (!Number.isInteger(stakeKobo) || stakeKobo < s.minStakeKobo || stakeKobo > s.maxStakeKobo || (stakeKobo - s.minStakeKobo) % s.stakeStepKobo !== 0) {
     throw new GameError(`Choose a stake from ₦${s.minStakeKobo / 100} to ₦${s.maxStakeKobo / 100}, in steps of ₦${s.stakeStepKobo / 100}.`);
   }
@@ -103,7 +104,8 @@ export function money(stakeKobo, feeBps) {
 
 // ── Creating and joining ───────────────────────────────────────────────────
 
-export async function createMatch(user, { mode = 'duel', stakeKobo = 0, durationSec, opponentId = null, open = false, rematchOfId = null, symbol = null }) {
+// quick: a Quick Match pairing (no challenge notice; the lobby opens for both at once).
+export async function createMatch(user, { mode = 'duel', stakeKobo = 0, durationSec, opponentId = null, open = false, rematchOfId = null, symbol = null, quick = false }) {
   const s = await loadGameSettings();
   if (symbol != null && !s.pairs.includes(symbol)) throw new GameError('Choose one of the Kotka pairs on offer.');
   // No pair chosen: any of those on offer.
@@ -130,7 +132,8 @@ export async function createMatch(user, { mode = 'duel', stakeKobo = 0, duration
   const backgroundTicks = Math.round(s.backgroundHours * 3600);
   const market = generateMarket({ scenario, seed, durationSec: duration, candleSec: s.candleSec, historyCandles: s.historyCandles, symbol: pair, backgroundTicks });
   const at = now();
-  const rules = { trading: s.trading, weights: s.weights, scoring: s.scoring, drawTolerance: s.drawTolerance, noTradeRefund: s.noTradeRefund, revealScenario: s.revealScenario, backgroundTicks };
+  const source = practice ? 'practice' : quick ? 'quick' : rematchOfId ? 'rematch' : opponentId ? 'direct' : 'open';
+  const rules = { trading: s.trading, weights: s.weights, scoring: s.scoring, drawTolerance: s.drawTolerance, noTradeRefund: s.noTradeRefund, revealScenario: s.revealScenario, backgroundTicks, source };
   const base = {
     code: newCode(),
     mode: practice ? 'practice' : 'duel',
@@ -170,18 +173,19 @@ export async function createMatch(user, { mode = 'duel', stakeKobo = 0, duration
     return m;
   }, TX);
 
-  if (opponentId) {
-    notify([{ userId: opponentId, type: 'challenge', actorId: user.id, title: `${user.name} challenged you to a trading match`, body: `Stake ₦${(stakeKobo / 100).toLocaleString('en-NG')} each. Same market, same information, different decisions.`, link: `/app/game/matches/${match.id}` }]).catch(() => {});
+  if (opponentId && !quick) {
+    const title = rematchOfId ? `${user.name} wants a rematch` : `${user.name} challenged you to a trading match`;
+    notify([{ userId: opponentId, type: 'challenge', actorId: user.id, title, body: `Stake ₦${(stakeKobo / 100).toLocaleString('en-NG')} each, ${Math.round(duration / 60)} minutes. Same market, same information, different decisions.`, link: `/app/game/matches/${match.id}` }]).catch(() => {});
   }
   return match;
 }
 
-async function assertNotInLiveMatch(userId) {
+export async function assertNotInLiveMatch(userId) {
   const live = await prisma.gamePlayer.findFirst({ where: { userId, match: { status: { in: ['READY', 'LOCKED', 'COUNTDOWN', 'ACTIVE'] } } }, select: { matchId: true } });
   if (live) throw new GameError('Finish the match you’re in first.', 409, 'in_match');
 }
 
-export async function joinMatch(user, matchId) {
+export async function joinMatch(user, matchId, { quick = false } = {}) {
   const s = await loadGameSettings();
   await assertCanPlayForMoney(user.id, s);
   await assertNotInLiveMatch(user.id);
@@ -201,14 +205,15 @@ export async function joinMatch(user, matchId) {
     await move(tx, m, 'WAITING_FOR_OPPONENT', 'READY', { readyBy: new Date(at.getTime() + s.lobbyMinutes * 60e3), invitedUserId: user.id }, user.id);
     return m;
   }, TX);
-  notify([{ userId: result.creatorId, type: 'challenge', actorId: user.id, title: `${user.name} accepted your trading challenge`, body: 'Confirm in the lobby to start the countdown.', link: `/app/game/matches/${result.id}` }]).catch(() => {});
+  notify([{ userId: result.creatorId, type: 'challenge', actorId: user.id, title: quick ? `Opponent found: ${user.name}` : `${user.name} accepted your trading challenge`, body: 'You’re both in the lobby. Tap I’m ready to start the countdown.', link: `/app/game/matches/${result.id}` }]).catch(() => {});
   return result;
 }
 
 // Both players confirm in the lobby; then the countdown starts.
 export async function confirmMatch(user, matchId) {
   const s = await loadGameSettings();
-  return prisma.$transaction(async (tx) => {
+  let started = null;
+  const result = await prisma.$transaction(async (tx) => {
     const m = await lockMatch(tx, matchId);
     if (!m) throw new GameError('We couldn’t find that match.', 404);
     const me = await tx.gamePlayer.findUnique({ where: { matchId_userId: { matchId, userId: user.id } } });
@@ -221,15 +226,20 @@ export async function confirmMatch(user, matchId) {
       const endsAt = new Date(startsAt.getTime() + (m.durationSec * 1000) / m.speed);
       await move(tx, m, 'READY', 'LOCKED', {}, user.id, 'both confirmed');
       await move(tx, m, 'LOCKED', 'COUNTDOWN', { startsAt, endsAt }, user.id);
+      started = (await tx.gamePlayer.findMany({ where: { matchId, userId: { not: user.id } }, select: { userId: true } })).map((p) => p.userId);
     }
     return m;
   }, TX);
+  // The other player may have stepped away from the lobby: tell them it's starting.
+  if (started?.length) notify(started.map((userId) => ({ userId, type: 'challenge', actorId: user.id, title: 'Your trading match is starting', body: `The market opens in ${s.countdownSec} seconds. Both of you are ready.`, link: `/app/game/matches/${matchId}` }))).catch(() => {});
+  return result;
 }
 
 // Before the countdown: the creator can withdraw a challenge, the invited
 // trader can decline it, and either player can leave the lobby. Stakes go back.
 export async function cancelMatch(user, matchId) {
-  return prisma.$transaction(async (tx) => {
+  let tellOthers = [];
+  const result = await prisma.$transaction(async (tx) => {
     const m = await lockMatch(tx, matchId);
     if (!m) throw new GameError('We couldn’t find that match.', 404);
     const involved = m.creatorId === user.id || m.invitedUserId === user.id;
@@ -242,8 +252,15 @@ export async function cancelMatch(user, matchId) {
     if (!['WAITING_FOR_OPPONENT', 'READY'].includes(m.status)) throw new GameError('This match can’t be cancelled any more.', 409);
     await releaseStakes(tx, m, 'stake_release', 'cancelled');
     await move(tx, m, ['WAITING_FOR_OPPONENT', 'READY'], 'CANCELLED', {}, user.id, m.creatorId === user.id ? 'cancelled by the creator' : 'declined');
+    // Whoever else was in (or invited to) it hears why it closed.
+    const others = new Set([m.creatorId, m.invitedUserId, ...(await tx.gamePlayer.findMany({ where: { matchId }, select: { userId: true } })).map((p) => p.userId)]);
+    others.delete(user.id);
+    others.delete(null);
+    tellOthers = [...others].map((userId) => ({ userId, type: 'challenge', actorId: user.id, title: m.creatorId === user.id ? `${user.name} cancelled the trading challenge` : `${user.name} left the trading match`, body: kobo(m.stakeKobo) ? 'Your stake is back in your available balance.' : 'Nothing was staked.', link: '/app/game' }));
     return m;
   }, TX);
+  if (tellOthers.length) notify(tellOthers).catch(() => {});
+  return result;
 }
 
 async function releaseStakes(tx, m, type, why) {
@@ -417,7 +434,22 @@ async function finish(matchId) {
 
   // Progression is separate from money and can't undo a settlement.
   for (const p of settledPlayers) await awardProgress(p).catch((err) => console.error('Progress award failed:', err.message));
+  if (settledPlayers.length > 1) notifyResults(matchId, settledPlayers).catch(() => {});
   return prisma.gameMatch.findUnique({ where: { id: matchId } });
+}
+
+// Result notices for a competition: what happened and what it paid.
+async function notifyResults(matchId, players) {
+  const rows = await prisma.gamePlayer.findMany({ where: { matchId }, select: { userId: true, payoutKobo: true } });
+  const paid = new Map(rows.map((r) => [r.userId, kobo(r.payoutKobo)]));
+  const cash = (k) => `₦${(k / 100).toLocaleString('en-NG', { maximumFractionDigits: 2 })}`;
+  const items = players.map((p) => {
+    const other = players.find((x) => x.userId !== p.userId);
+    const scores = `Your Kotka Score ${p.score?.toFixed(1)}, theirs ${other?.score?.toFixed(1)}.`;
+    const title = { win: `You won ${cash(paid.get(p.userId) ?? 0)}`, loss: 'You lost this trading match', draw: `Draw: ${cash(paid.get(p.userId) ?? 0)} to you`, refund: 'Stakes returned: neither of you traded' }[p.outcome] ?? 'Your trading match has finished';
+    return { userId: p.userId, type: 'challenge', actorId: other?.userId ?? null, title, body: p.outcome === 'refund' ? 'Both stakes went back in full, with no fee.' : `${scores} See what went well and what to work on.`, link: `/app/game/matches/${matchId}` };
+  });
+  await notify(items);
 }
 
 const slimTrade = (t) => ({
@@ -543,7 +575,7 @@ function cleanPayload(type, p = {}) {
 
 // ── Views ──────────────────────────────────────────────────────────────────
 
-const personOf = (u) => (u ? { id: u.id, name: u.name, username: u.username, initials: u.initials, avatarId: u.avatarId } : null);
+export const personOf = (u) => (u ? { id: u.id, name: u.name, username: u.username, initials: u.initials, avatarId: u.avatarId, avatarUrl: avatarUrl(u) } : null);
 
 export function summary(m, people = new Map()) {
   const stake = kobo(m.stakeKobo);
@@ -575,7 +607,7 @@ export function summary(m, people = new Map()) {
     createdAt: m.createdAt,
     scenario: reveal ? { code: m.scenarioCode, name: tpl?.name ?? m.scenario, key: m.scenario } : null,
     pair: publicPair(pairOf(m.symbol)) ?? { symbol: 'KTK', name: 'Kotka market', decimals: 2 },
-    rules: { ...m.rules.trading, drawTolerance: m.rules.drawTolerance, noTradeRefund: m.rules.noTradeRefund, weights: m.rules.weights },
+    rules: { ...m.rules.trading, drawTolerance: m.rules.drawTolerance, noTradeRefund: m.rules.noTradeRefund, weights: m.rules.weights, source: m.rules.source ?? null },
     result: m.result ?? null,
     rematchOfId: m.rematchOfId,
   };
@@ -730,6 +762,8 @@ export async function history(userId, { take = 30, cursor } = {}) {
         maxDrawdownPct: r.maxDrawdownPct,
         payoutKobo: kobo(r.payoutKobo),
         scenario: templateOf(r.match.scenario)?.name,
+        pair: r.match.symbol,
+        durationSec: r.match.durationSec,
         opponent: opp ? { ...personOf(people.get(opp.userId)), score: opp.score, returnPct: opp.returnPct } : null,
       };
     }),

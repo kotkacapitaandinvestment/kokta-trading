@@ -8,8 +8,11 @@
 //   outcome      the return
 //   risk         stops, risk per trade, drawdown, leverage
 //   decision     thesis coherence, confirmation, chasing, drift, planned R:R
-//   execution    exits against plan, giving back profit, being stopped out
-//   consistency  sizing, sizing up after losses, overtrading
+//   execution    exits against plan, giving back profit, being stopped out,
+//                closing winners long before the planned target
+//   consistency  sizing and risk per trade, sizing up after losses,
+//                overtrading, holding losers longer than winners,
+//                switching approach on every trade
 
 import { candlesUpTo, templateOf } from './market.js';
 import { sma, rsi, macd, atr, levels as swingLevels } from './indicators.js';
@@ -126,6 +129,24 @@ function assessTrade(tr, market, ctx, cfg, rules) {
   f.lossVsPlan = perUnit < 0 && tr.stopAtOpen != null ? -perUnit / Math.max(Math.abs(tr.openPrice - tr.stopAtOpen), 1e-9) : null;
   f.exitReason = tr.exitReason;
   f.won = tr.pnl > 0;
+  // Took a small profit by hand, well short of the target planned at entry.
+  // (Whether price went on to reach it is shown, never scored: no hindsight.)
+  const planned = tr.targetAtOpen != null ? Math.abs(tr.targetAtOpen - tr.openPrice) : null;
+  if (tr.exitReason === 'manual' && f.won && planned) {
+    f.progress = perUnit / planned;
+    if (f.progress < 0.5) {
+      f.earlyExit = { tick: tr.closeTick, price: tr.exitPrice, target: tr.targetAtOpen };
+      for (let t = tr.closeTick + 1; t < market.matchTicks; t++) {
+        const px = market.prices[market.historyTicks + t];
+        if (long ? px >= tr.targetAtOpen : px <= tr.targetAtOpen) {
+          f.earlyExit.reachedAt = t;
+          break;
+        }
+      }
+    }
+  }
+  f.duration = (tr.closeTick ?? market.matchTicks - 1) - tr.openTick;
+  f.reasons = reasons;
   return f;
 }
 
@@ -182,6 +203,25 @@ export function scorePlayer({ market, sim, rules, weights = DEFAULT_WEIGHTS, sco
   const overtradeLimit = Math.max(3, Math.round((cfg.overtradesPer15Min * market.matchTicks) / 900));
   const overtrading = trades.length > overtradeLimit;
 
+  // Holding losers far longer than winners (closed trades only).
+  const closed = assess.filter((a, i) => trades[i].closeTick != null && trades[i].exitReason !== 'end');
+  const avgDur = (list) => list.reduce((s, a) => s + a.duration, 0) / list.length;
+  const winners = closed.filter((a) => a.won);
+  const losers = closed.filter((a) => !a.won);
+  const holdRatio = winners.length >= 2 && losers.length >= 2 ? avgDur(losers) / Math.max(avgDur(winners), 1) : null;
+  const heldLosers = holdRatio != null && holdRatio >= 2;
+  // A different reason and a different direction on every trade.
+  let switches = 0;
+  for (let i = 1; i < assess.length; i++) {
+    const shared = assess[i].reasons.some((r) => assess[i - 1].reasons.includes(r));
+    if (!shared && trades[i].side !== trades[i - 1].side) switches += 1;
+  }
+  const switching = assess.length >= 3 && switches >= assess.length - 1;
+  // Risk per trade all over the place.
+  const riskRange = risks.length >= 3 ? { lo: Math.min(...risks), hi: Math.max(...risks) } : null;
+  const unevenRisk = riskRange != null && riskRange.lo > 0 && riskRange.hi / riskRange.lo >= 3;
+  const earlyExits = assess.filter((a) => a.earlyExit);
+
   // ── Category scores ──
   const ret = sim.returnPct;
   const outcome = clamp(50 + 50 * Math.tanh(ret / 6));
@@ -224,6 +264,7 @@ export function scorePlayer({ market, sim, rules, weights = DEFAULT_WEIGHTS, sco
       if (a.exitReason === 'end') s -= 5;
       if (a.exitReason === 'stop_out') s -= 30;
       if (a.drift) s -= 10;
+      if (a.earlyExit) s -= 8;
       return s;
     });
     execution += per.reduce((s, x) => s + x, 0) / per.length;
@@ -240,6 +281,9 @@ export function scorePlayer({ market, sim, rules, weights = DEFAULT_WEIGHTS, sco
     consistency -= Math.min(30, sizeUpAfterLoss * 15);
     consistency -= Math.min(30, revenge * 15);
     if (overtrading) consistency -= 20;
+    if (heldLosers) consistency -= 10;
+    if (switching) consistency -= 10;
+    if (unevenRisk) consistency -= 10;
     if (trades.every((t) => t.stopAtOpen != null)) consistency += 10;
   }
 
@@ -277,6 +321,13 @@ export function scorePlayer({ market, sim, rules, weights = DEFAULT_WEIGHTS, sco
     if (respected.length && respected.length === assess.filter((a) => a.lossVsPlan != null).length) good('respected_stop', 'Your losing trades were closed at or before your planned stop.');
     const gaveBack = assess.filter((a) => a.captured != null && a.captured < 0.3);
     if (gaveBack.length) bad('gave_back', 'A winning trade gave back most of its best profit before you closed it.');
+    for (const a of earlyExits) {
+      const e = a.earlyExit;
+      bad('early_exit', `You closed a winning trade at ${fmt(e.price)} at ${mmss(e.tick)}, less than halfway to the target of ${fmt(e.target)} you set when you entered.${e.reachedAt != null ? ` Price reached that target at ${mmss(e.reachedAt)}.` : ''}`, e.tick);
+    }
+    if (heldLosers) bad('held_losers', `You held losing trades about ${r1(holdRatio)}× longer than winning ones.`);
+    if (switching) bad('strategy_switching', 'You changed both your reason and your direction on every trade, so no single approach had time to work.');
+    if (unevenRisk) bad('inconsistent_risk', `Your risk per trade ranged from ${r1(riskRange.lo)}% to ${r1(riskRange.hi)}% of your capital.`);
     if (sim.stoppedOut) bad('stopped_out', 'Your capital fell to the floor and your position was closed for you.');
     if (sim.maxDrawdownPct <= 2 && ret >= 0) good('capital', `Your capital never fell more than ${r1(sim.maxDrawdownPct)}% from its high.`);
   }
@@ -312,7 +363,7 @@ function buildReport({ market, subscores, findings, metrics, trades }) {
         ? 'Size each trade from the stop: risk a fixed small share of capital (1–2%), so one bad trade can’t decide the match.'
         : 'Keep risk per trade small and fixed; it lets good decisions show over several trades.';
   const behaviour =
-    findings.find((f) => ['size_after_loss', 'quick_reentry', 'add_losing', 'overtrading', 'thesis_drift', 'chasing'].includes(f.key))?.text ??
+    findings.find((f) => ['size_after_loss', 'quick_reentry', 'add_losing', 'overtrading', 'thesis_drift', 'chasing', 'held_losers', 'early_exit', 'strategy_switching', 'inconsistent_risk'].includes(f.key))?.text ??
     (trades.length ? 'No risky pattern stood out in this match.' : 'You stayed out of the market for the whole match.');
   const practice = {
     risk: 'Practise a match using a stop on every trade and no more than 2% risk each time.',

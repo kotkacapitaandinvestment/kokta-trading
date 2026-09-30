@@ -44,6 +44,8 @@ import GameWallet from '../features/game/Wallet';
 import GameMatch from '../features/game/MatchPage';
 import GameHistory from '../features/game/History';
 import GameProfile from '../features/game/Profile';
+import GameLearn from '../features/game/Learn';
+import GameLeaderboard from '../features/game/Leaderboard';
 import CommunityLayout from '../features/community/CommunityLayout';
 import ForYou from '../features/community/pages/ForYou';
 import Markets from '../features/community/pages/Markets';
@@ -99,6 +101,8 @@ export default function AppRoutes() {
         <Route path="game/history" element={<GameHistory />} />
         <Route path="game/profile" element={<GameProfile />} />
         <Route path="game/traders/:username" element={<GameProfile />} />
+        <Route path="game/learn" element={<GameLearn />} />
+        <Route path="game/leaderboard" element={<GameLeaderboard />} />
         <Route path="settings" element={<Settings />} />
         <Route path="notifications" element={<Notifications />} />
         <Route path="community" element={<CommunityLayout />}>

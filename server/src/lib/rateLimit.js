@@ -27,6 +27,8 @@ export const LIMITS = {
   passwordChange: [5, 3600e3],
   accountDelete: [5, 3600e3],
   userDelete: [30, 3600e3], // a Super Admin permanently deleting accounts
+  quickMatch: [120, 3600e3], // starting a Quick Match search
+  gameReady: [120, 3600e3], // turning Ready to Trade on or off
   mfa: [6, 15 * 60e3],
   mfaSetup: [10, 3600e3],
   kyc: [10, 3600e3],

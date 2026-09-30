@@ -10,6 +10,8 @@ export const BADGES = {
   trend_hunter: { name: 'Trend Hunter', how: 'Finish up in 3 trending markets.' },
   breakout_specialist: { name: 'Breakout Specialist', how: 'A decision score of 80 or more, and a profit, in a breakout or false breakout.' },
   volatility_navigator: { name: 'Volatility Navigator', how: 'A score of 75 or more in a high-volatility or shock market.' },
+  consistency_king: { name: 'Consistency King', how: 'A consistency score of 85 or more in 5 matches where you traded.' },
+  patient_entry: { name: 'Patient Entry', how: 'In 3 matches, every entry was backed by the reasons you gave, with no chasing.' },
 };
 
 const TRENDING = ['bull_trend', 'bear_trend', 'trend_continuation', 'momentum_expansion'];
@@ -37,6 +39,10 @@ export async function awardProgress({ userId, matchId, score, subscores, metrics
   if (count((r) => TRENDING.includes(r.match.scenario) && (r.returnPct ?? 0) > 0) >= 3) earned.push('trend_hunter');
   if (count((r) => ['breakout', 'false_breakout'].includes(r.match.scenario) && r.subscores?.decision >= 80 && (r.returnPct ?? 0) > 0) >= 1) earned.push('breakout_specialist');
   if (count((r) => ['high_volatility', 'volatility_shock'].includes(r.match.scenario) && r.score >= 75) >= 1) earned.push('volatility_navigator');
+  const traded = (r) => r.report?.metrics?.trades > 0;
+  const has = (r, key) => (r.report?.findings ?? []).some((f) => f.key === key);
+  if (count((r) => traded(r) && r.subscores?.consistency >= 85) >= 5) earned.push('consistency_king');
+  if (count((r) => traded(r) && has(r, 'confirmed') && !has(r, 'chasing') && !has(r, 'unconfirmed')) >= 3) earned.push('patient_entry');
   for (const badge of earned) await prisma.gameBadge.upsert({ where: { userId_badge: { userId, badge } }, update: {}, create: { userId, badge, matchId } });
   return { xp, badges: earned };
 }

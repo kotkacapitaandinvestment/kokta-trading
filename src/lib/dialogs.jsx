@@ -88,7 +88,7 @@ function Dialog({ d }) {
           ) : null}
           <div className="min-w-0 flex-1">
             <h2 id={`dlg-${d.id}-t`} className="text-base font-semibold text-ink-900 dark:text-ink-50">{d.title}</h2>
-            {d.message ? <p id={`dlg-${d.id}-m`} className="mt-1 text-sm leading-relaxed text-ink-500 dark:text-ink-400">{d.message}</p> : null}
+            {d.message ? <p id={`dlg-${d.id}-m`} className="mt-1 whitespace-pre-line text-sm leading-relaxed text-ink-500 dark:text-ink-400">{d.message}</p> : null}
           </div>
         </div>
         {d.kind === 'prompt' ? (

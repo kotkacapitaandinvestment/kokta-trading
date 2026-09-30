@@ -6,9 +6,10 @@ import { limit } from '../lib/rateLimit.js';
 import { auditLater } from '../lib/audit.js';
 import { loadGameSettings, publicGameRules } from '../lib/game/config.js';
 import { walletFor, walletView, entryView, stakedToday } from '../lib/game/wallet.js';
-import { createMatch, joinMatch, confirmMatch, cancelMatch, act, matchView, chartCandles, lobby, history, rematch, GameError } from '../lib/game/matches.js';
+import { createMatch, joinMatch, confirmMatch, cancelMatch, act, matchView, chartCandles, lobby, history, rematch, personOf, GameError } from '../lib/game/matches.js';
 import { PAIRS, publicPair } from '../lib/game/pairs.js';
 import { profileFor } from '../lib/game/progression.js';
+import * as arena from '../lib/game/arena.js';
 import { TEMPLATES } from '../lib/game/market.js';
 import * as pay from '../lib/game/payments/index.js';
 
@@ -22,8 +23,25 @@ const int = (v) => (Number.isInteger(v) ? v : Number.isInteger(Number(v)) && Str
 
 gameRouter.get('/home', asyncHandler(async (req, res) => {
   const user = await me(req);
-  const [s, wallet, lists, profile, p, kyc, today] = await Promise.all([loadGameSettings(), walletFor(user.id), lobby(user), profileFor(user.id), pay.providers(), prisma.kycProfile.findUnique({ where: { userId: user.id }, select: { status: true } }), stakedToday(user.id)]);
+  arena.touch(user.id);
+  const [s, wallet, lists, profile, p, kyc, today, stats, ready, board, recent, featured, presence, queue] = await Promise.all([
+    loadGameSettings(),
+    walletFor(user.id),
+    lobby(user),
+    profileFor(user.id),
+    pay.providers(),
+    prisma.kycProfile.findUnique({ where: { userId: user.id }, select: { status: true } }),
+    stakedToday(user.id),
+    arena.arenaStats(),
+    arena.readyTraders(user),
+    arena.openBoard(user),
+    arena.recentResults(6),
+    arena.leaderboard('week'),
+    arena.presenceOf(user.id),
+    arena.queueStatus(user),
+  ]);
   res.json({
+    arena: { stats, readyTraders: ready, board, recentResults: recent, featured: featured.slice(0, 3), me: { ready: presence.ready, queue } },
     rules: publicGameRules(s),
     wallet: walletView(wallet),
     stakedTodayKobo: today,
@@ -40,6 +58,7 @@ gameRouter.get('/home', asyncHandler(async (req, res) => {
 
 gameRouter.get('/wallet', asyncHandler(async (req, res) => {
   const user = await me(req);
+  arena.touch(user.id);
   const [wallet, entries, deposits, withdrawals, payout, s] = await Promise.all([
     walletFor(user.id),
     prisma.walletEntry.findMany({ where: { userId: user.id }, orderBy: { createdAt: 'desc' }, take: 100 }),
@@ -183,6 +202,7 @@ gameRouter.post('/matches/:id/rematch', limit('gameCreate'), asyncHandler(async 
 }));
 
 gameRouter.get('/history', asyncHandler(async (req, res) => {
+  arena.touch(req.userId);
   res.json(await history(req.userId, { cursor: typeof req.query.cursor === 'string' ? req.query.cursor : undefined }));
 }));
 
@@ -194,8 +214,45 @@ gameRouter.get('/profile', asyncHandler(async (req, res) => {
 gameRouter.get('/traders/:username', asyncHandler(async (req, res) => {
   const u = await prisma.user.findUnique({ where: { username: String(req.params.username) }, select: { id: true, name: true, username: true, initials: true, avatarId: true, status: true } });
   if (!u || u.status !== 'active') throw new GameError('We couldn’t find that trader.', 404);
-  const { totalStakedKobo, totalWonKobo, ...p } = await profileFor(u.id); // eslint-disable-line no-unused-vars
-  res.json({ trader: { id: u.id, name: u.name, username: u.username, initials: u.initials, avatarId: u.avatarId }, profile: p });
+  const [{ totalStakedKobo, totalWonKobo, ...p }, recent, dna, presence] = await Promise.all([profileFor(u.id), arena.publicMatches(u.id), arena.traderDna(u.id), arena.presenceOf(u.id)]); // eslint-disable-line no-unused-vars
+  res.json({ trader: { ...personOf(u), ...presence, self: u.id === req.userId }, profile: p, recent, dna });
+}));
+
+// ── Trading Arena ───────────────────────────────────────────────────────────
+
+// Ready to Trade: others in the Arena can see you and challenge you.
+gameRouter.post('/ready', limit('gameReady'), asyncHandler(async (req, res) => {
+  res.json(await arena.setReady(await me(req), req.body?.on === true));
+}));
+
+// Quick Match: find an opponent on the same stake and length.
+gameRouter.post('/quick', limit('quickMatch'), asyncHandler(async (req, res) => {
+  const user = await me(req);
+  const r = await arena.quickMatch(user, { stakeKobo: int(req.body?.stakeKobo), durationSec: int(req.body?.durationSec) });
+  if (r.status === 'matched') auditLater(req, 'game.quick_matched', { targetType: 'match', targetId: r.matchId });
+  res.json(r);
+}));
+gameRouter.get('/quick', asyncHandler(async (req, res) => {
+  const user = await me(req);
+  arena.touch(user.id);
+  res.json(await arena.queueStatus(user));
+}));
+gameRouter.delete('/quick', asyncHandler(async (req, res) => {
+  res.json(await arena.leaveQueue(await me(req)));
+}));
+
+gameRouter.get('/leaderboard', asyncHandler(async (req, res) => {
+  arena.touch(req.userId);
+  const period = ['week', 'month', 'all'].includes(req.query.period) ? req.query.period : 'week';
+  const rows = await arena.leaderboard(period);
+  res.json({ period, minMatches: arena.LEADERBOARD_MIN, rows, you: rows.find((r) => r.person.id === req.userId) ?? null });
+}));
+
+// Learn: what each kind of market teaches, and what your own matches show.
+gameRouter.get('/learn', asyncHandler(async (req, res) => {
+  arena.touch(req.userId);
+  const [s, insights, dna] = await Promise.all([loadGameSettings(), arena.insightsFor(req.userId), arena.traderDna(req.userId)]);
+  res.json({ lessons: arena.lessons().filter((l) => s.scenarios.includes(l.key)), insights, dna, weights: s.weights });
 }));
 
 // ── Webhooks (no session: signed by the provider) ───────────────────────────

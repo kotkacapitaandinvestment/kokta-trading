@@ -20,6 +20,7 @@ const TABS = [
   { value: 'matches', label: 'Matches' },
   { value: 'deposits', label: 'Deposits' },
   { value: 'ledger', label: 'Ledger' },
+  { value: 'risk', label: 'Risk & compliance' },
   { value: 'settings', label: 'Settings' },
 ];
 const when = (d) => (d ? new Date(d).toLocaleString([], { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—');
@@ -279,6 +280,52 @@ function Ledger({ canEdit }) {
   );
 }
 
+// Patterns worth a human look. Nothing here blocks anyone by itself.
+function Risk() {
+  const [days, setDays] = useState(14);
+  const { data, error } = useData(`/admin/game/risk?days=${days}`);
+  if (error) return <LoadError message={error} />;
+  const who = (p) => (p ? <span className="font-medium text-ink-800 dark:text-ink-100">{p.name}{p.username ? <span className="font-normal text-ink-400"> @{p.username}</span> : null}</span> : '—');
+  const section = (title, subtitle, rows, render, empty) => (
+    <Card>
+      <CardHeader title={title} subtitle={subtitle} />
+      <CardBody>
+        {!data ? <div className="h-16 animate-pulse rounded-lg bg-ink-50 dark:bg-ink-800" /> : rows.length ? <ul className="divide-y divide-ink-100 text-sm dark:divide-ink-800">{rows.map(render)}</ul> : <EmptyState size="inline" title={empty} />}
+      </CardBody>
+    </Card>
+  );
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="max-w-2xl text-sm text-ink-500 dark:text-ink-400">Signals from settled competitions and the money ledger. They are reasons to look closer, not proof of wrongdoing; open the players’ matches and ledger before acting.</p>
+        <div className="w-40">
+          <Select label="Period" value={days} onChange={(e) => setDays(Number(e.target.value))}>
+            {[7, 14, 30].map((d) => <option key={d} value={d}>Last {d} days</option>)}
+          </Select>
+        </div>
+      </div>
+      {section('The same two traders, again and again', 'Three or more competitions between the same pair. Worth a look when one side always wins.', data?.repeatedPairs ?? [], (r, i) => (
+        <li key={i} className="flex flex-wrap items-center justify-between gap-2 py-2.5">
+          <span>{who(r.players[0])} <span className="text-ink-400">({r.players[0].wins} won)</span> and {who(r.players[1])} <span className="text-ink-400">({r.players[1].wins} won)</span></span>
+          <span className="text-xs tabular-nums text-ink-500">{r.matches} competitions · {naira(r.stakedKobo)} staked · last {when(r.last)}</span>
+        </li>
+      ), 'No pair has played three times in this period.')}
+      {section('Lost without trading', 'One player lost without opening a single position while the other won, at least twice between the same two. This is how money can be passed between accounts.', data?.oneSidedLosses ?? [], (r, i) => (
+        <li key={i} className="flex flex-wrap items-center justify-between gap-2 py-2.5">
+          <span>{who(r.loser)} <span className="text-ink-400">lost to</span> {who(r.winner)}</span>
+          <span className="text-xs tabular-nums text-ink-500">{r.matches} times · {naira(r.passedKobo)} in stakes · last {when(r.last)}</span>
+        </li>
+      ), 'No repeated one-sided losses in this period.')}
+      {section('Money in and straight out', 'A withdrawal within 24 hours of a deposit, with one competition or none in between.', data?.quickCashOuts ?? [], (r) => (
+        <li key={r.withdrawalId} className="flex flex-wrap items-center justify-between gap-2 py-2.5">
+          <span>{who(r.person)} <span className="text-ink-400">deposited {naira(r.depositedKobo)}, asked to withdraw {naira(r.withdrawnKobo)}</span></span>
+          <span className="text-xs tabular-nums text-ink-500">{r.hours} h later · {r.matchesBetween} competition{r.matchesBetween === 1 ? '' : 's'} between · {r.status}</span>
+        </li>
+      ), 'No fast cash-outs in this period.')}
+    </div>
+  );
+}
+
 function Settings() {
   const { data, error, load } = useData('/admin/game/settings');
   const [draft, setDraft] = useState(null);
@@ -432,6 +479,7 @@ export default function AdminGame() {
       {tab === 'matches' ? <Matches /> : null}
       {tab === 'deposits' ? <Deposits /> : null}
       {tab === 'ledger' ? <Ledger canEdit={canEdit} /> : null}
+      {tab === 'risk' ? <Risk /> : null}
       {tab === 'settings' ? <Settings /> : null}
     </div>
   );

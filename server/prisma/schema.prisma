@@ -97,6 +97,7 @@ model User {
   gamePlayers       GamePlayer[]
   gameProfile       GameProfile?
   gameBadges        GameBadge[]
+  gameQueue         GameQueue?
   GameChartLayout   GameChartLayout[]
 
   @@index([name(ops: raw("gin_trgm_ops"))], type: Gin, map: "User_name_trgm")
@@ -1351,11 +1352,34 @@ model GameMatchTransition {
 
 // Progression is separate from money: XP and levels measure play and learning.
 model GameProfile {
-  userId    String   @id
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  xp        Int      @default(0)
-  level     Int      @default(1)
-  updatedAt DateTime @updatedAt
+  userId       String    @id
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  xp           Int       @default(0)
+  level        Int       @default(1)
+  // Trading Arena presence: last seen on a game page, and "Ready to Trade"
+  // (open to being challenged). Ready only counts while they're around.
+  lastSeenAt   DateTime?
+  readyToTrade Boolean   @default(false)
+  readyAt      DateTime?
+  updatedAt    DateTime  @updatedAt
+
+  @@index([lastSeenAt])
+}
+
+// Quick Match: a trader waiting to be paired with anyone on the same terms
+// (stake and length). No money is held while waiting; both stakes lock when
+// a pair is made. matchId is set when paired, so the waiting screen can move on.
+model GameQueue {
+  id          String   @id @default(cuid())
+  userId      String   @unique
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  stakeKobo   BigInt
+  durationSec Int
+  matchId     String?
+  createdAt   DateTime @default(now())
+  expiresAt   DateTime
+
+  @@index([stakeKobo, durationSec, createdAt])
 }
 
 model GameBadge {
