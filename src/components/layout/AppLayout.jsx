@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useRef, useState } from 'react';
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { Clock3, MailWarning, WifiOff } from 'lucide-react';
 import { api } from '../../lib/api';
@@ -11,6 +11,8 @@ import { traderNav, traderNavSecondary } from './navConfig';
 import { useAuth } from '../../context/AuthContext';
 import { useAppConfig } from '../../context/AppConfigContext';
 import CommunityShell from '../../features/community/CommunityShell';
+import { resyncPush } from '../../lib/pwa';
+import { PageLoading } from '../../lib/lazyPage';
 
 const titleFromPath = (pathname) => {
   const match = [...traderNav, ...traderNavSecondary].find((i) => pathname.startsWith(i.to));
@@ -86,6 +88,23 @@ export default function AppLayout() {
 
   useEffect(() => setMenuOpen(false), [location.pathname]);
 
+  // Full-height screens (Kotka AI, Messages, market rooms) size themselves to
+  // the window; --banners tells them how much room the notices above take.
+  const banners = useRef(null);
+  useEffect(() => {
+    const el = banners.current;
+    if (!el || typeof ResizeObserver === 'undefined') return undefined;
+    const set = () => document.documentElement.style.setProperty('--banners', `${el.offsetHeight}px`);
+    const ro = new ResizeObserver(set);
+    ro.observe(el);
+    set();
+    return () => { ro.disconnect(); document.documentElement.style.removeProperty('--banners'); };
+  }, []);
+  // Keep this browser's push subscription tied to the current session.
+  useEffect(() => {
+    if (user?.id) resyncPush();
+  }, [user?.id]);
+
   // A tapped push notification asks the open window to go to its link.
   useEffect(() => {
     if (!('serviceWorker' in navigator)) return undefined;
@@ -113,12 +132,14 @@ export default function AppLayout() {
       <div className="flex min-w-0 flex-1 flex-col">
         <Topbar title={titleFromPath(location.pathname)} />
         <MobileNav items={traderNav} secondaryItems={traderNavSecondary} open={menuOpen} onOpenChange={setMenuOpen} />
-        <ConnectionBanner />
-        <VerificationBanner user={user} config={config} />
-        <EmailBanner user={user} />
+        <div ref={banners} className="shrink-0">
+          <ConnectionBanner />
+          <VerificationBanner user={user} config={config} />
+          <EmailBanner user={user} />
+        </div>
         <main className="flex-1 overflow-y-auto scrollbar-thin px-4 py-5 sm:py-6 lg:px-8 lg:py-8">
           <div className="mx-auto max-w-7xl animate-fade-in">
-            <Outlet />
+            <Suspense fallback={<PageLoading />}><Outlet /></Suspense>
           </div>
         </main>
         <BottomNav onMore={() => setMenuOpen((o) => !o)} moreOpen={menuOpen} />

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import Input, { Select } from '../../components/ui/Input';
 import Button from '../../components/ui/Button';
+import { localDay } from '../../lib/day';
 
 const emotions = ['Calm', 'Confident', 'Anxious', 'Frustrated', 'Fearful', 'Greedy', 'Satisfied'];
 const sessions = ['Tokyo', 'London', 'New York', 'Sydney'];
@@ -8,7 +9,6 @@ const markets = ['EUR/USD', 'GBP/USD', 'GBP/JPY', 'XAU/USD', 'US30', 'NAS100', '
 
 const blank = {
   positionStatus: 'closed',
-  date: new Date().toISOString().slice(0, 10),
   market: 'EUR/USD',
   session: 'London',
   strategy: '',
@@ -28,7 +28,7 @@ const blank = {
 };
 
 export default function JournalEntryForm({ onSubmit, onCancel }) {
-  const [form, setForm] = useState(blank);
+  const [form, setForm] = useState(() => ({ ...blank, date: localDay() }));
   const [state, setState] = useState(null);
   const isOpen = form.positionStatus === 'open';
 

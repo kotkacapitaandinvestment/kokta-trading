@@ -30,8 +30,19 @@ const URGENT = new Set(['message', 'group', 'mention', 'moderation']);
 
 // items: [{ userId, type, actorId?, title, body?, link?, data?, groupKey? }]
 export async function notify(items) {
-  const list = items.filter((n) => n && n.userId && n.userId !== n.actorId);
+  let list = items.filter((n) => n && n.userId && n.userId !== n.actorId);
   if (!list.length) return;
+  // Nothing from someone you've blocked, or who has blocked you.
+  const actors = [...new Set(list.map((n) => n.actorId).filter(Boolean))];
+  if (actors.length) {
+    const recipients = [...new Set(list.map((n) => n.userId))];
+    const blocks = await prisma.userRelation.findMany({ where: { kind: 'block', OR: [{ userId: { in: recipients }, targetId: { in: actors } }, { userId: { in: actors }, targetId: { in: recipients } }] }, select: { userId: true, targetId: true } });
+    if (blocks.length) {
+      const pair = new Set(blocks.flatMap((b) => [`${b.userId}:${b.targetId}`, `${b.targetId}:${b.userId}`]));
+      list = list.filter((n) => !n.actorId || !pair.has(`${n.userId}:${n.actorId}`));
+      if (!list.length) return;
+    }
+  }
   const prefOf = await prefsFor([...new Set(list.map((n) => n.userId))]);
   const events = [];
   const pushes = [];

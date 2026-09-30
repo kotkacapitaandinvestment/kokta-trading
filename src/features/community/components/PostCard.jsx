@@ -88,6 +88,12 @@ export default function PostCard({ post: initial, reason, full = false, onChange
   }
 
   const link = `/app/community/${post.kind === 'idea' ? 'ideas' : 'posts'}/${post.id}`;
+  // Tapping the text of a post in a list opens it, as on other social apps.
+  // Links, mentions and selecting text keep working as normal.
+  const openPost = (e) => {
+    if (full || e.target.closest('a, button') || window.getSelection()?.toString()) return;
+    navigate(link);
+  };
   const mine = post.reactions.find((r) => r.mine);
   const react = async (emoji) => {
     setShowPicker(false);
@@ -169,7 +175,7 @@ export default function PostCard({ post: initial, reason, full = false, onChange
               <div className="flex gap-2"><Button size="sm" onClick={saveEdit}>Save</Button><Button size="sm" variant="ghost" onClick={() => setEditing(null)}>Cancel</Button></div>
             </div>
           ) : body ? (
-            <div className={clsx('mt-2 text-[15px] leading-relaxed text-ink-800 dark:text-ink-100', !expanded && long && 'line-clamp-6')}>
+            <div onClick={openPost} className={clsx('mt-2 text-[15px] leading-relaxed text-ink-800 dark:text-ink-100', !expanded && long && 'line-clamp-6', !full && 'cursor-pointer')}>
               {post.kind === 'idea' ? <p className="mb-1 text-[11px] font-semibold text-ink-500 dark:text-ink-400">Reasoning</p> : null}
               <RichText text={body} />
             </div>

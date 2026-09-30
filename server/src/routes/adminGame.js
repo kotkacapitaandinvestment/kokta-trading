@@ -173,6 +173,19 @@ adminGameRouter.get('/ledger', asyncHandler(async (req, res) => {
   res.json({ entries: rows.map((e) => ({ ...entryView(e), userName: people.get(e.userId)?.name ?? (e.walletId === HOUSE_WALLET ? 'Kotka (fees)' : null), idempotencyKey: e.idempotencyKey, createdBy: e.createdBy })) });
 }));
 
+// Put a wallet on hold (no stakes, no withdrawals) or clear the hold. A
+// refund or chargeback on a deposit sets it automatically.
+adminGameRouter.post('/wallets/:userId/hold', superOnly, asyncHandler(async (req, res) => {
+  const on = req.body?.on === true;
+  const reason = String(req.body?.reason ?? '').trim().slice(0, 300);
+  if (on && reason.length < 5) return res.status(400).json({ error: 'Say why the wallet is on hold; the person may ask.' });
+  const w = await prisma.wallet.findUnique({ where: { userId: req.params.userId } });
+  if (!w) throw new GameError('That person has no wallet yet.', 404);
+  await prisma.wallet.update({ where: { id: w.id }, data: on ? { frozenAt: new Date(), frozenReason: reason } : { frozenAt: null, frozenReason: null } });
+  await audit(req, on ? 'game.wallet_held' : 'game.wallet_released', { targetType: 'user', targetId: req.params.userId, detail: { reason: reason || null, previous: w.frozenReason ?? null } });
+  res.json({ ok: true, onHold: on });
+}));
+
 // A correction to a person's available balance, with a reason. Positive adds, negative removes.
 adminGameRouter.post('/adjustments', superOnly, asyncHandler(async (req, res) => {
   const amount = Number(req.body?.amountKobo);

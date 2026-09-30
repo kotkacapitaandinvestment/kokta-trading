@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import clsx from 'clsx';
+import { PageLoading } from '../../lib/lazyPage';
 import { Bookmark, BookOpen, Flame, Globe2, Lightbulb, CalendarDays, MessagesSquare, Radio, Search, Sparkles, Trophy, Users } from 'lucide-react';
 import { api } from '../../lib/api';
 import { useCommunity } from './CommunityContext';
@@ -115,9 +116,9 @@ export default function CommunityLayout() {
           <span className={clsx('h-2 w-2 rounded-full', status === 'open' ? 'bg-profit-500' : 'bg-amber-500')} title={status === 'open' ? 'Live updates connected' : 'Reconnecting live updates'} aria-label={status === 'open' ? 'Live updates connected' : 'Reconnecting live updates'} />
         </div>
       </div>
-      {fullBleed ? <Outlet /> : (
+      {fullBleed ? <Suspense fallback={<PageLoading />}><Outlet /></Suspense> : (
         <div className="flex gap-6">
-          <div className="min-w-0 flex-1"><Outlet /></div>
+          <div className="min-w-0 flex-1"><Suspense fallback={<PageLoading />}><Outlet /></Suspense></div>
           <Rail />
         </div>
       )}

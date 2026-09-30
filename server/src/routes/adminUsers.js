@@ -6,6 +6,8 @@ import { audit } from '../lib/audit.js';
 import { revokeUserSessions } from '../lib/sessions.js';
 import { limit } from '../lib/rateLimit.js';
 import { unsubscribe } from '../lib/email/inbox.js';
+import { closeOpenFor } from '../lib/game/matches.js';
+import { handOverOwnership } from '../lib/community/access.js';
 
 export const adminUsersRouter = Router();
 
@@ -61,8 +63,13 @@ adminUsersRouter.patch('/:id', asyncHandler(async (req, res) => {
       ...(typeof plan === 'string' && plan.trim() ? { plan: plan.trim().slice(0, 40) } : {}),
     },
   });
-  // Suspended or banned: every signed-in browser is signed out now.
-  if (status && status !== 'active' && status !== target.status) await revokeUserSessions(user.id);
+  // Suspended or banned: every signed-in browser is signed out now, their push
+  // devices stop receiving, and their open challenges and lobbies close.
+  if (status && status !== 'active' && status !== target.status) {
+    await revokeUserSessions(user.id);
+    await prisma.pushSubscription.deleteMany({ where: { userId: user.id } });
+    await closeOpenFor(user.id, status === 'banned' ? 'account banned' : 'account suspended').catch((err) => console.error('Closing open matches failed:', err.message));
+  }
   forgetUserAccess(user.id);
   const changed = {};
   if (status && status !== target.status) changed.status = { from: target.status, to: status };
@@ -98,6 +105,7 @@ adminUsersRouter.delete('/:id', limit('userDelete'), asyncHandler(async (req, re
   await audit(req, 'user.deleted', { targetType: 'user', targetId: target.id, detail: { email: target.email, name: target.name, role: target.role, status: target.status, verification: target.kyc?.status ?? 'none', joined: target.createdAt.toISOString().slice(0, 10) } });
   await revokeUserSessions(target.id);
   await prisma.follow.deleteMany({ where: { targetType: 'user', targetId: target.id } });
+  await handOverOwnership(target.id);
   if (target.newsletterContactId) await unsubscribe(target.newsletterContactId).catch(() => {});
   await prisma.user.delete({ where: { id: target.id } });
   forgetUserAccess(target.id);

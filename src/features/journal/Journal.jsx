@@ -101,7 +101,7 @@ export default function Journal() {
         description="Every trade, every emotion and every lesson, in one disciplined record."
         actions={
           <Button icon={Plus} onClick={() => setShowForm(true)}>
-            New entry
+            Log a trade
           </Button>
         }
       />

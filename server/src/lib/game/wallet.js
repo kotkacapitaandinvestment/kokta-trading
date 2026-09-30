@@ -78,7 +78,7 @@ export function walletView(w) {
   const available = kobo(w?.availableKobo);
   const locked = kobo(w?.lockedKobo);
   const pending = kobo(w?.pendingWithdrawKobo);
-  return { availableKobo: available, lockedKobo: locked, pendingWithdrawKobo: pending, totalKobo: available + locked + pending, promoAvailableKobo: kobo(w?.promoAvailableKobo) };
+  return { availableKobo: available, lockedKobo: locked, pendingWithdrawKobo: pending, totalKobo: available + locked + pending, promoAvailableKobo: kobo(w?.promoAvailableKobo), onHold: !!w?.frozenAt, holdReason: w?.frozenAt ? w.frozenReason ?? null : null };
 }
 
 const TYPE_LABEL = {
@@ -119,9 +119,9 @@ export function entryView(e) {
 }
 
 // Stakes locked today (UTC), for the daily stake limit.
-export async function stakedToday(userId) {
+export async function stakedToday(userId, db = prisma) {
   const d = new Date();
   const since = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
-  const agg = await prisma.walletEntry.aggregate({ where: { userId, type: 'stake_lock', createdAt: { gte: since } }, _sum: { amountKobo: true } });
+  const agg = await db.walletEntry.aggregate({ where: { userId, type: 'stake_lock', createdAt: { gte: since } }, _sum: { amountKobo: true } });
   return kobo(agg._sum.amountKobo);
 }

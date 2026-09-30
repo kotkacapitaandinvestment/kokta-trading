@@ -285,7 +285,7 @@ export default function MarketRoom() {
       </nav>
       {tab === 'overview' ? <Overview room={room} setRoom={setRoom} /> : null}
       {tab === 'discussion' ? (
-        <div className="flex h-[calc(100dvh_-_23rem_-_var(--bottom-nav))] min-h-[20rem] overflow-hidden sm:h-[calc(100dvh_-_19rem_-_var(--bottom-nav))] sm:min-h-[28rem] rounded-2xl border border-ink-100 bg-white dark:border-ink-800 dark:bg-ink-900">
+        <div className="flex h-[calc(100dvh_-_23rem_-_var(--bottom-nav)_-_var(--banners,0px))] min-h-[20rem] overflow-hidden sm:h-[calc(100dvh_-_19rem_-_var(--bottom-nav)_-_var(--banners,0px))] sm:min-h-[28rem] rounded-2xl border border-ink-100 bg-white dark:border-ink-800 dark:bg-ink-900">
           <ConversationChat conversationId={room.room.id} variant="room" isPublic focusId={params.get('m')} emptyText={`No messages yet in ${room.instrument.display}. Start the conversation.`} />
         </div>
       ) : null}

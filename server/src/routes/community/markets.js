@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { limit } from '../../lib/rateLimit.js';
 import { prisma } from '../../lib/prisma.js';
 import { asyncHandler } from '../../lib/asyncHandler.js';
 import { publish } from '../../lib/realtime.js';
@@ -82,7 +83,7 @@ marketsRouter.get('/markets/:symbol', asyncHandler(async (req, res) => {
   });
 }));
 
-marketsRouter.post('/markets/:symbol/sentiment', requireProfile, asyncHandler(async (req, res) => {
+marketsRouter.post('/markets/:symbol/sentiment', requireProfile, limit('sentimentVote'), asyncHandler(async (req, res) => {
   const inst = instrument(req.params.symbol);
   if (!inst) return res.status(404).json({ error: 'We couldn’t find that market.' });
   const stance = req.body?.stance;

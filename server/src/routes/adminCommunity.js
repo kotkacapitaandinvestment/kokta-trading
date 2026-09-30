@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { dropAttachedMedia } from '../lib/media.js';
 import { prisma } from '../lib/prisma.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 import { requireAuth, requireRole, forgetUserAccess } from '../middleware/auth.js';
@@ -133,6 +134,7 @@ async function contentOwner(type, id) {
 async function removeContent(req, type, id) {
   if (type === 'post') {
     const p = await prisma.post.update({ where: { id }, data: { removedAt: new Date(), removedById: req.user.id } });
+    await dropAttachedMedia(p.authorId, p.attachments);
     return p.authorId;
   }
   if (type === 'comment') {
@@ -141,6 +143,7 @@ async function removeContent(req, type, id) {
   }
   if (type === 'message') {
     const m = await prisma.message.update({ where: { id }, data: { removedById: req.user.id, pinnedAt: null }, include: { conversation: true } });
+    await dropAttachedMedia(m.authorId, m.attachments);
     await publish((await conversationChannels(m.conversation)).map((channel) => ({ channel, type: 'message_removed', payload: { conversationId: m.conversationId, messageId: m.id } })));
     return m.authorId;
   }
@@ -172,10 +175,23 @@ adminCommunityRouter.post('/actions', asyncHandler(async (req, res) => {
   const targetId = String(req.body?.targetId ?? report?.targetId ?? '');
   let targetUserId = req.body?.userId ? String(req.body.userId) : report?.targetUserId ?? null;
 
-  // Moderators can't pause, remove or restore content of fellow staff.
-  if (['remove', 'restore', 'mute', 'unmute'].includes(action)) {
-    const owner = targetUserId ?? (await contentOwner(targetType, targetId));
+  // Moderators can't pause, remove or restore content of fellow staff. For
+  // content, the rank check is against its real author, never an id sent in
+  // the request.
+  if (['remove', 'restore'].includes(action)) {
+    const owner = await contentOwner(targetType, targetId);
+    if (!owner && targetType !== 'conversation') return res.status(404).json({ error: 'We couldn’t find that item.' });
     if (!(await outranks(req.user, owner))) return res.status(403).json({ error: 'You can’t moderate an account with the same or a higher role.' });
+    targetUserId = owner ?? targetUserId;
+    // Only public spaces can be archived by moderators; private chats can't.
+    if (targetType === 'conversation') {
+      const conv = await prisma.conversation.findUnique({ where: { id: targetId }, select: { kind: true } });
+      if (!conv) return res.status(404).json({ error: 'We couldn’t find that item.' });
+      if (!['room', 'community', 'event'].includes(conv.kind) && !isAdmin(req.user)) return res.status(403).json({ error: 'Private chats can’t be archived by moderators. Remove the messages that break the rules instead.' });
+    }
+  }
+  if (['mute', 'unmute'].includes(action)) {
+    if (!(await outranks(req.user, targetUserId))) return res.status(403).json({ error: 'You can’t moderate an account with the same or a higher role.' });
   }
 
   switch (action) {
@@ -250,6 +266,9 @@ adminCommunityRouter.post('/rooms', asyncHandler(async (req, res) => {
 }));
 
 adminCommunityRouter.patch('/rooms/:id', asyncHandler(async (req, res) => {
+  if (!isAdmin(req.user)) return res.status(403).json({ error: 'Only admins can change communities.' });
+  const existing = await prisma.conversation.findUnique({ where: { id: req.params.id }, select: { kind: true } });
+  if (!existing || !['room', 'community', 'event'].includes(existing.kind)) return res.status(404).json({ error: 'That community doesn’t exist.' });
   const data = {};
   if (typeof req.body?.featured === 'boolean') data.featured = req.body.featured;
   if (typeof req.body?.archived === 'boolean') data.archivedAt = req.body.archived ? new Date() : null;

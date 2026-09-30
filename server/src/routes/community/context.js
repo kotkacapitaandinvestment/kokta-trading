@@ -1,6 +1,7 @@
 // Request context for Community routes: the signed-in user's community
 // identity, loaded once per request.
 import { prisma } from '../../lib/prisma.js';
+import { mutedMessage } from '../../lib/community/access.js';
 
 export const ME_SELECT = { id: true, name: true, email: true, username: true, headline: true, bio: true, avatarId: true, initials: true, role: true, status: true, communityMutedUntil: true, lastSeenAt: true, createdAt: true };
 
@@ -12,6 +13,14 @@ export async function loadMe(req, res, next) {
   } catch (err) {
     next(err);
   }
+}
+
+// A moderator's posting pause covers every kind of writing: posts, ideas,
+// polls, comments and edits, not only chat messages.
+export function notMuted(req, res, next) {
+  const muted = mutedMessage(req.me);
+  if (muted) return res.status(403).json({ error: muted, code: 'posting_paused' });
+  next();
 }
 
 // Posting, messaging and following need a username first.

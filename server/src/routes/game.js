@@ -10,6 +10,7 @@ import { createMatch, joinMatch, confirmMatch, cancelMatch, act, matchView, char
 import { PAIRS, publicPair } from '../lib/game/pairs.js';
 import { profileFor } from '../lib/game/progression.js';
 import * as arena from '../lib/game/arena.js';
+import { learnData } from '../lib/game/learn.js';
 import { TEMPLATES } from '../lib/game/market.js';
 import * as pay from '../lib/game/payments/index.js';
 
@@ -102,7 +103,7 @@ gameRouter.post('/wallet/withdrawals', limit('withdrawal'), asyncHandler(async (
   res.status(201).json({ withdrawal: w });
 }));
 
-gameRouter.post('/wallet/withdrawals/:id/cancel', asyncHandler(async (req, res) => {
+gameRouter.post('/wallet/withdrawals/:id/cancel', limit('gameLobby'), asyncHandler(async (req, res) => {
   res.json({ withdrawal: await pay.cancelWithdrawal(await me(req), req.params.id) });
 }));
 
@@ -176,12 +177,12 @@ gameRouter.post('/matches/:id/join', limit('gameCreate'), asyncHandler(async (re
   res.json({ ok: true });
 }));
 
-gameRouter.post('/matches/:id/confirm', asyncHandler(async (req, res) => {
+gameRouter.post('/matches/:id/confirm', limit('gameLobby'), asyncHandler(async (req, res) => {
   await confirmMatch({ id: req.userId }, req.params.id);
   res.json(await matchView({ id: req.userId }, req.params.id));
 }));
 
-gameRouter.post('/matches/:id/cancel', asyncHandler(async (req, res) => {
+gameRouter.post('/matches/:id/cancel', limit('gameLobby'), asyncHandler(async (req, res) => {
   await cancelMatch({ id: req.userId }, req.params.id);
   res.json({ ok: true });
 }));
@@ -237,7 +238,7 @@ gameRouter.get('/quick', asyncHandler(async (req, res) => {
   arena.touch(user.id);
   res.json(await arena.queueStatus(user));
 }));
-gameRouter.delete('/quick', asyncHandler(async (req, res) => {
+gameRouter.delete('/quick', limit('quickMatch'), asyncHandler(async (req, res) => {
   res.json(await arena.leaveQueue(await me(req)));
 }));
 
@@ -251,8 +252,7 @@ gameRouter.get('/leaderboard', asyncHandler(async (req, res) => {
 // Learn: what each kind of market teaches, and what your own matches show.
 gameRouter.get('/learn', asyncHandler(async (req, res) => {
   arena.touch(req.userId);
-  const [s, insights, dna] = await Promise.all([loadGameSettings(), arena.insightsFor(req.userId), arena.traderDna(req.userId)]);
-  res.json({ lessons: arena.lessons().filter((l) => s.scenarios.includes(l.key)), insights, dna, weights: s.weights });
+  res.json(await learnData(req.userId, await loadGameSettings()));
 }));
 
 // ── Webhooks (no session: signed by the provider) ───────────────────────────

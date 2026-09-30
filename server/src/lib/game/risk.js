@@ -32,7 +32,9 @@ export async function riskSignals({ days = 14 } = {}) {
     pairs.set(key, row);
     const loser = m.players.find((x) => x.outcome === 'loss');
     const winner = m.players.find((x) => x.outcome === 'win');
-    if (loser && winner && (loser.report?.metrics?.trades ?? 0) === 0) {
+    // Lost without trading, or with only a token position.
+    const token = (x) => (x.report?.metrics?.trades ?? 0) === 0 || x.report?.metrics?.engaged === false || (x.report?.metrics?.maxSizePct ?? 0) < 10;
+    if (loser && winner && token(loser)) {
       const k = `${loser.userId}>${winner.userId}`;
       const o = oneSided.get(k) ?? { loserId: loser.userId, winnerId: winner.userId, matches: 0, passedKobo: 0, last: m.settledAt };
       o.matches += 1;

@@ -161,10 +161,17 @@ export async function handleWhopWebhook(rawBody, headers) {
       await prisma.deposit.updateMany({ where: { id: String(depositId), status: 'initiated' }, data: { status: 'failed', failureReason: 'Whop: payment failed' } });
       return 'failed';
     }
-    // Refunds and disputes on a deposit need a person: flag it.
-    if (/refund|dispute/.test(event.type ?? '') && depositId) {
-      await prisma.deposit.updateMany({ where: { id: String(depositId) }, data: { failureReason: `Whop reported ${event.type} after payment. Review this deposit.` } });
-      return 'flagged';
+    // A refund or chargeback on a deposit: freeze the wallet until a person
+    // reviews it, so the money can't be staked or withdrawn meanwhile. The
+    // event may not carry our metadata, so the deposit is also found by the
+    // Whop payment id.
+    if (/refund|dispute|chargeback/.test(event.type ?? '')) {
+      const paymentId = data.payment_id ?? data.payment?.id ?? (String(data.id ?? '').startsWith('pay_') ? data.id : null);
+      const d = depositId ? await prisma.deposit.findUnique({ where: { id: String(depositId) } }) : paymentId ? await prisma.deposit.findFirst({ where: { provider: 'whop', providerPaymentId: String(paymentId) } }) : null;
+      if (!d) return 'ignored';
+      await prisma.deposit.update({ where: { id: d.id }, data: { failureReason: `Whop reported ${event.type} after payment. Review this deposit.` } });
+      await freezeWallet(d.userId, `Whop ${event.type} on deposit ${d.id}`);
+      return 'frozen';
     }
     return 'ignored';
   });
@@ -191,6 +198,15 @@ export async function handlePaystackWebhook(rawBody, signature) {
       if (!paystack.transactionMatches(t, d)) throw new Error(`Paystack transaction ${data.reference} doesn’t match deposit ${d.id}`);
       await creditDeposit(d.id, String(t.id));
       return 'credited';
+    }
+    // A refund or chargeback on a Paystack deposit: hold the wallet for review.
+    if (/^(charge\.dispute|refund)\./.test(event.event ?? '')) {
+      const ref = data.transaction?.reference ?? data.transaction_reference ?? data.reference;
+      const d = ref ? await prisma.deposit.findFirst({ where: { provider: 'paystack', providerRef: String(ref) } }) : null;
+      if (!d) return 'ignored';
+      await prisma.deposit.update({ where: { id: d.id }, data: { failureReason: `Paystack reported ${event.event} after payment. Review this deposit.` } });
+      await freezeWallet(d.userId, `Paystack ${event.event} on deposit ${d.id}`);
+      return 'frozen';
     }
     if (['transfer.success', 'transfer.failed', 'transfer.reversed'].includes(event.event)) {
       const w = await prisma.withdrawal.findUnique({ where: { id: String(data.reference) } });
@@ -264,10 +280,19 @@ export async function setPaystackAccount(user, { bankCode, accountNumber }) {
 
 // ── Withdrawals ────────────────────────────────────────────────────────────
 
+// A wallet on hold: no stakes and no withdrawals until an admin clears it.
+export async function freezeWallet(userId, reason) {
+  if (!userId) return;
+  const w = await walletFor(userId);
+  await prisma.wallet.update({ where: { id: w.id }, data: { frozenAt: new Date(), frozenReason: String(reason).slice(0, 300) } });
+}
+
 export async function requestWithdrawal(user, { amountKobo, provider }) {
   const { list, settings: s } = await providers();
   if (!s.withdrawalsEnabled) throw new GameError('Withdrawals are paused right now. Your balance is safe; please try again later.', 503, 'withdrawals_paused');
   await assertVerified(user.id);
+  const held = await prisma.wallet.findUnique({ where: { userId: user.id }, select: { frozenAt: true } });
+  if (held?.frozenAt) throw new GameError('Your wallet is on hold while a payment is reviewed, so withdrawals are paused. Contact support to clear it.', 403, 'wallet_frozen');
   if (!Number.isInteger(amountKobo) || amountKobo < s.minWithdrawalKobo) throw new GameError(`The smallest withdrawal is ₦${(s.minWithdrawalKobo / 100).toLocaleString('en-NG')}.`);
   const key = provider ?? list[0]?.key;
   if (!list.some((p) => p.key === key)) throw new GameError('Withdrawals aren’t set up yet. Please check back soon.', 503, 'provider_unavailable');
@@ -279,8 +304,11 @@ export async function requestWithdrawal(user, { amountKobo, provider }) {
     await post(tx, { walletId: wallet.id, userId: user.id, type: 'withdrawal_hold', amount: amountKobo, available: -amountKobo, pending: amountKobo, key: `withdrawal_hold:${wd.id}`, withdrawalId: wd.id });
     return wd;
   }, TX);
-  // A bank name that doesn't match the verified name always waits for a person.
-  if (s.withdrawalApproval === 'automatic' && acct.nameMatchesId !== false) await processWithdrawal(w.id, null).catch((err) => console.error('Automatic withdrawal failed:', err.message));
+  // A bank name that doesn't match the verified name always waits for a
+  // person, and so does money that came in within the last 72 hours (a card
+  // payment can still be charged back).
+  const recent = await prisma.deposit.count({ where: { userId: user.id, status: 'succeeded', createdAt: { gte: new Date(Date.now() - 72 * 3600e3) } } });
+  if (s.withdrawalApproval === 'automatic' && acct.nameMatchesId !== false && !recent) await processWithdrawal(w.id, null).catch((err) => console.error('Automatic withdrawal failed:', err.message));
   return withdrawalView(await prisma.withdrawal.findUnique({ where: { id: w.id } }));
 }
 

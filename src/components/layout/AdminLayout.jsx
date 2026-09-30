@@ -1,8 +1,10 @@
+import { Suspense } from 'react';
 import { Outlet, useLocation, Navigate, Link } from 'react-router-dom';
 import { ShieldAlert } from 'lucide-react';
 import Sidebar from './Sidebar';
 import Topbar from './Topbar';
 import MobileNav from './MobileNav';
+import { PageLoading } from '../../lib/lazyPage';
 import { adminNav, traderNav } from './navConfig';
 import { useAuth } from '../../context/AuthContext';
 import Badge from '../ui/Badge';
@@ -57,7 +59,7 @@ export default function AdminLayout() {
                 <span className="font-medium">Set it up</span>
               </Link>
             ) : null}
-            <Outlet />
+            <Suspense fallback={<PageLoading />}><Outlet /></Suspense>
           </div>
         </main>
       </div>

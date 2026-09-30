@@ -1,4 +1,6 @@
 import { Router } from 'express';
+import { impersonationError } from '../lib/community/users.js';
+import { handOverOwnership } from '../lib/community/access.js';
 import { prisma } from '../lib/prisma.js';
 import { requireAuth, clearSessionCookie, forgetUserAccess } from '../middleware/auth.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
@@ -30,7 +32,9 @@ accountRouter.patch('/profile', limit('profile'), asyncHandler(async (req, res) 
   const name = typeof req.body?.name === 'string' ? req.body.name.trim().replace(/\s+/g, ' ') : '';
   if (!name) return res.status(400).json({ error: 'Enter your name.' });
   if (name.length > 80) return res.status(400).json({ error: 'Keep your name under 80 characters.' });
-  const before = await prisma.user.findUnique({ where: { id: req.userId }, select: { name: true } });
+  const before = await prisma.user.findUnique({ where: { id: req.userId }, select: { name: true, role: true } });
+  const nameProblem = impersonationError(name, { staff: ['moderator', 'admin', 'super_admin'].includes(before?.role) });
+  if (nameProblem) return res.status(400).json({ error: nameProblem });
   const user = await prisma.user.update({ where: { id: req.userId }, data: { name, initials: initialsFor(name) }, include: PUBLIC_USER_INCLUDE });
   if (before?.name !== name) auditLater(req, 'account.name_changed', { targetType: 'user', targetId: user.id, actor: user, detail: { from: before?.name, to: name } });
   res.json({ user: toPublicUser(user) });
@@ -177,6 +181,7 @@ accountRouter.delete('/', limit('accountDelete'), asyncHandler(async (req, res) 
   if (inMatch) return res.status(409).json({ error: 'You’re in a Trading Game match. Finish or cancel it before deleting your account.' });
   await audit(req, 'account.deleted', { targetType: 'user', targetId: user.id, actor: user, detail: { email: user.email, role: user.role } });
   await prisma.follow.deleteMany({ where: { targetType: 'user', targetId: user.id } });
+  await handOverOwnership(user.id);
   // Off the newsletter list too.
   if (user.newsletterContactId) await unsubscribe(user.newsletterContactId).catch(() => {});
   await prisma.user.delete({ where: { id: user.id } });

@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { impersonationError } from '../lib/community/users.js';
 import { prisma } from '../lib/prisma.js';
 import { requireAuth, clearSessionCookie, sessionUserId } from '../middleware/auth.js';
 import { toPublicUser, PUBLIC_USER_INCLUDE } from '../lib/serialize.js';
@@ -45,6 +46,9 @@ authRouter.post('/signup', asyncHandler(async (req, res) => {
   const email = normalizeEmail(req.body?.email);
   const password = typeof req.body?.password === 'string' ? req.body.password : '';
   if (!name || !email || !password) return res.status(400).json({ error: 'Enter your name, email and a password.' });
+  // Your name is how Community shows you: it can't suggest you work for Kotka.
+  const nameProblem = impersonationError(name);
+  if (nameProblem) return res.status(400).json({ error: nameProblem, field: 'name' });
   if (!EMAIL_RE.test(email) || email.length > 254) return res.status(400).json({ error: 'Enter a valid email address.' });
   const problem = passwordProblem(password, { email, name });
   if (problem) return res.status(400).json({ error: problem, field: 'password' });

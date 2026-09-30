@@ -313,7 +313,7 @@ export default function Messages() {
   }, [id]);
 
   return (
-    <div className="flex h-[calc(100dvh_-_12rem_-_var(--bottom-nav))] min-h-[30rem] overflow-hidden rounded-2xl border border-ink-100 bg-white dark:border-ink-800 dark:bg-ink-900">
+    <div className="flex h-[calc(100dvh_-_12rem_-_var(--bottom-nav)_-_var(--banners,0px))] min-h-[30rem] overflow-hidden rounded-2xl border border-ink-100 bg-white dark:border-ink-800 dark:bg-ink-900">
       <div className={clsx('flex w-full flex-col border-r border-ink-100 dark:border-ink-800 lg:w-80 lg:shrink-0', id && 'hidden lg:flex')}>
         <div className="flex items-center justify-between px-4 py-3">
           <h1 className="text-sm font-semibold text-ink-900 dark:text-ink-50">Messages</h1>

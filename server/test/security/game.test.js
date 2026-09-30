@@ -11,7 +11,7 @@ import { generateMarket, candlesUpTo, candleRange, TEMPLATE_KEYS } from '../../s
 import { PAIR_SYMBOLS } from '../../src/lib/game/pairs.js';
 import { simulate, defaultTradingRules } from '../../src/lib/game/trading.js';
 import { scorePlayer } from '../../src/lib/game/scoring.js';
-import { money, advance, sweep, marketFor } from '../../src/lib/game/matches.js';
+import { money, advance, sweep, marketFor, decideResult, TX } from '../../src/lib/game/matches.js';
 import { clearGameSettingsCache } from '../../src/lib/game/config.js';
 import { verifyWebhook } from '../../src/lib/game/payments/whop.js';
 import { post, walletFor, HOUSE_WALLET } from '../../src/lib/game/wallet.js';
@@ -69,7 +69,15 @@ async function fund(u, kobo) {
   await prisma.$transaction(async (tx) => {
     const w = await walletFor(u.id, tx);
     await post(tx, { walletId: w.id, userId: u.id, type: 'adjustment', amount: kobo, available: kobo, key: `test-fund:${crypto.randomUUID()}`, reason: 'test funding' });
-  });
+  }, TX);
+}
+// Take a test wallet's available balance back to zero, through the ledger.
+async function drain(u) {
+  await prisma.$transaction(async (tx) => {
+    const w = await walletFor(u.id, tx);
+    const amt = Number(w.availableKobo);
+    if (amt > 0) await post(tx, { walletId: w.id, userId: u.id, type: 'adjustment', amount: amt, available: -amt, key: `test-drain:${crypto.randomUUID()}`, reason: 'test cleanup' });
+  }, TX);
 }
 async function setGame(cfg) {
   await prisma.gameSettings.upsert({ where: { id: 'singleton' }, update: { config: cfg }, create: { id: 'singleton', config: cfg } });
@@ -151,15 +159,18 @@ after(async () => {
 
 // ── The engine (no database) ────────────────────────────────────────────────
 
-const mk = (o) => generateMarket({ durationSec: 900, candleSec: 15, historyCandles: 80, symbol: 'KTK/NGN', backgroundTicks: 3600, ...o });
+const SECRET = 'ab'.repeat(32);
+const mk = (o) => generateMarket({ durationSec: 900, candleSec: 15, historyCandles: 80, symbol: 'KTK/NGN', backgroundTicks: 3600, secret: SECRET, ...o });
 
-test('the synthetic market is deterministic, and the same scenario, pair and seed replay exactly', () => {
+test('the synthetic market is deterministic from its secret, and the public seed alone can’t rebuild it', () => {
   for (const scenario of TEMPLATE_KEYS) {
     const x = mk({ scenario, seed: 424242 });
     const y = mk({ scenario, seed: 424242 });
-    const z = mk({ scenario, seed: 424243 });
+    const z = mk({ scenario, seed: 424242, secret: 'cd'.repeat(32) });
     assert.equal(x.hash, y.hash, scenario);
-    assert.notEqual(x.hash, z.hash, `${scenario}: a different seed gives a different path`);
+    assert.equal(x.version, 3);
+    assert.notEqual(x.hash, z.hash, `${scenario}: same seed, different secret, a different path`);
+    assert.notDeepEqual(x.prices.slice(-900), mk({ scenario, seed: 424242, secret: 'ef'.repeat(32) }).prices.slice(-900), 'the future depends on the secret');
     assert.notEqual(mk({ scenario, seed: 424242, symbol: 'KGD/USD' }).hash, x.hash, 'a different pair, a different path');
     assert.equal(x.prices.length, 3600 + 80 * 15 + 900);
     assert.ok(x.prices.every((p) => p > 0 && Number.isFinite(p)));
@@ -167,7 +178,11 @@ test('the synthetic market is deterministic, and the same scenario, pair and see
     assert.equal(candles.length, (3600 + 1200) / 15 + 60);
     assert.ok(candles.every((k) => k.h >= Math.max(k.o, k.c) && k.l <= Math.min(k.o, k.c)));
   }
-  // Older matches (version 1) still regenerate exactly as they were made.
+  assert.throws(() => mk({ scenario: 'range', seed: 1, secret: null }), /secret/, 'version 3 refuses to run without its secret');
+  // Older matches (versions 1 and 2) still regenerate exactly as they were made.
+  const v2a = generateMarket({ scenario: 'range', seed: 77, durationSec: 900, candleSec: 15, historyCandles: 80, symbol: 'KTK/NGN', backgroundTicks: 3600, version: 2 });
+  const v2b = generateMarket({ scenario: 'range', seed: 77, durationSec: 900, candleSec: 15, historyCandles: 80, symbol: 'KTK/NGN', backgroundTicks: 3600, version: 2 });
+  assert.equal(v2a.hash, v2b.hash);
   const old = generateMarket({ scenario: 'bull_trend', seed: 2024, durationSec: 900, candleSec: 15, historyCandles: 80, version: 1 });
   assert.equal(old.prices.length, 2100);
   assert.equal(old.decimals, 2);
@@ -204,8 +219,21 @@ test('every Kotka pair generates at its own precision, and timeframes agree with
   assert.equal(page2.more, true);
 });
 
+// A market where a 1% stop under the entry at tick 120 isn't touched before tick 700.
+function calmMarket() {
+  for (const s of ['bc', 'ab', 'cd', 'ef', '12', '34', '56', '78', '9a', 'de', 'f0', '0f']) {
+    const market = mk({ scenario: 'bull_trend', seed: 2024, secret: s.repeat(32) });
+    const at = (t) => market.prices[market.historyTicks + t];
+    const p = at(120);
+    let ok = true;
+    for (let t = 121; t <= 700; t++) if (at(t) <= p * 0.99 || at(t) >= p * 1.03) { ok = false; break; }
+    if (ok) return market;
+  }
+  throw new Error('no calm market among the test secrets');
+}
+
 test('same trade, different process, different score', () => {
-  const market = mk({ scenario: 'bull_trend', seed: 2024 });
+  const market = calmMarket();
   const rules = defaultTradingRules();
   const p = market.prices[market.historyTicks + 120];
   const disciplined = [{ seq: 1, tick: 120, type: 'open', payload: { side: 'long', sizePct: 200, stop: +(p * 0.99).toFixed(2), target: +(p * 1.03).toFixed(2), thesis } }, { seq: 2, tick: 700, type: 'close', payload: {} }];
@@ -220,14 +248,25 @@ test('same trade, different process, different score', () => {
 });
 
 test('observed behaviour: early exits, uneven risk, switching approach every trade', () => {
-  const market = mk({ scenario: 'bull_trend', seed: 2024 });
   const rules = defaultTradingRules();
+  // A market that offers a small profit before the stop or the target is hit.
+  let market;
+  let t1 = null;
+  for (const s of ['ab', 'cd', 'ef', '12', '34', '56', '78', '9a', 'bc', 'de']) {
+    market = mk({ scenario: 'bull_trend', seed: 2024, secret: s.repeat(32) });
+    const at0 = (t) => market.prices[market.historyTicks + t];
+    const p0 = at0(120);
+    for (let t = 125; t < market.matchTicks - 5; t++) {
+      if (at0(t) <= p0 * 0.99 || at0(t) >= p0 * 1.04) break;
+      if (at0(t) > p0 * 1.003 && at0(t) < p0 * 1.01) { t1 = t; break; }
+    }
+    if (t1) break;
+  }
+  assert.ok(t1, 'a market offers a small profit');
   const H = market.historyTicks;
   const at = (t) => market.prices[H + t];
   // A winner closed by hand, well short of its planned target.
   const p = at(120);
-  const t1 = [...Array(market.matchTicks - 130).keys()].map((k) => k + 125).find((t) => at(t) > p * 1.003 && at(t) < p * 1.01);
-  assert.ok(t1, 'the market offers a small profit');
   const early = simulate({ market, actions: [{ seq: 1, tick: 120, type: 'open', payload: { side: 'long', sizePct: 100, stop: +(p * 0.99).toFixed(2), target: +(p * 1.04).toFixed(2), thesis } }, { seq: 2, tick: t1, type: 'close', payload: {} }], capital: 100000, rules, final: true });
   const E = scorePlayer({ market, sim: early, rules });
   assert.ok(E.findings.some((f) => f.key === 'early_exit'), JSON.stringify(E.findings.map((f) => f.key)));
@@ -251,6 +290,30 @@ test('observed behaviour: early exits, uneven risk, switching approach every tra
   assert.ok(keys.includes('inconsistent_risk'), JSON.stringify(keys));
   assert.ok(keys.includes('strategy_switching'), JSON.stringify(keys));
   assert.ok(M.findings.every((f) => !/you are|you feel|anxious|greedy|fear/i.test(f.text)), 'describes behaviour, never diagnoses');
+});
+
+test('you can’t win without really trading: idle scores 50, token trades earn little credit, and neither can beat a real trader', () => {
+  const market = mk({ scenario: 'bull_trend', seed: 31 });
+  const rules = defaultTradingRules();
+  const p = market.prices[market.historyTicks + 30];
+  const run = (actions) => scorePlayer({ market, sim: simulate({ market, actions, capital: 100000, rules, final: true }), rules });
+  const open = (sizePct) => ({ seq: 1, tick: 30, type: 'open', payload: { side: 'long', sizePct, stop: +(p * 0.997).toFixed(2), target: +(p * 1.006).toFixed(2), thesis } });
+  const idle = run([]);
+  const token = run([open(1)]);
+  const real = run([open(100)]);
+  const flash = run([open(100), { seq: 2, tick: 32, type: 'close', payload: {} }]);
+  assert.equal(idle.score, 50);
+  assert.equal(idle.metrics.engaged, false);
+  assert.equal(token.metrics.engaged, false, 'a 1% position isn’t really trading');
+  assert.equal(real.metrics.engaged, true);
+  assert.ok(token.findings.some((f) => f.key === 'small_stake'));
+  assert.ok(real.metrics.processCreditPct === 100);
+  const flashExit = simulate({ market, actions: [open(100), { seq: 2, tick: 32, type: 'close', payload: {} }], capital: 100000, rules, final: true }).trades[0].exitReason;
+  if (flashExit === 'manual') assert.equal(flash.metrics.engaged, false, 'opened and closed by hand within seconds');
+  // The one rule on top of the scores: the non-trader can't win.
+  assert.deepEqual(decideResult([{ userId: 'idle', score: 60, engaged: false }, { userId: 'real', score: 40, engaged: true }], 1), { winnerId: null, draw: true, reason: 'winner_did_not_trade' });
+  assert.deepEqual(decideResult([{ userId: 'a', score: 60, engaged: true }, { userId: 'b', score: 40, engaged: false }], 1), { winnerId: 'a', draw: false });
+  assert.deepEqual(decideResult([{ userId: 'a', score: 60, engaged: false }, { userId: 'b', score: 40, engaged: false }], 1), { winnerId: 'a', draw: false }, 'if neither really traded, scores decide');
 });
 
 test('stops fill from the market path, and the end of the match closes what is open', () => {
@@ -306,6 +369,24 @@ test('a ₦500 duel: stakes lock, both trade the same market, it settles once wi
   assert.equal(va.json.price, market.prices[market.historyTicks + va.json.tick]);
 
   // A trades with a plan; B trades without one.
+  const price = va.json.price;
+  const opened = await aC.post(`/api/game/matches/${id}/actions`, { type: 'open', payload: { side: 'long', sizePct: 100, stop: +(price * 0.99).toFixed(2), target: +(price * 1.02).toFixed(2), thesis }, ticksSince: va.json.chart.lastT - 1 }, { 'Idempotency-Key': 'open-ada-00001' });
+  assert.equal(opened.status, 200, JSON.stringify(opened.json));
+  assert.ok(opened.json.me.position);
+  assert.ok(Array.isArray(opened.json.ticks) && opened.json.ticks.length >= 1 && opened.json.candles === undefined, 'the new chart gets one-second prices back, not candles');
+  assert.equal((await aC.post(`/api/game/matches/${id}/cancel`)).status, 409, 'a staked match can’t be ended early');
+  const again = await aC.post(`/api/game/matches/${id}/actions`, { type: 'open', payload: { side: 'long', sizePct: 100, stop: +(price * 0.99).toFixed(2), thesis } }, { 'Idempotency-Key': 'open-ada-00001' });
+  assert.equal(again.status, 200, 'a replayed request is recognised');
+  assert.equal(await prisma.gameAction.count({ where: { matchId: id, userId: a.id } }), 1, 'and not stored twice');
+  // B sees A's standing late and rounded, never exact enough to copy.
+  const stateB = await bC.get(`/api/game/matches/${id}/state`);
+  const seenByB = stateB.json.opponent;
+  assert.ok(seenByB, `B's view has the opponent: ${stateB.status} ${JSON.stringify({ ...stateB.json, ticks: undefined, candles: undefined }).slice(0, 400)}`);
+  assert.equal(seenByB.delaySec, 30);
+  assert.ok(Number.isInteger(seenByB.returnPct * 2), `rounded to 0.5%: ${seenByB.returnPct}`);
+  assert.equal((await bC.post(`/api/game/matches/${id}/actions`, { type: 'open', payload: { side: 'short', sizePct: 400, thesis: { view: 'bearish', reasons: ['momentum'], confidence: 'high' } } })).status, 200);
+  // (Chart checks run after both trades, so a slow database can't let the short
+  // test match end before the trades are in.)
   // The chart: candles at any timeframe, never beyond the tick; the live tick feed; the pair.
   assert.ok(va.json.chart?.symbol, 'the match has a Kotka pair');
   for (const tf of [1, 60]) {
@@ -325,17 +406,6 @@ test('a ₦500 duel: stakes lock, both trade the same market, it settles once wi
   assert.equal((await bC.get(`/api/game/charts/match:${id}`)).json.layout, null, 'B sees their own (empty) chart, not A’s');
   assert.equal((await cC.put(`/api/game/charts/match:${id}`, { layout })).status, 404, 'not in the match');
   assert.equal((await aC.put(`/api/game/charts/match:${id}`, { layout: { drawings: Array.from({ length: 301 }, () => ({})) } })).status, 413);
-
-  const price = va.json.price;
-  const opened = await aC.post(`/api/game/matches/${id}/actions`, { type: 'open', payload: { side: 'long', sizePct: 100, stop: +(price * 0.99).toFixed(2), target: +(price * 1.02).toFixed(2), thesis }, ticksSince: va.json.chart.lastT - 1 }, { 'Idempotency-Key': 'open-ada-00001' });
-  assert.equal(opened.status, 200, JSON.stringify(opened.json));
-  assert.ok(opened.json.me.position);
-  assert.ok(Array.isArray(opened.json.ticks) && opened.json.ticks.length >= 1 && opened.json.candles === undefined, 'the new chart gets one-second prices back, not candles');
-  assert.equal((await aC.post(`/api/game/matches/${id}/cancel`)).status, 409, 'a staked match can’t be ended early');
-  const again = await aC.post(`/api/game/matches/${id}/actions`, { type: 'open', payload: { side: 'long', sizePct: 100, stop: +(price * 0.99).toFixed(2), thesis } }, { 'Idempotency-Key': 'open-ada-00001' });
-  assert.equal(again.status, 200, 'a replayed request is recognised');
-  assert.equal(await prisma.gameAction.count({ where: { matchId: id, userId: a.id } }), 1, 'and not stored twice');
-  assert.equal((await bC.post(`/api/game/matches/${id}/actions`, { type: 'open', payload: { side: 'short', sizePct: 400, thesis: { view: 'bearish', reasons: ['momentum'], confidence: 'high' } } })).status, 200);
 
   const done = await untilSettled(id);
   assert.equal(done.status, 'SETTLED');
@@ -378,6 +448,48 @@ test('a ₦500 duel: stakes lock, both trade the same market, it settles once wi
   assert.ok(hist.json.matches.some((x) => x.id === id));
   const prof = await aC.get('/api/game/profile');
   assert.ok(prof.json.profile.xp > 0);
+});
+
+test('one live match at a time, for creators too: entering a match withdraws your other open challenges', async () => {
+  await fund(c, naira(1500));
+  await fund(a, naira(500));
+  const ids = [];
+  for (let i = 0; i < 3; i++) {
+    const r = await cC.post('/api/game/matches', { mode: 'duel', stakeKobo: naira(500), open: true });
+    assert.equal(r.status, 201, JSON.stringify(r.json));
+    ids.push(r.json.match.id);
+  }
+  assert.equal(Number((await balance(c)).lockedKobo), naira(1500));
+  assert.equal((await aC.post(`/api/game/matches/${ids[0]}/join`)).status, 200);
+  const others = await prisma.gameMatch.findMany({ where: { id: { in: ids.slice(1) } } });
+  assert.ok(others.every((m) => m.status === 'CANCELLED'), 'the other challenges are withdrawn');
+  assert.equal(Number((await balance(c)).lockedKobo), naira(500), 'and their stakes come back');
+  assert.equal((await bC.post(`/api/game/matches/${ids[1]}/join`)).status, 409, 'nobody can join a withdrawn one');
+  assert.equal((await cC.post('/api/game/quick', { stakeKobo: naira(500), durationSec: 60 })).json.code, 'in_match');
+  assert.equal((await cC.post(`/api/game/matches/${ids[0]}/cancel`)).status, 200);
+  await drain(a);
+  await drain(c);
+});
+
+test('a wallet on hold can’t stake or search; suspending a trader closes their open challenges', async () => {
+  await fund(c, naira(500));
+  assert.equal((await adminC.post(`/api/admin/game/wallets/${c.id}/hold`, { on: true, reason: 'test hold' })).status, 403, 'super admins only');
+  assert.equal((await superC.post(`/api/admin/game/wallets/${c.id}/hold`, { on: true, reason: 'chargeback on a test deposit' })).status, 200);
+  const blocked = await cC.post('/api/game/matches', { mode: 'duel', stakeKobo: naira(500), open: true });
+  assert.equal(blocked.status, 403);
+  assert.equal(blocked.json.code, 'wallet_frozen');
+  assert.equal((await cC.post('/api/game/quick', { stakeKobo: naira(500), durationSec: 60 })).json.code, 'wallet_frozen');
+  assert.equal((await cC.get('/api/game/wallet')).json.wallet.onHold, true, 'the owner is told');
+  assert.equal((await superC.post(`/api/admin/game/wallets/${c.id}/hold`, { on: false })).status, 200);
+  const posted = await cC.post('/api/game/matches', { mode: 'duel', stakeKobo: naira(500), open: true });
+  assert.equal(posted.status, 201);
+  // Suspension closes it and returns the stake.
+  assert.equal((await superC.patch(`/api/admin/users/${c.id}`, { status: 'suspended' })).status, 200);
+  assert.equal((await prisma.gameMatch.findUnique({ where: { id: posted.json.match.id } })).status, 'CANCELLED');
+  assert.equal(Number((await balance(c)).lockedKobo), 0);
+  assert.equal((await superC.patch(`/api/admin/users/${c.id}`, { status: 'active' })).status, 200);
+  cC = await signIn(c);
+  await drain(c);
 });
 
 test('parallel entries cannot spend the same money twice', async () => {

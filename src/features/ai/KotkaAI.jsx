@@ -27,6 +27,11 @@ const SUGGESTIONS = [
   'How am I doing against my risk rules today?',
 ];
 
+// A new analysis opens straight away as a draft; the conversation is only
+// created when the first message goes, so no empty chats pile up and a quick
+// first message can't land in the previous one.
+const DRAFT = 'draft';
+
 export default function KotkaAI() {
   const [conversations, setConversations] = useState(null);
   const [activeId, setActiveId] = useState(null);
@@ -55,29 +60,23 @@ export default function KotkaAI() {
     const fromLink = params.get('prompt');
     const linkMarket = markets.includes(params.get('market')) ? params.get('market') : null;
     if (linkMarket) setMarket(linkMarket);
-    api.get('/ai/conversations').then(async ({ conversations: list }) => {
-      if (fromLink) {
-        const { conversation } = await api.post('/ai/conversations', { market: linkMarket ?? 'Forex' });
-        setMessagesCache((prev) => ({ ...prev, [conversation.id]: [] }));
-        setConversations([conversation, ...list]);
-        setActiveId(conversation.id);
-        setParams({}, { replace: true });
-        return;
-      }
+    api.get('/ai/conversations').then(({ conversations: list }) => {
       setConversations(list);
-      if (list.length) setActiveId(list[0].id);
+      if (fromLink) setParams({}, { replace: true });
+      setActiveId(fromLink || !list.length ? DRAFT : list[0].id);
     }).catch(() => setLoadError('We couldn’t load Kotka AI. Refresh the page to try again.'));
     api.get('/ai/usage').then(setUsage);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    if (!activeId || messagesCache[activeId]) return;
+    if (!activeId || activeId === DRAFT || messagesCache[activeId]) return;
     api.get(`/ai/conversations/${activeId}`).then(({ messages }) => {
       setMessagesCache((prev) => ({ ...prev, [activeId]: messages }));
     });
   }, [activeId, messagesCache]);
 
-  const active = conversations?.find((c) => c.id === activeId) ?? null;
+  const isDraft = activeId === DRAFT;
+  const active = isDraft ? { id: DRAFT, favorite: false } : conversations?.find((c) => c.id === activeId) ?? null;
   const activeMessages = activeId ? messagesCache[activeId] ?? [] : [];
   // Limits and pauses come from the server (Usage Control); this only shows them.
   const limitReached = !!usage && (usage.paused || usage.headline?.remaining === 0);
@@ -85,15 +84,14 @@ export default function KotkaAI() {
   const note = usageNote(usage);
 
   const handleNew = () => {
-    api.post('/ai/conversations', { market }).then(({ conversation }) => {
-      setConversations((prev) => [conversation, ...(prev ?? [])]);
-      setMessagesCache((prev) => ({ ...prev, [conversation.id]: [] }));
-      setActiveId(conversation.id);
-    });
+    if (thinking) return;
+    setMessagesCache((prev) => ({ ...prev, [DRAFT]: [] }));
+    setActiveId(DRAFT);
+    setLastSource(null);
   };
 
   const handleToggleFavorite = () => {
-    if (!active) return;
+    if (!active || isDraft) return;
     api.patch(`/ai/conversations/${active.id}`, { favorite: !active.favorite }).then(({ conversation }) => {
       setConversations((prev) => prev.map((c) => (c.id === conversation.id ? conversation : c)));
     });
@@ -118,7 +116,7 @@ export default function KotkaAI() {
     if ((!text.trim() && !pendingImage) || !active || thinking) return;
     const content = text.trim();
     const image = pendingImage;
-    const conversationId = active.id;
+    let conversationId = active.id;
     const wasEmpty = (messagesCache[conversationId] ?? []).length === 0;
 
     const userMsg = { id: `local-user-${Date.now()}`, role: 'user', content: content || 'Chart attached for review.', image };
@@ -126,6 +124,23 @@ export default function KotkaAI() {
     setInput('');
     setPendingImage(null);
     setThinking(true);
+
+    if (conversationId === DRAFT) {
+      try {
+        const { conversation } = await api.post('/ai/conversations', { market });
+        conversationId = conversation.id;
+        setConversations((prev) => [conversation, ...(prev ?? [])]);
+        setMessagesCache((prev) => ({ ...prev, [conversation.id]: prev[DRAFT] ?? [userMsg], [DRAFT]: [] }));
+        setActiveId(conversation.id);
+      } catch (err) {
+        setMessagesCache((prev) => ({ ...prev, [DRAFT]: [] }));
+        setInput(text);
+        setPendingImage(image);
+        setThinking(false);
+        toast(err.message || 'Kotka AI couldn’t start that analysis. Please try again.', { tone: 'error' });
+        return;
+      }
+    }
 
     const assistantLocalId = `local-assistant-${Date.now()}`;
     let placeholderAdded = false;
@@ -216,7 +231,7 @@ export default function KotkaAI() {
   };
 
   useEffect(() => {
-    if (!autoSend.current || !active || !messagesCache[active.id] || !input.trim()) return;
+    if (!autoSend.current || !active || (!isDraft && !messagesCache[active.id]) || !input.trim()) return;
     autoSend.current = false;
     handleSend();
   }); // eslint-disable-line react-hooks/exhaustive-deps
@@ -225,7 +240,7 @@ export default function KotkaAI() {
   if (!conversations) return <div className="h-96 animate-pulse rounded-2xl bg-white dark:bg-ink-900" aria-label="Loading your conversations" />;
 
   return (
-    <div className="flex h-[calc(100dvh_-_6.5rem_-_var(--bottom-nav))] min-h-[26rem] flex-col sm:h-[calc(100dvh_-_7rem_-_var(--bottom-nav))] lg:h-[calc(100dvh-8rem)]">
+    <div className="flex h-[calc(100dvh_-_6.5rem_-_var(--bottom-nav)_-_var(--banners,0px))] min-h-[26rem] flex-col sm:h-[calc(100dvh_-_7rem_-_var(--bottom-nav)_-_var(--banners,0px))] lg:h-[calc(100dvh_-_8rem_-_var(--banners,0px))]">
       <PageHeader
         compact
         eyebrow="Kotka AI"
@@ -298,9 +313,11 @@ export default function KotkaAI() {
                     <Badge tone="warning">{lastSource === 'vision_unconfigured' ? 'Chart reading is off right now' : 'Kotka AI is having trouble. Try again soon.'}</Badge>
                   ) : null}
                   <UsageMeter usage={usage} />
-                  <button onClick={handleToggleFavorite} className="text-ink-300 hover:text-amber-400" aria-label={active.favorite ? 'Remove from favourites' : 'Add to favourites'} title={active.favorite ? 'Remove from favourites' : 'Add to favourites'}>
-                    <Star className={active.favorite ? 'h-4 w-4 fill-amber-400 text-amber-400' : 'h-4 w-4'} />
-                  </button>
+                  {!isDraft ? (
+                    <button onClick={handleToggleFavorite} className="text-ink-300 hover:text-amber-400" aria-label={active.favorite ? 'Remove from favourites' : 'Add to favourites'} title={active.favorite ? 'Remove from favourites' : 'Add to favourites'}>
+                      <Star className={active.favorite ? 'h-4 w-4 fill-amber-400 text-amber-400' : 'h-4 w-4'} />
+                    </button>
+                  ) : null}
                 </div>
               </div>
 

@@ -80,3 +80,14 @@ export async function conversationChannels(conv) {
   const members = await prisma.conversationMember.findMany({ where: { conversationId: conv.id, status: 'active' }, select: { userId: true } });
   return members.map((m) => `user:${m.userId}`);
 }
+
+// An account is being deleted: every group or community it owns passes to
+// the next longest-standing admin or member, so none is left without an owner.
+export async function handOverOwnership(userId) {
+  const owned = await prisma.conversationMember.findMany({ where: { userId, role: 'owner', status: 'active', conversation: { kind: { not: 'dm' } } }, select: { conversationId: true } });
+  for (const { conversationId } of owned) {
+    const heir = await prisma.conversationMember.findFirst({ where: { conversationId, status: 'active', userId: { not: userId } }, orderBy: [{ role: 'asc' }, { joinedAt: 'asc' }] });
+    if (heir) await prisma.conversationMember.update({ where: { id: heir.id }, data: { role: 'owner' } });
+  }
+  return owned.length;
+}

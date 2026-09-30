@@ -56,8 +56,8 @@ pushRouter.post('/subscribe', limit('push'), asyncHandler(async (req, res) => {
   // A browser belongs to whoever signed in last on it.
   const row = await prisma.pushSubscription.upsert({
     where: { endpoint: sub.endpoint },
-    update: { userId: req.userId, p256dh: sub.p256dh, auth: sub.auth, userAgent },
-    create: { userId: req.userId, ...sub, userAgent },
+    update: { userId: req.userId, p256dh: sub.p256dh, auth: sub.auth, userAgent, sessionId: req.sessionId ?? null },
+    create: { userId: req.userId, ...sub, userAgent, sessionId: req.sessionId ?? null },
   });
   const extra = await prisma.pushSubscription.findMany({ where: { userId: req.userId }, orderBy: { createdAt: 'desc' }, skip: MAX_DEVICES, select: { id: true } });
   if (extra.length) await prisma.pushSubscription.deleteMany({ where: { id: { in: extra.map((e) => e.id) } } });

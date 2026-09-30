@@ -1,8 +1,10 @@
+import { Suspense } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import ProtectedRoute from './ProtectedRoute';
 import RequireSuperAdmin from './RequireSuperAdmin';
 import AppLayout from '../components/layout/AppLayout';
 import AdminLayout from '../components/layout/AdminLayout';
+import { lazyPage, PageLoading } from '../lib/lazyPage';
 
 import Landing from '../features/marketing/Landing';
 import NotFound from '../features/marketing/NotFound';
@@ -11,63 +13,64 @@ import Signup from '../features/auth/Signup';
 import ForgotPassword from '../features/auth/ForgotPassword';
 import ResetPassword from '../features/auth/ResetPassword';
 import VerifyEmail from '../features/auth/VerifyEmail';
-import VerifyIdentity from '../features/verification/VerifyIdentity';
 
-import Dashboard from '../features/dashboard/Dashboard';
-import KotkaAI from '../features/ai/KotkaAI';
-import Journal from '../features/journal/Journal';
-import Checklist from '../features/checklist/Checklist';
-import Analytics from '../features/analytics/Analytics';
-import Calculators from '../features/calculators/Calculators';
-import MarketIntelligence from '../features/market-intelligence/MarketIntelligence';
-import Settings from '../features/settings/Settings';
-import Notifications from '../features/notifications/Notifications';
-
-import AdminOverview from '../features/admin/AdminOverview';
-import AdminUsers from '../features/admin/AdminUsers';
-import AdminAIUsage from '../features/admin/AdminAIUsage';
-import AdminTradingStats from '../features/admin/AdminTradingStats';
-import AdminJournalStats from '../features/admin/AdminJournalStats';
-import AdminAnnouncements from '../features/admin/AdminAnnouncements';
-import AdminAuditLogs from '../features/admin/AdminAuditLogs';
-import AdminSystemHealth from '../features/admin/AdminSystemHealth';
-import AdminSettings from '../features/admin/AdminSettings';
-import AdminIntegrations from '../features/admin/AdminIntegrations';
-import AdminResearch from '../features/admin/AdminResearch';
-import AdminVerifications from '../features/admin/AdminVerifications';
-import AdminBilling from '../features/admin/AdminBilling';
-import AdminCommunity from '../features/admin/AdminCommunity';
-import AdminUsage from '../features/admin/AdminUsage';
-import AdminGame from '../features/admin/AdminGame';
-import GameHome from '../features/game/GameHome';
-import GameWallet from '../features/game/Wallet';
-import GameMatch from '../features/game/MatchPage';
-import GameHistory from '../features/game/History';
-import GameProfile from '../features/game/Profile';
-import GameLearn from '../features/game/Learn';
-import GameLeaderboard from '../features/game/Leaderboard';
 import CommunityLayout from '../features/community/CommunityLayout';
-import ForYou from '../features/community/pages/ForYou';
-import Markets from '../features/community/pages/Markets';
-import MarketRoom from '../features/community/pages/MarketRoom';
-import Ideas from '../features/community/pages/Ideas';
-import PostPage from '../features/community/pages/PostPage';
-import CommunityEvents from '../features/community/pages/Events';
-import EventDetail from '../features/community/pages/EventDetail';
-import Following from '../features/community/pages/Following';
-import Messages from '../features/community/pages/Messages';
-import Profile from '../features/community/pages/Profile';
-import CommunitySearch from '../features/community/pages/Search';
-import Saved from '../features/community/pages/Saved';
-import NewsDetail from '../features/community/pages/NewsDetail';
-import Guidelines from '../features/community/pages/Guidelines';
-import Invite from '../features/community/pages/Invite';
-import CommunityGoals from '../features/community/pages/Goals';
-import GoalRoom from '../features/goals/GoalRoom';
-import PublicAchievement from '../features/goals/PublicAchievement';
+
+const VerifyIdentity = lazyPage(() => import('../features/verification/VerifyIdentity'));
+const Dashboard = lazyPage(() => import('../features/dashboard/Dashboard'));
+const KotkaAI = lazyPage(() => import('../features/ai/KotkaAI'));
+const Journal = lazyPage(() => import('../features/journal/Journal'));
+const Checklist = lazyPage(() => import('../features/checklist/Checklist'));
+const Analytics = lazyPage(() => import('../features/analytics/Analytics'));
+const Calculators = lazyPage(() => import('../features/calculators/Calculators'));
+const MarketIntelligence = lazyPage(() => import('../features/market-intelligence/MarketIntelligence'));
+const Settings = lazyPage(() => import('../features/settings/Settings'));
+const Notifications = lazyPage(() => import('../features/notifications/Notifications'));
+const AdminOverview = lazyPage(() => import('../features/admin/AdminOverview'));
+const AdminUsers = lazyPage(() => import('../features/admin/AdminUsers'));
+const AdminAIUsage = lazyPage(() => import('../features/admin/AdminAIUsage'));
+const AdminTradingStats = lazyPage(() => import('../features/admin/AdminTradingStats'));
+const AdminJournalStats = lazyPage(() => import('../features/admin/AdminJournalStats'));
+const AdminAnnouncements = lazyPage(() => import('../features/admin/AdminAnnouncements'));
+const AdminAuditLogs = lazyPage(() => import('../features/admin/AdminAuditLogs'));
+const AdminSystemHealth = lazyPage(() => import('../features/admin/AdminSystemHealth'));
+const AdminSettings = lazyPage(() => import('../features/admin/AdminSettings'));
+const AdminIntegrations = lazyPage(() => import('../features/admin/AdminIntegrations'));
+const AdminResearch = lazyPage(() => import('../features/admin/AdminResearch'));
+const AdminVerifications = lazyPage(() => import('../features/admin/AdminVerifications'));
+const AdminBilling = lazyPage(() => import('../features/admin/AdminBilling'));
+const AdminCommunity = lazyPage(() => import('../features/admin/AdminCommunity'));
+const AdminUsage = lazyPage(() => import('../features/admin/AdminUsage'));
+const AdminGame = lazyPage(() => import('../features/admin/AdminGame'));
+const GameHome = lazyPage(() => import('../features/game/GameHome'));
+const GameWallet = lazyPage(() => import('../features/game/Wallet'));
+const GameMatch = lazyPage(() => import('../features/game/MatchPage'));
+const GameHistory = lazyPage(() => import('../features/game/History'));
+const GameProfile = lazyPage(() => import('../features/game/Profile'));
+const GameLearn = lazyPage(() => import('../features/game/Learn'));
+const GameLeaderboard = lazyPage(() => import('../features/game/Leaderboard'));
+const ForYou = lazyPage(() => import('../features/community/pages/ForYou'));
+const Markets = lazyPage(() => import('../features/community/pages/Markets'));
+const MarketRoom = lazyPage(() => import('../features/community/pages/MarketRoom'));
+const Ideas = lazyPage(() => import('../features/community/pages/Ideas'));
+const PostPage = lazyPage(() => import('../features/community/pages/PostPage'));
+const CommunityEvents = lazyPage(() => import('../features/community/pages/Events'));
+const EventDetail = lazyPage(() => import('../features/community/pages/EventDetail'));
+const Following = lazyPage(() => import('../features/community/pages/Following'));
+const Messages = lazyPage(() => import('../features/community/pages/Messages'));
+const Profile = lazyPage(() => import('../features/community/pages/Profile'));
+const CommunitySearch = lazyPage(() => import('../features/community/pages/Search'));
+const Saved = lazyPage(() => import('../features/community/pages/Saved'));
+const NewsDetail = lazyPage(() => import('../features/community/pages/NewsDetail'));
+const Guidelines = lazyPage(() => import('../features/community/pages/Guidelines'));
+const Invite = lazyPage(() => import('../features/community/pages/Invite'));
+const CommunityGoals = lazyPage(() => import('../features/community/pages/Goals'));
+const GoalRoom = lazyPage(() => import('../features/goals/GoalRoom'));
+const PublicAchievement = lazyPage(() => import('../features/goals/PublicAchievement'));
 
 export default function AppRoutes() {
   return (
+    <Suspense fallback={<div className="p-6"><PageLoading /></div>}>
     <Routes>
       <Route path="/" element={<Landing />} />
       <Route path="/login" element={<Login />} />
@@ -169,5 +172,6 @@ export default function AppRoutes() {
 
       <Route path="*" element={<NotFound />} />
     </Routes>
+    </Suspense>
   );
 }

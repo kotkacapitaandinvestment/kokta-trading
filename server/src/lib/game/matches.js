@@ -17,6 +17,7 @@ import { prisma } from '../prisma.js';
 import { loadGameSettings } from './config.js';
 import { generateMarket, drawScenario, candlesUpTo, candleRange, templateOf, GENERATOR_VERSION } from './market.js';
 import { pairOf, publicPair } from './pairs.js';
+import { newMarketSecret } from './rng.js';
 import { simulate, validateAction } from './trading.js';
 import { scorePlayer } from './scoring.js';
 import { post, walletFor, HOUSE_WALLET, stakedToday, kobo } from './wallet.js';
@@ -47,10 +48,10 @@ const newCode = () => crypto.randomBytes(5).toString('base64url').replace(/[-_]/
 const markets = new Map();
 export function marketFor(match) {
   const bgTicks = match.rules?.backgroundTicks ?? 0;
-  const key = `${match.scenario}:${match.seed}:${match.generatorVersion}:${match.symbol}:${bgTicks}:${match.durationSec}:${match.candleSec}:${match.historyCandles}`;
+  const key = `${match.id}:${match.scenario}:${match.seed}:${match.generatorVersion}:${match.symbol}:${bgTicks}:${match.durationSec}:${match.candleSec}:${match.historyCandles}`;
   let m = markets.get(key);
   if (!m) {
-    m = generateMarket({ scenario: match.scenario, seed: match.seed, durationSec: match.durationSec, candleSec: match.candleSec, historyCandles: match.historyCandles, symbol: match.symbol, backgroundTicks: bgTicks, version: match.generatorVersion });
+    m = generateMarket({ scenario: match.scenario, seed: match.seed, durationSec: match.durationSec, candleSec: match.candleSec, historyCandles: match.historyCandles, symbol: match.symbol, backgroundTicks: bgTicks, version: match.generatorVersion, secret: match.secret });
     markets.set(key, m);
     if (markets.size > 20) markets.delete(markets.keys().next().value);
   }
@@ -77,6 +78,32 @@ async function move(tx, match, from, to, data = {}, actorId = null, reason = nul
 }
 
 const lockMatch = async (tx, id) => (await tx.$queryRaw`SELECT * FROM "GameMatch" WHERE "id" = ${id} FOR UPDATE`)[0] ?? null;
+
+// One money decision per trader at a time: parallel requests from the same
+// people queue here, so the checks below always see the latest state.
+// Always taken in the same (sorted) order, before any match row lock.
+async function lockTraders(tx, ids) {
+  for (const id of [...new Set(ids.filter(Boolean))].sort()) await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`kotka-trader:${id}`}))`;
+}
+const BUSY = ['READY', 'LOCKED', 'COUNTDOWN', 'ACTIVE'];
+async function assertFree(tx, userId, exceptMatchId, message) {
+  const live = await tx.gamePlayer.findFirst({ where: { userId, ...(exceptMatchId ? { matchId: { not: exceptMatchId } } : {}), match: { status: { in: BUSY } } }, select: { matchId: true } });
+  if (live) throw new GameError(message, 409, 'in_match');
+}
+async function assertWalletOpen(tx, userId) {
+  const w = await tx.wallet.findUnique({ where: { userId }, select: { frozenAt: true } });
+  if (w?.frozenAt) throw new GameError('Your wallet is on hold while a payment is reviewed. Contact support to clear it.', 403, 'wallet_frozen');
+}
+// Someone starting a match withdraws their other open challenges (stakes back).
+async function withdrawOtherChallenges(tx, userId, exceptMatchId) {
+  const others = await tx.gameMatch.findMany({ where: { creatorId: userId, status: 'WAITING_FOR_OPPONENT', id: { not: exceptMatchId } }, select: { id: true } });
+  for (const { id } of others) {
+    const o = await lockMatch(tx, id);
+    if (!o || o.status !== 'WAITING_FOR_OPPONENT') continue;
+    await releaseStakes(tx, o, 'stake_release', 'withdrawn: the trader started another match');
+    await move(tx, o, 'WAITING_FOR_OPPONENT', 'CANCELLED', {}, userId, 'the trader started another match');
+  }
+}
 
 // ── Eligibility ────────────────────────────────────────────────────────────
 
@@ -121,6 +148,8 @@ export async function createMatch(user, { mode = 'duel', stakeKobo = 0, duration
     if (opponentId) {
       const opp = await prisma.user.findUnique({ where: { id: opponentId }, select: { status: true } });
       if (!opp || opp.status !== 'active') throw new GameError('We couldn’t find that trader.', 404);
+      const blocked = await prisma.userRelation.findFirst({ where: { kind: 'block', OR: [{ userId: user.id, targetId: opponentId }, { userId: opponentId, targetId: user.id }] }, select: { userId: true } });
+      if (blocked) throw new GameError('You can’t challenge this trader.', 403);
     }
     const pending = await prisma.gameMatch.count({ where: { creatorId: user.id, status: 'WAITING_FOR_OPPONENT' } });
     if (pending >= s.maxOpenChallenges) throw new GameError(`You already have ${pending} challenges waiting. Cancel one or wait for them to be accepted.`);
@@ -130,7 +159,9 @@ export async function createMatch(user, { mode = 'duel', stakeKobo = 0, duration
 
   const { scenario, seed } = drawScenario(s.scenarios);
   const backgroundTicks = Math.round(s.backgroundHours * 3600);
-  const market = generateMarket({ scenario, seed, durationSec: duration, candleSec: s.candleSec, historyCandles: s.historyCandles, symbol: pair, backgroundTicks });
+  // The market's randomness comes from this secret. It never leaves the server.
+  const secret = newMarketSecret();
+  const market = generateMarket({ scenario, seed, durationSec: duration, candleSec: s.candleSec, historyCandles: s.historyCandles, symbol: pair, backgroundTicks, secret });
   const at = now();
   const source = practice ? 'practice' : quick ? 'quick' : rematchOfId ? 'rematch' : opponentId ? 'direct' : 'open';
   const rules = { trading: s.trading, weights: s.weights, scoring: s.scoring, drawTolerance: s.drawTolerance, noTradeRefund: s.noTradeRefund, revealScenario: s.revealScenario, backgroundTicks, source };
@@ -141,6 +172,7 @@ export async function createMatch(user, { mode = 'duel', stakeKobo = 0, duration
     scenarioCode: market.code,
     symbol: pair,
     seed,
+    secret,
     generatorVersion: GENERATOR_VERSION,
     marketHash: market.hash,
     durationSec: duration,
@@ -164,6 +196,13 @@ export async function createMatch(user, { mode = 'duel', stakeKobo = 0, duration
       for (const [f, t] of [[null, 'CREATED'], ['CREATED', 'READY'], ['READY', 'LOCKED'], ['LOCKED', 'COUNTDOWN']]) await record(tx, m.id, f, t, user.id, 'practice');
       return m;
     }
+    // Re-checked under the trader's lock, so parallel requests can't slip past.
+    await lockTraders(tx, [user.id]);
+    await assertWalletOpen(tx, user.id);
+    await assertFree(tx, user.id, null, 'Finish the match you’re in first.');
+    const pendingNow = await tx.gameMatch.count({ where: { creatorId: user.id, status: 'WAITING_FOR_OPPONENT' } });
+    if (pendingNow >= s.maxOpenChallenges) throw new GameError(`You already have ${pendingNow} challenges waiting. Cancel one or wait for them to be accepted.`);
+    if ((await stakedToday(user.id, tx)) + stakeKobo > s.dailyStakeLimitKobo) throw new GameError(`That would take your stakes today over the daily limit of ₦${(s.dailyStakeLimitKobo / 100).toLocaleString('en-NG')}.`);
     const minutes = opponentId ? s.directChallengeMinutes : s.openChallengeMinutes;
     const m = await tx.gameMatch.create({ data: { ...base, status: 'WAITING_FOR_OPPONENT', expiresAt: new Date(at.getTime() + minutes * 60e3), players: { create: { userId: user.id, role: 'creator' } } } });
     await record(tx, m.id, null, 'CREATED', user.id);
@@ -190,7 +229,9 @@ export async function joinMatch(user, matchId, { quick = false } = {}) {
   await assertCanPlayForMoney(user.id, s);
   await assertNotInLiveMatch(user.id);
   const at = now();
+  const peek = await prisma.gameMatch.findUnique({ where: { id: matchId }, select: { creatorId: true } });
   const result = await prisma.$transaction(async (tx) => {
+    await lockTraders(tx, [user.id, peek?.creatorId]);
     const m = await lockMatch(tx, matchId);
     if (!m || m.mode !== 'duel') throw new GameError('We couldn’t find that challenge.', 404);
     if (m.status !== 'WAITING_FOR_OPPONENT') throw new GameError('That challenge has already been taken or has closed.', 409);
@@ -198,11 +239,21 @@ export async function joinMatch(user, matchId, { quick = false } = {}) {
     if (m.creatorId === user.id) throw new GameError('You can’t accept your own challenge.');
     if (m.invitedUserId && m.invitedUserId !== user.id) throw new GameError('That challenge is for someone else.', 403);
     const stake = kobo(m.stakeKobo);
-    if ((await stakedToday(user.id)) + stake > s.dailyStakeLimitKobo) throw new GameError('That would take your stakes today over the daily limit.');
+    await assertWalletOpen(tx, user.id);
+    await assertFree(tx, user.id, null, 'Finish the match you’re in first.');
+    await assertFree(tx, m.creatorId, m.id, 'That trader has just started another match, so this challenge is closed.');
+    const creator = await tx.user.findUnique({ where: { id: m.creatorId }, select: { status: true } });
+    if (creator?.status !== 'active') throw new GameError('That challenge is no longer available.', 409);
+    const blocked = await tx.userRelation.findFirst({ where: { kind: 'block', OR: [{ userId: user.id, targetId: m.creatorId }, { userId: m.creatorId, targetId: user.id }] }, select: { userId: true } });
+    if (blocked) throw new GameError('That challenge isn’t available to you.', 403);
+    if ((await stakedToday(user.id, tx)) + stake > s.dailyStakeLimitKobo) throw new GameError('That would take your stakes today over the daily limit.');
     await tx.gamePlayer.create({ data: { matchId: m.id, userId: user.id, role: 'opponent' } });
     const w = await walletFor(user.id, tx);
     await post(tx, { walletId: w.id, userId: user.id, type: 'stake_lock', amount: stake, available: -stake, locked: stake, key: `stake_lock:${m.id}:${user.id}`, matchId: m.id });
     await move(tx, m, 'WAITING_FOR_OPPONENT', 'READY', { readyBy: new Date(at.getTime() + s.lobbyMinutes * 60e3), invitedUserId: user.id }, user.id);
+    // In a match now: both traders' other open challenges are withdrawn.
+    await withdrawOtherChallenges(tx, user.id, m.id);
+    await withdrawOtherChallenges(tx, m.creatorId, m.id);
     return m;
   }, TX);
   notify([{ userId: result.creatorId, type: 'challenge', actorId: user.id, title: quick ? `Opponent found: ${user.name}` : `${user.name} accepted your trading challenge`, body: 'You’re both in the lobby. Tap I’m ready to start the countdown.', link: `/app/game/matches/${result.id}` }]).catch(() => {});
@@ -213,12 +264,15 @@ export async function joinMatch(user, matchId, { quick = false } = {}) {
 export async function confirmMatch(user, matchId) {
   const s = await loadGameSettings();
   let started = null;
+  const seated = await prisma.gamePlayer.findMany({ where: { matchId }, select: { userId: true } });
   const result = await prisma.$transaction(async (tx) => {
+    await lockTraders(tx, seated.map((p) => p.userId));
     const m = await lockMatch(tx, matchId);
     if (!m) throw new GameError('We couldn’t find that match.', 404);
     const me = await tx.gamePlayer.findUnique({ where: { matchId_userId: { matchId, userId: user.id } } });
     if (!me) throw new GameError('You’re not in this match.', 403);
     if (m.status !== 'READY') throw new GameError('This match isn’t waiting for confirmation.', 409);
+    for (const p of seated) await assertFree(tx, p.userId, m.id, p.userId === user.id ? 'Finish your other match first.' : 'Your opponent is in another match right now. Leave the lobby and your stake comes back.');
     if (!me.confirmedAt) await tx.gamePlayer.update({ where: { id: me.id }, data: { confirmedAt: now() } });
     const unconfirmed = await tx.gamePlayer.count({ where: { matchId, confirmedAt: null } });
     if (unconfirmed === 0) {
@@ -231,7 +285,7 @@ export async function confirmMatch(user, matchId) {
     return m;
   }, TX);
   // The other player may have stepped away from the lobby: tell them it's starting.
-  if (started?.length) notify(started.map((userId) => ({ userId, type: 'challenge', actorId: user.id, title: 'Your trading match is starting', body: `The market opens in ${s.countdownSec} seconds. Both of you are ready.`, link: `/app/game/matches/${matchId}` }))).catch(() => {});
+  if (started?.length) notify(started.map((userId) => ({ userId, type: 'challenge', actorId: null, title: 'Your trading match is starting', body: `The market opens in ${s.countdownSec} seconds. Both of you are ready.`, link: `/app/game/matches/${matchId}` }))).catch(() => {});
   return result;
 }
 
@@ -256,11 +310,28 @@ export async function cancelMatch(user, matchId) {
     const others = new Set([m.creatorId, m.invitedUserId, ...(await tx.gamePlayer.findMany({ where: { matchId }, select: { userId: true } })).map((p) => p.userId)]);
     others.delete(user.id);
     others.delete(null);
-    tellOthers = [...others].map((userId) => ({ userId, type: 'challenge', actorId: user.id, title: m.creatorId === user.id ? `${user.name} cancelled the trading challenge` : `${user.name} left the trading match`, body: kobo(m.stakeKobo) ? 'Your stake is back in your available balance.' : 'Nothing was staked.', link: '/app/game' }));
+    tellOthers = [...others].map((userId) => ({ userId, type: 'challenge', actorId: null, title: m.creatorId === user.id ? `${user.name} cancelled the trading challenge` : `${user.name} left the trading match`, body: kobo(m.stakeKobo) ? 'Your stake is back in your available balance.' : 'Nothing was staked.', link: '/app/game' }));
     return m;
   }, TX);
   if (tellOthers.length) notify(tellOthers).catch(() => {});
   return result;
+}
+
+// A suspended or banned trader: their open challenges and lobbies close,
+// stakes back to everyone, and any Quick Match search ends. A match already
+// running carries on and settles as normal.
+export async function closeOpenFor(userId, reason = 'account suspended') {
+  const rows = await prisma.gameMatch.findMany({ where: { status: { in: ['WAITING_FOR_OPPONENT', 'READY'] }, OR: [{ creatorId: userId }, { players: { some: { userId } } }] }, select: { id: true } });
+  for (const { id } of rows) {
+    await prisma.$transaction(async (tx) => {
+      const m = await lockMatch(tx, id);
+      if (!m || !['WAITING_FOR_OPPONENT', 'READY'].includes(m.status)) return;
+      await releaseStakes(tx, m, 'stake_release', reason);
+      await move(tx, m, ['WAITING_FOR_OPPONENT', 'READY'], 'CANCELLED', {}, null, reason);
+    }, TX);
+  }
+  await prisma.gameQueue.deleteMany({ where: { userId } });
+  return rows.length;
 }
 
 async function releaseStakes(tx, m, type, why) {
@@ -328,11 +399,17 @@ export async function sweep({ limit = 50 } = {}) {
 
 // ── Scoring and settlement ─────────────────────────────────────────────────
 
+// Scores decide it, with one rule: someone who didn't really trade (no
+// position, or only token ones) can't win against someone who did. If they
+// would have, it's a draw.
 export function decideResult(scores, tolerance) {
   if (scores.length < 2) return { winnerId: null, draw: false };
   const [a, b] = scores;
   if (Math.abs(a.score - b.score) <= tolerance) return { winnerId: null, draw: true };
-  return { winnerId: a.score > b.score ? a.userId : b.userId, draw: false };
+  const winner = a.score > b.score ? a : b;
+  const loser = winner === a ? b : a;
+  if (winner.engaged === false && loser.engaged !== false) return { winnerId: null, draw: true, reason: 'winner_did_not_trade' };
+  return { winnerId: winner.userId, draw: false };
 }
 
 async function finish(matchId) {
@@ -365,7 +442,7 @@ async function finish(matchId) {
       const mine = actions.filter((a) => a.userId === p.userId);
       const sim = simulate({ market, actions: mine, capital: m.startingCapital, rules: rules.trading, upTo: m.durationSec - 1, final: true });
       const s = scorePlayer({ market, sim, rules: rules.trading, weights: rules.weights, scoring: rules.scoring });
-      return { player: p, userId: p.userId, sim, ...s };
+      return { player: p, userId: p.userId, sim, ...s, engaged: s.metrics.engaged };
     });
 
     const practice = m.mode === 'practice';
@@ -422,6 +499,7 @@ async function finish(matchId) {
     const result = {
       winnerId: decision.winnerId,
       draw: decision.draw,
+      reason: decision.reason ?? null,
       refund,
       scores: scored.map((x) => ({ userId: x.userId, score: x.score, returnPct: x.sim.returnPct })),
       pool: cash.pool,
@@ -447,7 +525,7 @@ async function notifyResults(matchId, players) {
     const other = players.find((x) => x.userId !== p.userId);
     const scores = `Your Kotka Score ${p.score?.toFixed(1)}, theirs ${other?.score?.toFixed(1)}.`;
     const title = { win: `You won ${cash(paid.get(p.userId) ?? 0)}`, loss: 'You lost this trading match', draw: `Draw: ${cash(paid.get(p.userId) ?? 0)} to you`, refund: 'Stakes returned: neither of you traded' }[p.outcome] ?? 'Your trading match has finished';
-    return { userId: p.userId, type: 'challenge', actorId: other?.userId ?? null, title, body: p.outcome === 'refund' ? 'Both stakes went back in full, with no fee.' : `${scores} See what went well and what to work on.`, link: `/app/game/matches/${matchId}` };
+    return { userId: p.userId, type: 'challenge', actorId: null, title, body: p.outcome === 'refund' ? 'Both stakes went back in full, with no fee.' : `${scores} See what went well and what to work on.`, link: `/app/game/matches/${matchId}` };
   });
   await notify(items);
 }
@@ -613,6 +691,12 @@ export function summary(m, people = new Map()) {
   };
 }
 
+// Which of these accounts are active (not suspended or banned).
+export async function activeIds(ids) {
+  const rows = await prisma.user.findMany({ where: { id: { in: [...new Set(ids.filter(Boolean))] }, status: 'active' }, select: { id: true } });
+  return new Set(rows.map((r) => r.id));
+}
+
 export async function peopleFor(ids) {
   const list = await prisma.user.findMany({ where: { id: { in: [...new Set(ids.filter(Boolean))] } }, select: { id: true, name: true, username: true, initials: true, avatarId: true } });
   return new Map(list.map((u) => [u.id, u]));
@@ -691,8 +775,11 @@ export async function matchView(user, matchId, { since = null, ticksSince = null
     // The opponent's standing, not their positions: no copying.
     const opp = players.find((p) => p.userId !== user.id);
     if (opp) {
-      const o = await playerState(m, opp.userId, market, tick);
-      view.opponent = { returnPct: o.sim.returnPct, trades: o.sim.trades.length, inPosition: !!o.sim.position };
+      // Their standing, 30 seconds late and to the nearest 0.5%: enough to feel
+      // the race, not enough to work out (or copy) what they hold.
+      const OPP_DELAY = 30;
+      const o = await playerState(m, opp.userId, market, Math.max(-1, tick - OPP_DELAY));
+      view.opponent = { returnPct: Math.round(o.sim.returnPct * 2) / 2, trades: o.sim.trades.length, inPosition: !!o.sim.position, delaySec: OPP_DELAY };
     }
   } else if (tick < 0) {
     view.me = { position: null, equity: m.startingCapital, cash: m.startingCapital, returnPct: 0, trades: [], log: [] };
@@ -719,7 +806,7 @@ async function resultView(m, players, people, viewerId, market) {
     players: players.map(reveal),
     viewerId,
     // Replay: the whole market and its events, now that the match is over.
-    market: { code: m.scenarioCode, name: templateOf(m.scenario)?.name, seed: m.seed, events: market.events.map((e) => ({ ...e, tick: e.tick - market.historyTicks })).filter((e) => e.tick >= 0), historyTicks: market.historyTicks },
+    market: { code: m.scenarioCode, name: templateOf(m.scenario)?.name, seed: m.seed, secret: m.status === 'SETTLED' ? m.secret ?? null : null, hash: m.status === 'SETTLED' ? m.marketHash : null, version: m.generatorVersion, events: market.events.map((e) => ({ ...e, tick: e.tick - market.historyTicks })).filter((e) => e.tick >= 0), historyTicks: market.historyTicks },
   };
 }
 
@@ -732,8 +819,9 @@ export async function lobby(user) {
   ]);
   for (const m of mine) if ((m.expiresAt && m.expiresAt <= at) || (m.endsAt && m.endsAt <= at) || (m.readyBy && m.readyBy <= at && m.status === 'READY') || (m.status === 'COUNTDOWN' && m.startsAt <= at)) await advance(m.id).catch(() => {});
   const fresh = await prisma.gameMatch.findMany({ where: { id: { in: mine.map((m) => m.id) } }, orderBy: { createdAt: 'desc' } });
+  const active = await activeIds(open.map((m) => m.creatorId));
   const people = await peopleFor([...fresh, ...open].flatMap((m) => [m.creatorId, m.invitedUserId]));
-  return { mine: fresh.map((m) => summary(m, people)), open: open.map((m) => summary(m, people)) };
+  return { mine: fresh.map((m) => summary(m, people)), open: open.filter((m) => active.has(m.creatorId)).map((m) => summary(m, people)) };
 }
 
 export async function history(userId, { take = 30, cursor } = {}) {

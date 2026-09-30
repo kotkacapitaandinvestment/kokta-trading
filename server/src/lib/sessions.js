@@ -96,6 +96,8 @@ function forget(ids) {
 export async function revokeSession(id) {
   await prisma.session.updateMany({ where: { id, revokedAt: null }, data: { revokedAt: new Date() } });
   forget([id]);
+  // That device stops getting push notifications too.
+  await prisma.pushSubscription.deleteMany({ where: { sessionId: id } }).catch(() => {});
 }
 
 // Revokes every session of a user, optionally keeping one (the current).
@@ -104,6 +106,10 @@ export async function revokeUserSessions(userId, { except = null } = {}) {
   if (!rows.length) return 0;
   await prisma.session.updateMany({ where: { id: { in: rows.map((r) => r.id) } }, data: { revokedAt: new Date() } });
   forget(rows.map((r) => r.id));
+  // Signed-out devices stop getting push notifications (lock-screen previews
+  // of messages). Older subscriptions without a session go too; the current
+  // device signs up again the next time it opens the app.
+  await prisma.pushSubscription.deleteMany({ where: { userId, OR: [{ sessionId: { in: rows.map((r) => r.id) } }, { sessionId: null }] } }).catch(() => {});
   return rows.length;
 }
 

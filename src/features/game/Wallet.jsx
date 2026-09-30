@@ -13,6 +13,7 @@ import { api } from '../../lib/api';
 import { confirmDialog, toast } from '../../lib/dialogs';
 import { naira } from './format';
 import GameNav from './GameNav';
+import { CONTACT } from '../../lib/contact';
 
 const DEP_STATUS = { initiated: ['Waiting for payment', 'neutral'], succeeded: ['Added', 'profit'], failed: ['Didn’t go through', 'loss'], expired: ['Expired', 'neutral'] };
 const WD_STATUS = { requested: ['Waiting for review', 'warning'], processing: ['Sending', 'neutral'], paid: ['Paid', 'profit'], failed: ['Failed: money returned', 'loss'], rejected: ['Declined: money returned', 'loss'], cancelled: ['Cancelled', 'neutral'] };
@@ -191,6 +192,13 @@ export default function Wallet() {
         description="Real money, held as Kotka Credits (1 credit = ₦1). The capital you trade with inside a match is virtual, has no cash value, and is separate from this."
         actions={<Button as={Link} to="/app/game" icon={Swords}>Play</Button>}
       />
+
+      {w.onHold ? (
+        <div role="alert" className="flex items-start gap-2 rounded-xl border border-loss-500/30 bg-loss-50 p-3 text-sm text-loss-700 dark:bg-loss-500/10 dark:text-loss-400">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+          <span>Your wallet is on hold while a payment is reviewed, so staking and withdrawals are paused. Your balance is safe. <a href={`mailto:${CONTACT.support}`} className="font-medium underline">Contact support</a> if you have questions.</span>
+        </div>
+      ) : null}
 
       {checking ? (
         <div className={clsx('flex items-center gap-2 rounded-xl border p-3 text-sm', checking.status === 'succeeded' ? 'border-profit-500/30 bg-profit-50 text-profit-700 dark:bg-profit-500/10 dark:text-profit-400' : checking.status === 'failed' ? 'border-loss-500/30 bg-loss-50 text-loss-600 dark:bg-loss-500/10' : 'border-ink-200 text-ink-600 dark:border-ink-700 dark:text-ink-300')}>

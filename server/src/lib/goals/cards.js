@@ -30,7 +30,8 @@ const plural = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 const f = (key, label, value, opts = {}) => ({ key, label, value, kind: opts.kind ?? 'stat', unit: opts.unit, sensitive: !!opts.sensitive, on: opts.on ?? !opts.sensitive });
 
 function identityFields(user) {
-  return [f('name', 'Your name', user.name, { kind: 'identity' }), ...(user.username ? [f('username', 'Your username', `@${user.username}`, { kind: 'identity' })] : [])];
+  // Off unless the person turns them on: a public link shouldn't name you by default.
+  return [f('name', 'Your name', user.name, { kind: 'identity', on: false }), ...(user.username ? [f('username', 'Your username', `@${user.username}`, { kind: 'identity', on: false })] : [])];
 }
 
 const EYEBROW = {

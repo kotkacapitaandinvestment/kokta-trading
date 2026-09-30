@@ -29,6 +29,10 @@ export const LIMITS = {
   userDelete: [30, 3600e3], // a Super Admin permanently deleting accounts
   quickMatch: [120, 3600e3], // starting a Quick Match search
   gameReady: [120, 3600e3], // turning Ready to Trade on or off
+  gameLobby: [120, 3600e3], // confirming, leaving or cancelling
+  messageEdit: [120, 3600e3],
+  groupCreate: [40, 86400e3], // new groups and communities per day
+  sentimentVote: [60, 3600e3],
   mfa: [6, 15 * 60e3],
   mfaSetup: [10, 3600e3],
   kyc: [10, 3600e3],
@@ -53,13 +57,18 @@ function prune() {
 }
 
 // Records a hit for `key` unless it is already at `max` in the window.
-// Returns true when over the limit (the hit is then not recorded).
+// Returns true when over the limit (the hit is then not recorded). The count
+// and the insert happen under a lock on the key, so a burst of parallel
+// requests (guessing a 2FA code, say) can't all slip under the limit.
 export async function hit(key, max, windowMs) {
   prune();
-  const n = await prisma.rateLimitHit.count({ where: { key, createdAt: { gte: new Date(Date.now() - windowMs) } } });
-  if (n >= max) return true;
-  await prisma.rateLimitHit.create({ data: { key } });
-  return false;
+  return prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`kotka-rl:${key}`}))`;
+    const n = await tx.rateLimitHit.count({ where: { key, createdAt: { gte: new Date(Date.now() - windowMs) } } });
+    if (n >= max) return true;
+    await tx.rateLimitHit.create({ data: { key } });
+    return false;
+  }, { maxWait: 10000, timeout: 10000 });
 }
 
 const TOO_FAST = 'You’re going a bit fast. Please wait a little and try again.';

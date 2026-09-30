@@ -229,6 +229,18 @@ function Ledger({ canEdit }) {
       toast(err.message, { tone: 'error' });
     }
   };
+  const hold = async (w, on) => {
+    const reason = on ? await promptDialog({ title: `Put ${w.user.name}’s wallet on hold?`, message: 'They can’t stake or withdraw until you clear it. Their balance stays as it is.', label: 'Reason', confirmLabel: 'Put on hold', danger: true }) : null;
+    if (on && !reason) return;
+    if (!on && !(await confirmDialog({ title: `Clear the hold on ${w.user.name}’s wallet?`, message: w.wallet.holdReason ? `It was held because: ${w.wallet.holdReason}` : 'They can stake and withdraw again.', confirmLabel: 'Clear hold' }))) return;
+    try {
+      await api.post(`/admin/game/wallets/${w.user.id}/hold`, { on, reason });
+      toast(on ? 'Wallet on hold.' : 'Hold cleared.');
+      setWallets((list) => list.map((x) => (x.user.id === w.user.id ? { ...x, wallet: { ...x.wallet, onHold: on, holdReason: on ? reason : null } } : x)));
+    } catch (err) {
+      toast(err.message, { tone: 'error' });
+    }
+  };
   if (error) return <LoadError message={error} />;
   return (
     <div className="space-y-6">
@@ -245,8 +257,14 @@ function Ledger({ canEdit }) {
                   <button type="button" onClick={() => { setUserId(w.user.id); setHouse(false); }} className="text-left">
                     {w.user.name} <span className="text-xs text-ink-400">{w.user.email}</span>
                     <span className="block text-xs text-ink-400">{naira(w.wallet.availableKobo)} available · {naira(w.wallet.lockedKobo)} locked · {naira(w.wallet.pendingWithdrawKobo)} withdrawing</span>
+                    {w.wallet.onHold ? <span className="mt-0.5 block text-xs font-medium text-loss-600 dark:text-loss-400">On hold: {w.wallet.holdReason}</span> : null}
                   </button>
-                  {canEdit ? <Button size="sm" variant="ghost" onClick={() => adjust(w)}>Adjust</Button> : null}
+                  {canEdit ? (
+                    <span className="flex gap-1">
+                      <Button size="sm" variant="ghost" onClick={() => adjust(w)}>Adjust</Button>
+                      <Button size="sm" variant={w.wallet.onHold ? 'secondary' : 'dangerGhost'} onClick={() => hold(w, !w.wallet.onHold)}>{w.wallet.onHold ? 'Clear hold' : 'Put on hold'}</Button>
+                    </span>
+                  ) : null}
                 </li>
               ))}
             </ul>
@@ -310,7 +328,7 @@ function Risk() {
           <span className="text-xs tabular-nums text-ink-500">{r.matches} competitions · {naira(r.stakedKobo)} staked · last {when(r.last)}</span>
         </li>
       ), 'No pair has played three times in this period.')}
-      {section('Lost without trading', 'One player lost without opening a single position while the other won, at least twice between the same two. This is how money can be passed between accounts.', data?.oneSidedLosses ?? [], (r, i) => (
+      {section('Lost without really trading', 'One player lost with no position, or only a token one, while the other won, at least twice between the same two. This is how money can be passed between accounts.', data?.oneSidedLosses ?? [], (r, i) => (
         <li key={i} className="flex flex-wrap items-center justify-between gap-2 py-2.5">
           <span>{who(r.loser)} <span className="text-ink-400">lost to</span> {who(r.winner)}</span>
           <span className="text-xs tabular-nums text-ink-500">{r.matches} times · {naira(r.passedKobo)} in stakes · last {when(r.last)}</span>
@@ -421,10 +439,33 @@ function Settings() {
         </CardBody>
       </Card>
       <Card>
-        <CardHeader title="Score weights" subtitle="How much each part counts in the Kotka Performance Score." />
+        <CardHeader
+          title="Score weights"
+          subtitle="How much each part counts in the Kotka Performance Score, in percent. They must add up to 100. Traders see these on the Learn page; new matches use them."
+          action={(() => {
+            const total = Object.values(draft.weights).reduce((s, x) => s + (Number(x) || 0), 0);
+            return <Badge tone={total === 100 ? 'profit' : 'loss'}>Total {total}%</Badge>;
+          })()}
+        />
         <CardBody className="grid grid-cols-2 gap-4 sm:grid-cols-5">
           {Object.keys(draft.weights).map((k) => (
-            <Input key={k} label={k[0].toUpperCase() + k.slice(1)} inputMode="numeric" value={draft.weights[k]} disabled={!can} onChange={(e) => set('weights', { ...draft.weights, [k]: Number(e.target.value || 0) })} />
+            <Input key={k} label={`${k[0].toUpperCase() + k.slice(1)} (%)`} inputMode="numeric" value={draft.weights[k]} disabled={!can} onChange={(e) => set('weights', { ...draft.weights, [k]: Number(e.target.value.replace(/[^\d]/g, '') || 0) })} />
+          ))}
+        </CardBody>
+      </Card>
+      <Card>
+        <CardHeader title="Scoring rules" subtitle="The thresholds behind the risk, decision and consistency checks. The Learn page quotes them, and new matches use them." />
+        <CardBody className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          {[
+            ['goodRiskPct', 'Sensible risk per trade (%)', 'At or below this counts in the trader’s favour.'],
+            ['maxRiskPct', 'Risk ceiling per trade (%)', 'Above this is flagged as too much on one trade.'],
+            ['highLeveragePct', 'Very large position (% of capital)', 'Above this is flagged, e.g. 300 = 3× capital.'],
+            ['overtradesPer15Min', 'Overtrading (trades per 15 min)', 'More than this, scaled to the match length.'],
+            ['revengeTicks', 'Trade straight after a loss (seconds)', 'A new trade this soon after closing a loss is flagged.'],
+            ['driftGraceTicks', 'Grace after an idea is invalidated (seconds)', 'Staying in longer than this is thesis drift.'],
+            ['fullCreditSizePct', 'Full process credit from (% of capital)', 'Smaller positions earn proportionally less credit. Below half credit, a player can’t win.'],
+          ].map(([k, label, hint]) => (
+            <Input key={k} label={label} hint={hint} inputMode="decimal" value={draft.scoring?.[k] ?? ''} disabled={!can} onChange={(e) => set('scoring', { ...draft.scoring, [k]: e.target.value === '' ? '' : Number(e.target.value.replace(/[^\d.]/g, '')) })} />
           ))}
         </CardBody>
       </Card>

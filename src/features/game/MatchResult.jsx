@@ -22,6 +22,7 @@ function Bar({ value, tone }) {
 function headline(me, m) {
   if (me.outcome === 'practice') return ['Practice complete', 'No stake. Your score and lessons are below.'];
   if (me.outcome === 'refund') return ['Stakes returned', `Neither of you traded, so ${naira(me.payoutKobo)} went back to your balance with no fee.`];
+  if (me.outcome === 'draw' && m.result?.reason === 'winner_did_not_trade') return ['Draw', `The higher score came from a player who didn’t really trade, and a competition can’t be won without trading. It counts as a draw: ${naira(me.payoutKobo)} went to your balance.`];
   if (me.outcome === 'draw') return ['Draw', `Your scores were within ${m.rules.drawTolerance} point${m.rules.drawTolerance === 1 ? '' : 's'}. ${naira(me.payoutKobo)} went to your balance.`];
   if (me.outcome === 'win') return ['You won', `${naira(me.payoutKobo)} went to your balance (the ${naira(m.poolKobo)} pool less Kotka’s ${naira(m.feeKobo)} fee).`];
   return ['You lost', `Your ${naira(m.stakeKobo)} stake went to the prize pool.`];

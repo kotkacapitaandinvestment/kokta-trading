@@ -6,7 +6,7 @@
 //   is queued for moderators (guaranteed returns, account management,
 //   off-platform contact, signal selling, suspicious links).
 
-const APP_HOSTS = new Set(['kokta-trading.vercel.app', 'localhost']);
+const APP_HOSTS = new Set(['kotkafinance.online', 'www.kotkafinance.online', 'kokta-trading.vercel.app', 'localhost']);
 
 const RULES = [
   { flag: 'guaranteed_returns', re: /\b(guarantee(d|s)?|assured|certain)\s+(profits?|returns?|income|wins?|gains?)\b|\brisk[- ]?free\s+(profits?|returns?|trad\w*|income)\b|\b(100|9\d)\s?%\s+(win|accuracy|success|sure)\b|\bdouble\s+your\s+(money|account|capital|funds|investment)\b|\b\d{1,3}\s?%\s+(daily|weekly|per\s+(day|week))\s+(returns?|profits?|roi)\b|\bnever\s+lose\b/i },

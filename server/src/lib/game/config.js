@@ -148,8 +148,30 @@ export function sanitizeGameSettings(input, current) {
       if (v === undefined) return { error: 'Each score weight must be a whole number from 0 to 100.' };
       w[k] = v;
     }
-    if (!Object.values(w).some((x) => x > 0)) return { error: 'At least one score weight must be above 0.' };
+    const total = Object.values(w).reduce((s, x) => s + x, 0);
+    if (total !== 100) return { error: `The score weights must add up to 100. They add up to ${total} now.` };
     out.weights = w;
+  }
+  // The thresholds behind the risk, decision and consistency checks.
+  if (input.scoring !== undefined) {
+    const sc = { ...out.scoring, ...(input.scoring ?? {}) };
+    const checks = [
+      ['goodRiskPct', 0.1, 10, 'Sensible risk per trade must be 0.1% to 10%.'],
+      ['maxRiskPct', 0.5, 50, 'The risk ceiling per trade must be 0.5% to 50%.'],
+      ['highLeveragePct', 100, 2000, 'A very large position must be set between 100% and 2,000% of capital.'],
+      ['overtradesPer15Min', 1, 60, 'Overtrading must be set between 1 and 60 trades per 15 minutes.'],
+      ['revengeTicks', 5, 600, 'A trade straight after a loss must be set between 5 and 600 seconds.'],
+      ['driftGraceTicks', 5, 600, 'The grace period after an idea is invalidated must be 5 to 600 seconds.'],
+      ['fullCreditSizePct', 5, 100, 'Full process credit must start at a position of 5% to 100% of capital.'],
+    ];
+    const clean = {};
+    for (const [k, lo, hi, msg] of checks) {
+      const v = num(sc[k], lo, hi);
+      if (v === undefined) return { error: msg };
+      clean[k] = v;
+    }
+    if (clean.maxRiskPct <= clean.goodRiskPct) return { error: 'The risk ceiling must be higher than sensible risk per trade.' };
+    out.scoring = clean;
   }
   if (input.trading !== undefined) {
     const t = input.trading ?? {};
@@ -190,6 +212,7 @@ export function publicGameRules(s) {
     drawTolerance: s.drawTolerance,
     noTradeRefund: s.noTradeRefund,
     weights: s.weights,
+    scoring: s.scoring,
     trading: s.trading,
     matchesEnabled: s.matchesEnabled,
     depositsEnabled: s.depositsEnabled,

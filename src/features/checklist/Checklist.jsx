@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { CheckCircle2, Circle, Sparkles, RotateCcw } from 'lucide-react';
 import PageHeader from '../../components/ui/PageHeader';
 import Hint from '../../components/ui/Hint';
@@ -7,26 +7,35 @@ import Card, { CardBody, CardHeader } from '../../components/ui/Card';
 import Button from '../../components/ui/Button';
 import ProgressRing from '../../components/ui/ProgressRing';
 import { api } from '../../lib/api';
+import { toast } from '../../lib/dialogs';
+import { localDay } from '../../lib/day';
 import { CHART_COLORS } from '../../lib/chartColors';
 import { CHECKLIST_ITEMS as items } from './items';
 
-
-const today = () => new Date().toISOString().slice(0, 10);
-
 export default function Checklist() {
-  const [checked, setChecked] = useState({});
-  const date = today();
+  // null until today's ticks have loaded. Items can't be ticked before then:
+  // a save sends the whole day, so ticking early would wipe earlier ticks.
+  const [checked, setChecked] = useState(null);
+  const date = localDay();
+  const saves = useRef(Promise.resolve());
 
-  useEffect(() => {
-    api.get(`/checklist/${date}`).then(({ items }) => setChecked(items));
-  }, [date]);
+  const load = useCallback(() => api.get(`/checklist/${date}`).then(({ items }) => setChecked(items)).catch(() => {
+    setChecked((c) => c ?? {});
+    toast('Today’s checklist couldn’t be loaded. Check your connection and refresh.', { tone: 'error' });
+  }), [date]);
+  useEffect(() => { load(); }, [load]);
 
+  // One save at a time, in order, so the last tick is the one that sticks.
   const persist = (next) => {
     setChecked(next);
-    api.put(`/checklist/${date}`, { items: next });
+    saves.current = saves.current.then(() => api.put(`/checklist/${date}`, { items: next })).catch(() => {
+      toast('That change wasn’t saved. Check your connection and try again.', { tone: 'error' });
+      return load();
+    });
   };
 
-  const completedCount = items.filter((i) => checked[i.id]).length;
+  const loading = checked === null;
+  const completedCount = items.filter((i) => checked?.[i.id]).length;
   const baseScore = Math.round((completedCount / items.length) * 100);
   const aiApproved = completedCount === items.length;
 
@@ -36,7 +45,7 @@ export default function Checklist() {
     return { label: 'Not ready', tone: 'text-loss-500' };
   }, [baseScore]);
 
-  const toggle = (id) => persist({ ...checked, [id]: !checked[id] });
+  const toggle = (id) => !loading && persist({ ...checked, [id]: !checked[id] });
   const reset = () => persist({});
 
   return (
@@ -46,7 +55,7 @@ export default function Checklist() {
         title="Pre-Trade Checklist"
         description="Complete every item before opening a position. This is the gate between impulse and execution."
         actions={
-          <Button variant="ghost" size="sm" icon={RotateCcw} onClick={reset}>
+          <Button variant="ghost" size="sm" icon={RotateCcw} onClick={reset} disabled={loading}>
             Reset for new trade
           </Button>
         }
@@ -55,14 +64,18 @@ export default function Checklist() {
       <Hint id="checklist-journal" className="mb-4 max-w-2xl">Reset for each new trade. When you log it in the journal, tick "Pre-trade checklist was completed". That tick is what your discipline score counts.</Hint>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        <div className="space-y-3 lg:col-span-2">
+        <div className="space-y-3 lg:col-span-2" aria-busy={loading}>
           {items.map((item) => (
             <button
               key={item.id}
+              type="button"
+              role="checkbox"
+              aria-checked={!!checked?.[item.id]}
+              disabled={loading}
               onClick={() => toggle(item.id)}
-              className="flex w-full items-start gap-3 rounded-2xl border border-ink-100 bg-white p-4 text-left transition-colors hover:border-ink-200 dark:border-ink-800 dark:bg-ink-900 dark:hover:border-ink-700"
+              className="flex w-full items-start gap-3 rounded-2xl border border-ink-100 bg-white p-4 text-left transition-colors hover:border-ink-200 disabled:cursor-wait disabled:opacity-60 dark:border-ink-800 dark:bg-ink-900 dark:hover:border-ink-700"
             >
-              {checked[item.id] ? (
+              {checked?.[item.id] ? (
                 <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-profit-500" />
               ) : (
                 <Circle className="mt-0.5 h-5 w-5 shrink-0 text-ink-300" />

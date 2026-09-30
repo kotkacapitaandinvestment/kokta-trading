@@ -210,7 +210,7 @@ export default function LiveMatch({ view, now, apply, ticksSince }) {
           ['Virtual balance', `${virtual(me.equity)}`, '', pct(me.returnPct)],
           ['Unrealised P/L', pos ? `${pos.unrealised >= 0 ? '+' : '−'}${virtual(Math.abs(pos.unrealised))}` : '—', pos ? (pos.unrealised >= 0 ? 'text-profit-600 dark:text-profit-400' : 'text-loss-500') : ''],
           ['Exposure', pos ? `${pos.sizePct}%` : 'None', '', pos ? `${pos.side === 'long' ? 'Long' : 'Short'} · risk ${pos.riskPct == null ? 'no stop' : `${pos.riskPct}%`}` : 'No open position'],
-          view.opponent ? ['Opponent', pct(view.opponent.returnPct), '', `${view.opponent.trades} trade${view.opponent.trades === 1 ? '' : 's'} · ${view.opponent.inPosition ? 'in a position' : 'no position'}`] : ['Mode', 'Practice', '', 'No opponent'],
+          view.opponent ? ['Opponent', `≈ ${pct(view.opponent.returnPct, 1)}`, '', `${view.opponent.delaySec ? `${view.opponent.delaySec} s ago · ` : ''}${view.opponent.trades} trade${view.opponent.trades === 1 ? '' : 's'} · ${view.opponent.inPosition ? 'in a position' : 'no position'}`] : ['Mode', 'Practice', '', 'No opponent'],
         ].map(([k, v, tone, sub]) => (
           <div key={k} className="rounded-xl border border-ink-100 bg-white px-4 py-3 dark:border-ink-800 dark:bg-ink-900">
             <p className="flex items-center gap-1 text-[11px] uppercase tracking-wide text-ink-400">{k === 'Time left' ? <Clock3 className="h-3 w-3" /> : null}{k}</p>

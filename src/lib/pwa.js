@@ -119,6 +119,22 @@ export async function disablePush() {
   emitPush();
 }
 
+// The server ties each browser's push subscription to the signed-in session
+// (signing a device out stops its pushes). Once per visit, quietly tell it
+// about this browser's subscription again. Never prompts.
+export async function resyncPush() {
+  try {
+    if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
+    if (sessionStorage.getItem('kotka:push-synced')) return;
+    const sub = await currentSubscription();
+    if (!sub) return;
+    await api.post('/push/subscribe', { subscription: sub.toJSON() });
+    sessionStorage.setItem('kotka:push-synced', '1');
+  } catch {
+    // Push is optional; a failed sync is retried on the next visit.
+  }
+}
+
 // Signing out: this browser should stop receiving that account's pushes.
 export async function forgetDeviceOnLogout() {
   try {

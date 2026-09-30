@@ -14,7 +14,8 @@ import { postViews, buildFeed, POST_INCLUDE, trendScore } from '../../lib/commun
 import { audit, auditLater } from '../../lib/audit.js';
 import { limit } from '../../lib/rateLimit.js';
 import { TOPICS } from './social.js';
-import { requireProfile, clampInt, str } from './context.js';
+import { requireProfile, notMuted, clampInt, str } from './context.js';
+import { dropAttachedMedia } from '../../lib/media.js';
 
 export const postsRouter = Router();
 
@@ -83,7 +84,7 @@ postsRouter.get('/ideas', asyncHandler(async (req, res) => {
 
 // ── posts ──────────────────────────────────────────────────────────────────
 
-postsRouter.post('/posts', requireProfile, asyncHandler(async (req, res) => {
+postsRouter.post('/posts', requireProfile, notMuted, asyncHandler(async (req, res) => {
   const kind = KINDS.includes(req.body?.kind) ? req.body.kind : 'post';
   const body = typeof req.body?.body === 'string' ? req.body.body.trim().slice(0, 5000) : '';
   const inst = req.body?.instrument ? instrument(req.body.instrument) : null;
@@ -176,7 +177,7 @@ postsRouter.get('/posts/:id', asyncHandler(async (req, res) => {
   res.json({ post: view, followers, canEdit: post.authorId === req.me.id, canModerate: isStaff(req.me) });
 }));
 
-postsRouter.patch('/posts/:id', requireProfile, asyncHandler(async (req, res) => {
+postsRouter.patch('/posts/:id', requireProfile, notMuted, asyncHandler(async (req, res) => {
   const post = await prisma.post.findUnique({ where: { id: req.params.id } });
   if (!post || post.deletedAt || post.removedAt) return res.status(404).json({ error: 'This post isn’t available. It may have been deleted.' });
   if (post.authorId !== req.me.id) return res.status(403).json({ error: 'You can only edit your own posts.' });
@@ -194,6 +195,7 @@ postsRouter.delete('/posts/:id', asyncHandler(async (req, res) => {
   if (!post || post.deletedAt) return res.status(404).json({ error: 'This post isn’t available. It may have been deleted.' });
   const own = post.authorId === req.me.id;
   if (!own && !(await staffOutranks(req.me, post.authorId))) return res.status(403).json({ error: 'You can only delete your own posts.' });
+  await dropAttachedMedia(post.authorId, post.attachments);
   if (own) {
     await prisma.post.update({ where: { id: post.id }, data: { deletedAt: new Date() } });
     auditLater(req, 'community.post_deleted', { targetType: 'post', targetId: post.id, actor: req.me, detail: { kind: post.kind } });
@@ -304,7 +306,7 @@ postsRouter.get('/comments', asyncHandler(async (req, res) => {
   res.json({ comments: await commentViews(rows, req.me.id) });
 }));
 
-postsRouter.post('/comments', requireProfile, asyncHandler(async (req, res) => {
+postsRouter.post('/comments', requireProfile, notMuted, asyncHandler(async (req, res) => {
   const targetType = req.body?.targetType === 'news' ? 'news' : 'post';
   const target = await commentTarget(targetType, String(req.body?.targetId ?? ''));
   if (!target) return res.status(404).json({ error: 'This isn’t available any more. It may have been deleted.' });
@@ -356,7 +358,7 @@ postsRouter.post('/comments', requireProfile, asyncHandler(async (req, res) => {
   );
 }));
 
-postsRouter.patch('/comments/:id', requireProfile, asyncHandler(async (req, res) => {
+postsRouter.patch('/comments/:id', requireProfile, notMuted, asyncHandler(async (req, res) => {
   const c = await prisma.comment.findUnique({ where: { id: req.params.id } });
   if (!c || c.deletedAt || c.removedById) return res.status(404).json({ error: 'We couldn’t find that comment. It may have been deleted.' });
   if (c.authorId !== req.me.id) return res.status(403).json({ error: 'You can only edit your own comments.' });

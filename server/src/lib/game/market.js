@@ -12,27 +12,30 @@
 // would change: matches store the version and a hash of their path.
 
 import crypto from 'node:crypto';
-import { rng, mix } from './rng.js';
+import { rng, mix, secureRng } from './rng.js';
 import { pairOf } from './pairs.js';
 
 // 1: one unnamed market, 2-decimal prices, only the scenario's own history.
 // 2: a Kotka pair (its level, precision and volatility) and a long
 //    background history before the scenario. Old matches keep version 1.
-export const GENERATOR_VERSION = 2;
+// 3: the same markets, but every random number comes from a keyed
+//    cryptographic stream (a secret per match) instead of the 32-bit seed,
+//    so nobody can rebuild a match's future from the history on the chart.
+export const GENERATOR_VERSION = 3;
 
 export const TEMPLATES = [
-  { key: 'bull_trend', name: 'Bullish trend', lesson: 'In an uptrend, pullbacks towards the moving average are usually better entries than chasing a candle that has already run.' },
-  { key: 'bear_trend', name: 'Bearish trend', lesson: 'In a downtrend, rallies into resistance are where sellers step back in; buying because price "looks cheap" fights the trend.' },
-  { key: 'range', name: 'Range', lesson: 'In a range, the edges matter: buying near support and selling near resistance, with stops just outside, keeps risk small.' },
-  { key: 'breakout', name: 'Breakout', lesson: 'A genuine breakout usually closes beyond the level and holds on a retest. Waiting for the close costs a little price and saves many false starts.' },
-  { key: 'false_breakout', name: 'False breakout', lesson: 'Breakouts that close back inside the range often fail hard. Waiting for confirmation, and keeping the stop where the idea is wrong, limits the damage.' },
-  { key: 'reversal', name: 'Reversal', lesson: 'Trends usually weaken before they turn: smaller pushes, fading momentum, RSI divergence. A reversal is confirmed by structure breaking, not by a guess.' },
-  { key: 'high_volatility', name: 'High volatility', lesson: 'When the market is moving hard, the same stop distance means more risk per unit. Smaller size keeps your risk the same.' },
-  { key: 'low_volatility', name: 'Low volatility', lesson: 'Quiet markets rarely pay for wide targets. Doing less, or nothing, is a valid decision.' },
-  { key: 'momentum_expansion', name: 'Momentum expansion', lesson: 'When movement accelerates, trailing the stop behind structure lets a winner run without giving it all back.' },
-  { key: 'mean_reversion', name: 'Mean reversion', lesson: 'When price keeps snapping back to its average, extended moves away from it are poor places to enter in the same direction.' },
-  { key: 'volatility_shock', name: 'Volatility shock', lesson: 'After a sudden shock, the first move is often unreliable. Reducing size or waiting for the market to settle protects capital.' },
-  { key: 'trend_continuation', name: 'Trend continuation', lesson: 'A pullback inside a trend is not a reversal until structure breaks. Holding, or adding at support, follows the trend.' },
+  { key: 'bull_trend', name: 'Bullish trend', lesson: 'In an uptrend, pullbacks towards the moving average are usually better entries than chasing a candle that has already run.', watch: 'Higher highs and higher lows, price holding above a rising average, pullbacks that stop short of the last low.', mistake: 'Buying the candle that has already run, with no stop under the last swing low.' },
+  { key: 'bear_trend', name: 'Bearish trend', lesson: 'In a downtrend, rallies into resistance are where sellers step back in; buying because price "looks cheap" fights the trend.', watch: 'Lower highs and lower lows, rallies that fail below a falling average.', mistake: 'Buying because price “looks cheap” in a falling market, or shorting a bounce with no stop above the last high.' },
+  { key: 'range', name: 'Range', lesson: 'In a range, the edges matter: buying near support and selling near resistance, with stops just outside, keeps risk small.', watch: 'Clear edges that price keeps turning at, a flat average, fading momentum at each edge.', mistake: 'Treating every push to an edge as a breakout, or trading the middle of the range where there’s no edge.' },
+  { key: 'breakout', name: 'Breakout', lesson: 'A genuine breakout usually closes beyond the level and holds on a retest. Waiting for the close costs a little price and saves many false starts.', watch: 'A candle that closes beyond the level (not just a spike), rising volume, and a retest that holds.', mistake: 'Entering before the close confirms the break, then holding when price falls back inside.' },
+  { key: 'false_breakout', name: 'False breakout', lesson: 'Breakouts that close back inside the range often fail hard. Waiting for confirmation, and keeping the stop where the idea is wrong, limits the damage.', watch: 'A break that closes back inside the range, weak follow-through, volume that fades.', mistake: 'Staying in a breakout trade after price is back inside the range, hoping it goes again.' },
+  { key: 'reversal', name: 'Reversal', lesson: 'Trends usually weaken before they turn: smaller pushes, fading momentum, RSI divergence. A reversal is confirmed by structure breaking, not by a guess.', watch: 'Smaller pushes in the trend, momentum divergence, then structure breaking the other way.', mistake: 'Calling the top or bottom early, before structure has actually turned, and adding as it goes against you.' },
+  { key: 'high_volatility', name: 'High volatility', lesson: 'When the market is moving hard, the same stop distance means more risk per unit. Smaller size keeps your risk the same.', watch: 'Wide candles and fast swings: the same stop distance now means more risk per unit.', mistake: 'Keeping your usual size when every move is twice as big, so one swing takes out a large share of capital.' },
+  { key: 'low_volatility', name: 'Low volatility', lesson: 'Quiet markets rarely pay for wide targets. Doing less, or nothing, is a valid decision.', watch: 'Small candles and a tight range, with targets that price rarely reaches.', mistake: 'Overtrading a quiet market, or setting targets the market isn’t moving enough to reach.' },
+  { key: 'momentum_expansion', name: 'Momentum expansion', lesson: 'When movement accelerates, trailing the stop behind structure lets a winner run without giving it all back.', watch: 'Candles getting bigger in one direction, momentum indicators accelerating.', mistake: 'Taking profit on the first small gain, or not trailing the stop, and giving the move back.' },
+  { key: 'mean_reversion', name: 'Mean reversion', lesson: 'When price keeps snapping back to its average, extended moves away from it are poor places to enter in the same direction.', watch: 'Price repeatedly snapping back to its average after stretching away from it.', mistake: 'Chasing an extended move away from the average in the same direction.' },
+  { key: 'volatility_shock', name: 'Volatility shock', lesson: 'After a sudden shock, the first move is often unreliable. Reducing size or waiting for the market to settle protects capital.', watch: 'A sudden jump on an event, then a noisy period while the market finds its level.', mistake: 'Reacting to the first spike at full size, or widening your stop to survive it.' },
+  { key: 'trend_continuation', name: 'Trend continuation', lesson: 'A pullback inside a trend is not a reversal until structure breaks. Holding, or adding at support, follows the trend.', watch: 'A pullback that holds support in an established trend, then the trend resuming.', mistake: 'Mistaking a normal pullback for a reversal and flipping against the trend.' },
 ];
 export const TEMPLATE_KEYS = TEMPLATES.map((t) => t.key);
 export const templateOf = (key) => TEMPLATES.find((t) => t.key === key);
@@ -249,8 +252,9 @@ function trend(w, { v, H, M, mu, sc }, d) {
  * The full market for a match: prices and volumes per tick, events and
  * the scenario's levels. Pure and deterministic.
  */
-export function generateMarket({ scenario, seed, durationSec, candleSec, historyCandles, symbol = null, backgroundTicks = 0, version = GENERATOR_VERSION }) {
-  if (version !== 1 && version !== 2) throw new Error(`Market generator version ${version} is not available.`);
+export function generateMarket({ scenario, seed, durationSec, candleSec, historyCandles, symbol = null, backgroundTicks = 0, version = GENERATOR_VERSION, secret = null }) {
+  if (![1, 2, 3].includes(version)) throw new Error(`Market generator version ${version} is not available.`);
+  if (version >= 3 && !secret) throw new Error('Version 3 markets need their secret.');
   if (!BUILD[scenario]) throw new Error(`Unknown market scenario: ${scenario}`);
   const pair = version >= 2 ? pairOf(symbol) : null;
   if (version >= 2 && !pair) throw new Error(`Unknown Kotka pair: ${symbol}`);
@@ -259,8 +263,8 @@ export function generateMarket({ scenario, seed, durationSec, candleSec, history
   const roundP = version >= 2 ? roundTo(decimals) : round2;
   const H = historyCandles * candleSec;
   const M = durationSec;
-  const v = rng(mix('variant', scenario, seed % 100));
-  const noise = rng(version >= 2 ? mix('noise', scenario, symbol, seed) : mix('noise', scenario, seed));
+  const v = version >= 3 ? secureRng(secret, `variant:${scenario}`) : rng(mix('variant', scenario, seed % 100));
+  const noise = version >= 3 ? secureRng(secret, `noise:${scenario}:${symbol}`) : rng(version >= 2 ? mix('noise', scenario, symbol, seed) : mix('noise', scenario, seed));
   const s0 = v.between(0.0003, 0.00048) * (pair?.vol ?? 1);
   const mu = v.between(1.6, 2.6) * 1e-5 * (1 + s0 * 1000);
   const startPrice = pair ? roundP(pair.level * v.between(0.85, 1.15)) : round2(v.between(500, 5000));
@@ -280,7 +284,7 @@ export function generateMarket({ scenario, seed, durationSec, candleSec, history
 
   // Version 2: the long history before the scenario.
   if (B) {
-    const bg = background(rng(mix('background', symbol, seed)), startPrice, B, s0);
+    const bg = background(version >= 3 ? secureRng(secret, `background:${symbol}`) : rng(mix('background', symbol, seed)), startPrice, B, s0);
     w.prices.unshift(...bg.prices);
     w.regimes.unshift(...bg.regimes);
     w.shocks.unshift(...new Array(B).fill(0));

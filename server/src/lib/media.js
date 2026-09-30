@@ -8,6 +8,9 @@ import { prisma } from './prisma.js';
 import { cleanImage } from './imageSafety.js';
 
 export const MAX_BYTES = { image: 2.5 * 1024 * 1024, audio: 2.5 * 1024 * 1024 };
+// Storage per person: what they can add in a day, and keep in all.
+const DAILY_BYTES = 40 * 1024 * 1024;
+const TOTAL_BYTES = 400 * 1024 * 1024;
 
 // Identify the file from its bytes, not from what the client claims.
 function sniff(buf) {
@@ -44,6 +47,12 @@ export async function saveMedia(ownerId, { dataUrl, width, height, durationMs })
     width = clean.width;
     height = clean.height;
   }
+  const [today, total] = await Promise.all([
+    prisma.media.aggregate({ where: { ownerId, createdAt: { gte: new Date(Date.now() - 86400e3) } }, _sum: { size: true } }),
+    prisma.media.aggregate({ where: { ownerId }, _sum: { size: true } }),
+  ]);
+  if ((today._sum.size ?? 0) + buf.length > DAILY_BYTES) return { error: 'You’ve uploaded a lot today. Try again tomorrow.' };
+  if ((total._sum.size ?? 0) + buf.length > TOTAL_BYTES) return { error: 'Your uploads are full. Delete some older posts or messages with images, then try again.' };
   const media = await prisma.media.create({
     data: {
       ownerId,
@@ -61,6 +70,15 @@ export async function saveMedia(ownerId, { dataUrl, width, height, durationMs })
   return { media: { ...media, url: mediaUrl(media) } };
 }
 
+// A post or message is gone (deleted, or removed by a moderator): its images
+// and voice notes go too, so the files stop being reachable at their links.
+export async function dropAttachedMedia(ownerId, attachments) {
+  const ids = (Array.isArray(attachments) ? attachments : []).filter((a) => a && (a.type === 'image' || a.type === 'audio') && a.mediaId).map((a) => String(a.mediaId));
+  if (!ids.length || !ownerId) return 0;
+  const r = await prisma.media.deleteMany({ where: { id: { in: ids }, ownerId } }).catch(() => ({ count: 0 }));
+  return r.count;
+}
+
 // Validates an attachment's media reference belongs to the sender.
 export async function ownedMedia(ownerId, ids) {
   if (!ids.length) return new Map();
@@ -75,7 +93,8 @@ export async function serveMedia(req, res) {
   res.set({
     'Content-Type': m.mime,
     'Content-Length': String(m.size),
-    'Cache-Control': 'private, max-age=31536000, immutable',
+    // A day, not a year: removed or deleted uploads drop out of caches soon.
+    'Cache-Control': 'private, max-age=86400',
     'X-Content-Type-Options': 'nosniff',
     'Content-Disposition': 'inline',
     // Opened directly, an upload is inert: no scripts, no plugins, no forms.

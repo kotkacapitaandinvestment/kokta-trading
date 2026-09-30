@@ -242,6 +242,11 @@ goalsRouter.post('/shares', asyncHandler(async (req, res) => {
   if (typeof b.image === 'string' && b.image.startsWith('data:image/')) {
     const saved = await saveMedia(req.userId, { dataUrl: b.image, width: Number(b.width) || undefined, height: Number(b.height) || undefined });
     if (saved.error) return res.status(400).json({ error: saved.error });
+    // A public card is always a picture, whatever the upload claimed to be.
+    if (saved.media.kind !== 'image') {
+      await prisma.media.deleteMany({ where: { id: saved.media.id } });
+      return res.status(400).json({ error: 'The card must be an image.' });
+    }
     imageId = saved.media.id;
   }
   const slug = crypto.randomBytes(9).toString('base64url');

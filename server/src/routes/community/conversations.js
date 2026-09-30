@@ -11,10 +11,20 @@ import { screenText, REVIEW_FLAGS } from '../../lib/community/safety.js';
 import { overLimit } from '../../lib/community/throttle.js';
 import { notify } from '../../lib/community/notify.js';
 import { resolveMentions } from '../../lib/community/mentions.js';
-import { mediaUrl } from '../../lib/media.js';
+import { mediaUrl, dropAttachedMedia } from '../../lib/media.js';
 import { instrument } from '../../lib/instruments.js';
 import { audit } from '../../lib/audit.js';
-import { limit } from '../../lib/rateLimit.js';
+import { limit, memoryLimit, hit } from '../../lib/rateLimit.js';
+
+// People you can put into groups per day, across all your groups: stops a
+// group from being used to push notifications at strangers.
+const PEOPLE_ADDED_PER_DAY = 150;
+const canAddAnother = async (userId) => !(await hit(`people-added:${userId}`, PEOPLE_ADDED_PER_DAY, 86400e3));
+
+// Signals that fan out to every member: capped per person (per server instance).
+const byUser = (req) => req.userId ?? 'anon';
+const signalLimit = memoryLimit('chat-signal', 120, 60e3, byUser);
+const typingLimit = memoryLimit('chat-typing', 40, 60e3, byUser);
 import { requireProfile, clampInt, str } from './context.js';
 
 export const conversationsRouter = Router();
@@ -163,7 +173,7 @@ conversationsRouter.post('/conversations/dm', requireProfile, limit('conversatio
   res.status(201).json({ conversationId: conv.id });
 }));
 
-conversationsRouter.post('/conversations', requireProfile, asyncHandler(async (req, res) => {
+conversationsRouter.post('/conversations', requireProfile, limit('groupCreate'), asyncHandler(async (req, res) => {
   const kind = req.body?.kind === 'community' ? 'community' : 'group';
   const name = str(req.body?.name, 60);
   if (name.length < 3) return res.status(400).json({ error: 'Give it a name of at least 3 characters.' });
@@ -181,7 +191,11 @@ conversationsRouter.post('/conversations', requireProfile, asyncHandler(async (r
   }
   const memberIds = [...new Set((Array.isArray(req.body?.memberIds) ? req.body.memberIds : []).map(String))].filter((id) => id !== req.me.id).slice(0, MAX_GROUP_MEMBERS - 1);
   const allowed = [];
-  for (const id of memberIds) if (!(await canDirectMessage(req.me, id)).error) allowed.push(id);
+  for (const id of memberIds) {
+    if ((await canDirectMessage(req.me, id)).error) continue;
+    if (!(await canAddAnother(req.me.id))) break;
+    allowed.push(id);
+  }
   const conv = await prisma.conversation.create({
     data: {
       kind,
@@ -382,6 +396,7 @@ conversationsRouter.post('/conversations/:id/members', requireProfile, limit('co
   for (const id of ids) {
     if (a.conv.kind === 'group' && count + added.length >= MAX_GROUP_MEMBERS) break;
     if ((await canDirectMessage(req.me, id)).error) continue;
+    if (!(await canAddAnother(req.me.id))) break;
     await prisma.conversationMember.upsert({ where: { conversationId_userId: { conversationId: a.conv.id, userId: id } }, update: { status: 'active', archivedAt: null }, create: { conversationId: a.conv.id, userId: id, lastReadAt: new Date() } });
     added.push(id);
   }
@@ -567,11 +582,14 @@ async function ownMessage(req, res) {
   return m;
 }
 
-conversationsRouter.patch('/messages/:id', requireProfile, asyncHandler(async (req, res) => {
+conversationsRouter.patch('/messages/:id', requireProfile, limit('messageEdit'), asyncHandler(async (req, res) => {
   const m = await ownMessage(req, res);
   if (!m) return;
   if (m.authorId !== req.me.id) return res.status(403).json({ error: 'You can only edit your own messages.' });
   if (m.deletedAt || m.removedById) return res.status(400).json({ error: 'This message was deleted.' });
+  // Editing is sending: someone removed from a group, blocked, or paused can't rewrite old messages.
+  const access = await conversationAccess(m.conversation, req.me);
+  if (!access.canSend) return res.status(403).json({ error: access.reason ?? 'You can’t edit messages in this chat any more.' });
   const body = typeof req.body?.body === 'string' ? req.body.body.replace(/\s+$/, '').slice(0, 4000) : '';
   if (!body.trim() && !(m.attachments ?? []).length) return res.status(400).json({ error: 'A message cannot be empty.' });
   const screen = screenText(body, { staff: isStaff(req.me) });
@@ -588,6 +606,7 @@ conversationsRouter.delete('/messages/:id', asyncHandler(async (req, res) => {
   const a = await conversationAccess(m.conversation, req.me);
   const own = m.authorId === req.me.id;
   if (!own && !a.canModerate) return res.status(403).json({ error: 'You can only delete your own messages.' });
+  await dropAttachedMedia(m.authorId, m.attachments);
   if (own) await prisma.message.update({ where: { id: m.id }, data: { deletedAt: new Date(), pinnedAt: null } });
   else {
     await prisma.message.update({ where: { id: m.id }, data: { removedById: req.me.id, pinnedAt: null } });
@@ -633,7 +652,7 @@ conversationsRouter.post('/messages/:id/pin', asyncHandler(async (req, res) => {
 
 // ── receipts, typing, search ───────────────────────────────────────────────
 
-conversationsRouter.post('/conversations/:id/read', asyncHandler(async (req, res) => {
+conversationsRouter.post('/conversations/:id/read', signalLimit, asyncHandler(async (req, res) => {
   const member = await prisma.conversationMember.findUnique({ where: { conversationId_userId: { conversationId: req.params.id, userId: req.me.id } }, include: { conversation: true } });
   if (!member || member.status !== 'active') return res.json({ ok: true });
   const at = new Date();
@@ -645,7 +664,7 @@ conversationsRouter.post('/conversations/:id/read', asyncHandler(async (req, res
   res.json({ ok: true, at });
 }));
 
-conversationsRouter.post('/conversations/:id/delivered', asyncHandler(async (req, res) => {
+conversationsRouter.post('/conversations/:id/delivered', signalLimit, asyncHandler(async (req, res) => {
   const member = await prisma.conversationMember.findUnique({ where: { conversationId_userId: { conversationId: req.params.id, userId: req.me.id } }, include: { conversation: true } });
   if (!member || member.status !== 'active' || !['dm', 'group'].includes(member.conversation.kind)) return res.json({ ok: true });
   const at = new Date();
@@ -654,7 +673,7 @@ conversationsRouter.post('/conversations/:id/delivered', asyncHandler(async (req
   res.json({ ok: true });
 }));
 
-conversationsRouter.post('/conversations/:id/typing', asyncHandler(async (req, res) => {
+conversationsRouter.post('/conversations/:id/typing', typingLimit, asyncHandler(async (req, res) => {
   const a = await conversationAccess(req.params.id, req.me);
   if (!a.conv || !a.canSend || !req.me.username) return res.json({ ok: false });
   const channels = (await conversationChannels(a.conv)).filter((c) => c !== `user:${req.me.id}`);

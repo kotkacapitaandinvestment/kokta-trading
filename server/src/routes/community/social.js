@@ -20,7 +20,10 @@ async function validTarget(type, id, me) {
     case 'user': {
       if (id === me.id) return { error: "You can't follow yourself." };
       const u = await prisma.user.findUnique({ where: { id }, select: { id: true, status: true } });
-      return u && u.status === 'active' ? { id } : { error: 'We couldn’t find that trader. Their account may have been closed.' };
+      if (!u || u.status !== 'active') return { error: 'We couldn’t find that trader. Their account may have been closed.' };
+      // A block, either way, rules out following.
+      const blocked = await prisma.userRelation.findFirst({ where: { kind: 'block', OR: [{ userId: me.id, targetId: id }, { userId: id, targetId: me.id }] }, select: { userId: true } });
+      return blocked ? { error: 'You can’t follow this trader.' } : { id };
     }
     case 'market':
       return instrument(id) ? { id: instrument(id).symbol } : { error: 'We couldn’t find that market.' };

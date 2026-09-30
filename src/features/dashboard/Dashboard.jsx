@@ -8,6 +8,7 @@ import Card from '../../components/ui/Card';
 import Button from '../../components/ui/Button';
 import { useAuth } from '../../context/AuthContext';
 import { api } from '../../lib/api';
+import { localDay } from '../../lib/day';
 import WeeklyPerformanceChart from './widgets/WeeklyPerformanceChart';
 import EmptyState from '../../components/ui/EmptyState';
 
@@ -221,7 +222,7 @@ function GoalRoomStrip({ summary }) {
 
 export default function Dashboard() {
   const { user } = useAuth();
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localDay();
   const [data, dataFailed] = useGet('/me/dashboard');
   const [checklist] = useGet(`/checklist/${today}`);
   const [pulse] = useGet('/market/pulse');

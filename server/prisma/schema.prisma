@@ -958,10 +958,13 @@ model PushSubscription {
   p256dh     String
   auth       String
   userAgent  String?
+  // The signed-in session that turned push on: revoking it stops the pushes.
+  sessionId  String?
   createdAt  DateTime  @default(now())
   lastUsedAt DateTime?
 
   @@index([userId])
+  @@index([sessionId])
 }
 
 // ── Goal Room ─────────────────────────────────────────────────────────────
@@ -1137,6 +1140,10 @@ model Wallet {
   pendingWithdrawKobo BigInt        @default(0) // requested withdrawals not yet paid
   promoAvailableKobo  BigInt        @default(0) // promotional credits: never withdrawable
   promoLockedKobo     BigInt        @default(0)
+  // A card refund or chargeback on a deposit freezes the wallet: no stakes
+  // and no withdrawals until an admin clears it.
+  frozenAt            DateTime?
+  frozenReason        String?
   createdAt           DateTime      @default(now())
   updatedAt           DateTime      @updatedAt
   entries             WalletEntry[]
@@ -1259,6 +1266,9 @@ model GameMatch {
   scenarioCode     String
   symbol           String? // the Kotka pair (generator version 2+)
   seed             Int
+  // Generator 3: the market's randomness comes from this secret (32 random
+  // bytes, hex). Server-only; shown after settlement so anyone can verify.
+  secret           String?
   generatorVersion Int
   marketHash       String
   durationSec      Int

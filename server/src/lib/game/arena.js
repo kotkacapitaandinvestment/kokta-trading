@@ -5,7 +5,7 @@
 import { prisma } from '../prisma.js';
 import { loadGameSettings } from './config.js';
 import { walletFor, stakedToday, kobo } from './wallet.js';
-import { createMatch, joinMatch, cancelMatch, assertCanPlayForMoney, assertNotInLiveMatch, checkStake, money, GameError, peopleFor, personOf, TX } from './matches.js';
+import { createMatch, joinMatch, cancelMatch, assertCanPlayForMoney, assertNotInLiveMatch, checkStake, money, GameError, peopleFor, personOf, activeIds, TX } from './matches.js';
 import { notify } from '../community/notify.js';
 import { levelFor } from './progression.js';
 import { TEMPLATES, templateOf } from './market.js';
@@ -97,6 +97,7 @@ async function assertCanQueue(user, stakeKobo, durationSec) {
   if (!s.durations.includes(durationSec)) throw new GameError('Choose one of the match lengths on offer.');
   await assertNotInLiveMatch(user.id);
   const w = await walletFor(user.id);
+  if (w.frozenAt) throw new GameError('Your wallet is on hold while a payment is reviewed. Contact support to clear it.', 403, 'wallet_frozen');
   if (kobo(w.availableKobo) < stakeKobo) throw new GameError(`You need ₦${(stakeKobo / 100).toLocaleString('en-NG')} available for this stake. Add money to your wallet first.`, 409, 'insufficient_funds');
   if ((await stakedToday(user.id)) + stakeKobo > s.dailyStakeLimitKobo) throw new GameError(`That would take your stakes today over the daily limit of ₦${(s.dailyStakeLimitKobo / 100).toLocaleString('en-NG')}.`);
 }
@@ -110,7 +111,10 @@ export async function quickMatch(user, { stakeKobo, durationSec }) {
   const at = now();
 
   // An open challenge on the same terms: take it.
-  const open = await prisma.gameMatch.findMany({ where: { isOpen: true, status: 'WAITING_FOR_OPPONENT', expiresAt: { gt: at }, stakeKobo: BigInt(stakeKobo), durationSec, creatorId: { not: user.id } }, orderBy: { createdAt: 'asc' }, take: 3, select: { id: true } });
+  const blockedWith = new Set((await prisma.userRelation.findMany({ where: { kind: 'block', OR: [{ userId: user.id }, { targetId: user.id }] }, select: { userId: true, targetId: true } })).flatMap((b) => [b.userId, b.targetId]));
+  const openAll = await prisma.gameMatch.findMany({ where: { isOpen: true, status: 'WAITING_FOR_OPPONENT', expiresAt: { gt: at }, stakeKobo: BigInt(stakeKobo), durationSec, creatorId: { not: user.id } }, orderBy: { createdAt: 'asc' }, take: 6, select: { id: true, creatorId: true } });
+  const live = await activeIds(openAll.map((m) => m.creatorId));
+  const open = openAll.filter((m) => live.has(m.creatorId) && !blockedWith.has(m.creatorId)).slice(0, 3);
   for (const m of open) {
     try {
       await joinMatch(user, m.id, { quick: true });
@@ -126,7 +130,13 @@ export async function quickMatch(user, { stakeKobo, durationSec }) {
     const partner = await prisma.$transaction(async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('kotka-quick-match'))`;
       await tx.gameQueue.deleteMany({ where: { matchId: null, expiresAt: { lte: now() } } });
-      const other = await tx.gameQueue.findFirst({ where: { stakeKobo: BigInt(stakeKobo), durationSec, matchId: null, expiresAt: { gt: now() }, createdAt: { gt: new Date(Date.now() - QUEUE_MAX_MS) }, userId: { not: user.id } }, orderBy: { createdAt: 'asc' } });
+      // A pairing that never finished (a request that died half-way): let it go.
+      await tx.gameQueue.deleteMany({ where: { matchId: 'pairing', expiresAt: { lte: new Date(Date.now() - 60e3) } } });
+      const waiting = await tx.gameQueue.findMany({ where: { stakeKobo: BigInt(stakeKobo), durationSec, matchId: null, expiresAt: { gt: now() }, createdAt: { gt: new Date(Date.now() - QUEUE_MAX_MS) }, userId: { not: user.id } }, orderBy: { createdAt: 'asc' }, take: 10 });
+      // Never pair people where either has blocked the other.
+      const blocks = waiting.length ? await tx.userRelation.findMany({ where: { kind: 'block', OR: [{ userId: user.id, targetId: { in: waiting.map((w) => w.userId) } }, { userId: { in: waiting.map((w) => w.userId) }, targetId: user.id }] }, select: { userId: true, targetId: true } }) : [];
+      const avoid = new Set(blocks.flatMap((b) => [b.userId, b.targetId]));
+      const other = waiting.find((w) => !avoid.has(w.userId)) ?? null;
       if (!other) {
         const q = await tx.gameQueue.upsert({
           where: { userId: user.id },
@@ -186,7 +196,11 @@ export async function queueStatus(user) {
     await prisma.gameQueue.deleteMany({ where: { id: q.id } });
     return { status: 'matched', matchId: q.matchId };
   }
-  if (q.matchId === 'pairing') return queueView(q);
+  if (q.matchId === 'pairing') {
+    if (q.expiresAt > new Date(Date.now() - 60e3)) return queueView(q);
+    await prisma.gameQueue.deleteMany({ where: { id: q.id, matchId: 'pairing' } });
+    return { status: 'idle' };
+  }
   if (q.expiresAt <= now() || q.createdAt <= new Date(Date.now() - QUEUE_MAX_MS)) {
     await prisma.gameQueue.deleteMany({ where: { id: q.id } });
     return { status: 'expired' };
@@ -201,7 +215,7 @@ export async function leaveQueue(user) {
     await prisma.gameQueue.deleteMany({ where: { id: q.id } });
     return { status: 'matched', matchId: q.matchId };
   }
-  await prisma.gameQueue.deleteMany({ where: { userId: user.id, matchId: null } });
+  await prisma.gameQueue.deleteMany({ where: { userId: user.id, OR: [{ matchId: null }, { matchId: 'pairing', expiresAt: { lte: new Date(Date.now() - 60e3) } }] } });
   memo.delete('stats');
   return { status: 'idle' };
 }
@@ -226,8 +240,10 @@ export async function openBoard(user) {
     take: 30,
   });
   const people = await peopleFor(rows.flatMap((m) => [m.creatorId, m.invitedUserId]));
+  const live = await activeIds(rows.map((m) => m.creatorId));
   const order = { looking: 0, found: 1, starting: 2, in_match: 3 };
   return rows
+    .filter((m) => live.has(m.creatorId))
     .map((m) => {
       const stake = kobo(m.stakeKobo);
       const cash = money(stake, m.feeBps);
@@ -261,6 +277,7 @@ export function recentResults(take = 8) {
   return cached(`recent:${take}`, 30e3, async () => {
     const rows = await prisma.gameMatch.findMany({ where: { mode: 'duel', status: 'SETTLED' }, orderBy: { settledAt: 'desc' }, take, include: { players: { select: { userId: true, score: true, outcome: true } } } });
     const people = await peopleFor(rows.flatMap((m) => m.players.map((p) => p.userId)));
+    const active = await activeIds(rows.flatMap((m) => m.players.map((p) => p.userId)));
     return rows
       .map((m) => ({
         id: m.id,
@@ -269,7 +286,7 @@ export function recentResults(take = 8) {
         durationSec: m.durationSec,
         draw: !!m.result?.draw,
         refund: !!m.result?.refund,
-        players: m.players.filter((p) => p.userId).map((p) => ({ person: personOf(people.get(p.userId)), score: p.score, outcome: p.outcome })).sort((a, b) => (b.score ?? 0) - (a.score ?? 0)),
+        players: m.players.filter((p) => p.userId && active.has(p.userId)).map((p) => ({ person: personOf(people.get(p.userId)), score: p.score, outcome: p.outcome })).sort((a, b) => (b.score ?? 0) - (a.score ?? 0)),
       }))
       .filter((m) => m.players.length === 2 && m.players.every((p) => p.person));
   });
@@ -316,7 +333,7 @@ export function leaderboard(period = 'week') {
 
 // ── What a trader's matches show ───────────────────────────────────────────
 
-const FAMILY = {
+export const FAMILY = {
   bull_trend: 'Trending markets',
   bear_trend: 'Trending markets',
   trend_continuation: 'Trending markets',

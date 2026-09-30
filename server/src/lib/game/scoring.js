@@ -18,7 +18,14 @@ import { candlesUpTo, templateOf } from './market.js';
 import { sma, rsi, macd, atr, levels as swingLevels } from './indicators.js';
 
 export const DEFAULT_WEIGHTS = { outcome: 30, risk: 25, decision: 20, execution: 15, consistency: 10 };
-export const DEFAULT_SCORING = { goodRiskPct: 2, maxRiskPct: 5, highLeveragePct: 300, overtradesPer15Min: 8, revengeTicks: 30, driftGraceTicks: 30 };
+// fullCreditSizePct: the position size (share of capital) at which your
+// process counts in full. Smaller positions, or positions closed by hand
+// within seconds, count for proportionally less, so a token trade can't earn
+// the credit of really trading.
+export const DEFAULT_SCORING = { goodRiskPct: 2, maxRiskPct: 5, highLeveragePct: 300, overtradesPer15Min: 8, revengeTicks: 30, driftGraceTicks: 30, fullCreditSizePct: 50 };
+// Below this share of full credit a player hasn't really traded: they can't
+// win a competition against someone who did (at best it's a draw).
+export const ENGAGED_CREDIT = 0.5;
 
 const clamp = (v) => Math.max(0, Math.min(100, v));
 const r1 = (v) => Math.round(v * 10) / 10;
@@ -287,6 +294,23 @@ export function scorePlayer({ market, sim, rules, weights = DEFAULT_WEIGHTS, sco
     if (trades.every((t) => t.stopAtOpen != null)) consistency += 10;
   }
 
+  // Process only counts as far as there was something at stake: a token
+  // position (or one closed by hand within seconds) can't earn the credit of
+  // really trading, and staying out entirely scores a neutral 50. A trade the
+  // market closed (stop, target, the end) counts in full however short.
+  const minHold = Math.max(30, Math.round(market.matchTicks * 0.05));
+  const engagement = trades.map((tr) => {
+    const held = Math.max(0, (tr.closeTick ?? market.matchTicks - 1) - tr.openTick);
+    const byMarket = ['stop', 'target', 'end', 'stop_out'].includes(tr.exitReason) || tr.closeTick == null;
+    return Math.min(1, tr.maxSizePct / 100) * (byMarket ? 1 : Math.min(1, held / minHold));
+  });
+  const exposure = engagement.length ? engagement.reduce((s, x) => s + x, 0) / engagement.length : 0;
+  const credit = trades.length ? Math.min(1, Math.sqrt(exposure / Math.max(0.01, cfg.fullCreditSizePct / 100))) : 0;
+  const scaled = (x) => 50 + (clamp(x) - 50) * credit;
+  risk = scaled(risk);
+  decision = scaled(decision);
+  execution = scaled(execution);
+  consistency = scaled(consistency);
   const subscores = { outcome: r1(clamp(outcome)), risk: r1(clamp(risk)), decision: r1(clamp(decision)), execution: r1(clamp(execution)), consistency: r1(clamp(consistency)) };
   const wsum = Object.values(weights).reduce((s, x) => s + x, 0) || 1;
   const score = r1(Object.entries(weights).reduce((s, [k, w]) => s + (subscores[k] ?? 0) * w, 0) / wsum);
@@ -330,6 +354,7 @@ export function scorePlayer({ market, sim, rules, weights = DEFAULT_WEIGHTS, sco
     if (unevenRisk) bad('inconsistent_risk', `Your risk per trade ranged from ${r1(riskRange.lo)}% to ${r1(riskRange.hi)}% of your capital.`);
     if (sim.stoppedOut) bad('stopped_out', 'Your capital fell to the floor and your position was closed for you.');
     if (sim.maxDrawdownPct <= 2 && ret >= 0) good('capital', `Your capital never fell more than ${r1(sim.maxDrawdownPct)}% from its high.`);
+    if (credit < 1) findings.push({ key: 'small_stake', tone: 'neutral', text: `Your positions were small${engagement.some((e, i) => trades[i].exitReason === 'manual' && e < Math.min(1, trades[i].maxSizePct / 100)) ? ' or closed within seconds' : ''}, so your process counted for ${Math.round(credit * 100)}% of full credit. Positions of ${cfg.fullCreditSizePct}% of your capital or more, held until you or the market close them, count in full.` });
   }
   for (const tr of trades) points.push({ tick: tr.openTick, text: `${tr.side === 'long' ? 'Long' : 'Short'} entry at ${fmt(tr.openPrice)}${tr.riskPctAtOpen != null ? `, risking ${r1(tr.riskPctAtOpen)}%` : ', with no stop'}.` });
   for (const e of market.events) if (e.tick >= market.historyTicks) points.push({ tick: e.tick - market.historyTicks, text: e.label, market: true });
@@ -346,6 +371,9 @@ export function scorePlayer({ market, sim, rules, weights = DEFAULT_WEIGHTS, sco
     maxSizePct: r1(maxSize),
     noStopSharePct: Math.round(noStopShare * 100),
     stoppedOut: sim.stoppedOut,
+    exposurePct: Math.round(exposure * 1000) / 10,
+    processCreditPct: Math.round(credit * 100),
+    engaged: credit >= ENGAGED_CREDIT,
   };
   return { score, subscores, metrics, findings, decisionPoints: points, report: buildReport({ market, subscores, findings, metrics, trades }) };
 }
