@@ -1,11 +1,12 @@
 // Authentication and sessions: generic errors, cookie flags, revocation,
 // tampered tokens, password change, two-step verification.
-import { test, before, after } from 'node:test';
+import { test, before, after, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import jwt from 'jsonwebtoken';
 import { startServer, stopServer, makeUser, client, signIn, prisma, PASSWORD, runTag } from './helpers.js';
 import { codeAt, currentStep } from '../../src/lib/totp.js';
 import { issueSignupCode } from '../../src/lib/signupCodes.js';
+import { clearMemoryLimits } from '../../src/lib/rateLimit.js';
 
 let alice;
 before(async () => {
@@ -13,6 +14,9 @@ before(async () => {
   alice = await makeUser('Alice');
 });
 after(stopServer);
+// Each test starts under the per-network sign-in ceiling (40 a minute); a
+// fast machine runs these tests quicker than any one network should sign in.
+beforeEach(clearMemoryLimits);
 
 test('wrong password and unknown email get the same answer', async () => {
   const c = client();

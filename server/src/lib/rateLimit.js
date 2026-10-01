@@ -104,6 +104,12 @@ export function memoryHit(key, max, windowMs) {
   return b.n > max;
 }
 
+// For tests: the per-instance counters start again (a fast test run can
+// make more sign-ins in a minute than one network ever should).
+export function clearMemoryLimits() {
+  buckets.clear();
+}
+
 export function memoryLimit(name, max, windowMs, keyFn = (req) => clientIp(req) ?? 'unknown') {
   return (req, res, next) => (memoryHit(`${name}:${keyFn(req)}`, max, windowMs) ? res.status(429).json({ error: TOO_FAST, code: 'rate_limited' }) : next());
 }
