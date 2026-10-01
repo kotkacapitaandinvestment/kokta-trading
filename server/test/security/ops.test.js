@@ -9,7 +9,8 @@ import { recordStatusSample } from '../../src/lib/ops/status.js';
 import { collectDigest } from '../../src/lib/ops/alerts.js';
 
 let base, alice, bob, admin, aliceC, bobC, adminC;
-const marker = `ops-${runTag}`;
+// Letters only: the scrubber rightly replaces long numbers, and a random tag can be all digits.
+const marker = `opsmark${runTag.replace(/\d/g, (d) => 'abcdefghij'[d])}`;
 
 before(async () => {
   base = await startServer();
