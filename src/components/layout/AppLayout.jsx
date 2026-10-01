@@ -1,6 +1,6 @@
 import { Suspense, useEffect, useRef, useState } from 'react';
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { Clock3, MailWarning, WifiOff } from 'lucide-react';
+import { Clock3, Download, MailWarning, WifiOff } from 'lucide-react';
 import { api } from '../../lib/api';
 import { toast } from '../../lib/dialogs';
 import Sidebar from './Sidebar';
@@ -11,8 +11,11 @@ import { traderNav, traderNavSecondary } from './navConfig';
 import { useAuth } from '../../context/AuthContext';
 import { useAppConfig } from '../../context/AppConfigContext';
 import CommunityShell from '../../features/community/CommunityShell';
-import { resyncPush } from '../../lib/pwa';
+import { isStandalone, resyncPush } from '../../lib/pwa';
 import { PageLoading } from '../../lib/lazyPage';
+
+// On phones the More menu also offers the app, until Kotka is opened as one.
+const phoneSecondaryNav = () => (isStandalone() ? traderNavSecondary : [...traderNavSecondary, { to: '/install', label: 'Get the app', icon: Download }]);
 
 const titleFromPath = (pathname) => {
   const match = [...traderNav, ...traderNavSecondary].find((i) => pathname.startsWith(i.to));
@@ -131,7 +134,7 @@ export default function AppLayout() {
       <Sidebar brandTo="/app/dashboard" items={traderNav} secondaryItems={traderNavSecondary} />
       <div className="flex min-w-0 flex-1 flex-col">
         <Topbar title={titleFromPath(location.pathname)} />
-        <MobileNav items={traderNav} secondaryItems={traderNavSecondary} open={menuOpen} onOpenChange={setMenuOpen} />
+        <MobileNav items={traderNav} secondaryItems={phoneSecondaryNav()} open={menuOpen} onOpenChange={setMenuOpen} />
         <div ref={banners} className="shrink-0">
           <ConnectionBanner />
           <VerificationBanner user={user} config={config} />
