@@ -47,7 +47,7 @@ function Daily({ days }) {
 }
 
 function Cell({ v }) {
-  if (v === null || v === undefined) return <td className="px-3 py-2 text-center text-xs text-ink-300 dark:text-ink-600" title="Not recorded yet">·</td>;
+  if (v === null || v === undefined) return <td className="px-3 py-2 text-center text-xs text-ink-400 dark:text-ink-500" title="Not recorded yet"><span aria-hidden>·</span><span className="sr-only">Not recorded yet</span></td>;
   // One hue, light to dark, by share of the cohort that came back.
   const step = v >= 60 ? 'bg-accent-600 text-white' : v >= 40 ? 'bg-accent-500 text-white' : v >= 20 ? 'bg-accent-300 text-ink-900' : v > 0 ? 'bg-accent-100 text-ink-900 dark:bg-accent-900/40 dark:text-ink-100' : 'bg-ink-50 text-ink-500 dark:bg-ink-800';
   return <td className="px-1.5 py-1.5"><span className={clsx('block rounded-md px-2 py-1 text-center text-xs font-medium tabular-nums', step)}>{v}%</span></td>;

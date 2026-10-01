@@ -196,14 +196,14 @@ export default function PostCard({ post: initial, reason, full = false, onChange
               CHEERS.map(([emoji, label]) => {
                 const r = post.reactions.find((x) => x.emoji === emoji);
                 return (
-                  <button key={emoji} type="button" onClick={() => react(emoji)} aria-pressed={!!r?.mine} className={clsx('inline-flex h-8 items-center gap-1.5 rounded-lg px-2 text-xs font-medium hover:bg-ink-100 dark:hover:bg-ink-800', r?.mine && 'bg-accent-500/10 text-accent-800 dark:text-accent-300')}>
+                  <button key={emoji} type="button" onClick={() => react(emoji)} aria-pressed={!!r?.mine} aria-label={`${label}${r?.count ? ` (${r.count})` : ''}`} className={clsx('inline-flex h-8 items-center gap-1.5 rounded-lg px-2 text-xs font-medium hover:bg-ink-100 dark:hover:bg-ink-800', r?.mine && 'bg-accent-500/10 text-accent-800 dark:text-accent-300')}>
                     <span className="text-sm">{emoji}</span> <span className="hidden sm:inline">{label}</span> {r?.count ? <span className="tabular-nums">{r.count}</span> : null}
                   </button>
                 );
               })
             ) : (
             <>
-            <button type="button" onClick={() => react(mine?.emoji ?? 'like')} onContextMenu={(e) => { e.preventDefault(); setShowPicker(true); }} aria-pressed={!!mine} className={clsx('inline-flex h-8 items-center gap-1.5 rounded-lg px-2 text-xs font-medium hover:bg-ink-100 dark:hover:bg-ink-800', mine && 'text-accent-700 dark:text-accent-300')}>
+            <button type="button" onClick={() => react(mine?.emoji ?? 'like')} onContextMenu={(e) => { e.preventDefault(); setShowPicker(true); }} aria-pressed={!!mine} aria-label={`Like${post.reactionCount ? ` (${post.reactionCount})` : ''}`} className={clsx('inline-flex h-8 items-center gap-1.5 rounded-lg px-2 text-xs font-medium hover:bg-ink-100 dark:hover:bg-ink-800', mine && 'text-accent-700 dark:text-accent-300')}>
               {mine && mine.emoji !== 'like' ? <span className="text-sm">{mine.emoji}</span> : <ThumbsUp className="h-4 w-4" />}
               {post.reactionCount || ''}
             </button>
@@ -215,16 +215,16 @@ export default function PostCard({ post: initial, reason, full = false, onChange
             ) : null}
             </>
             )}
-            <Link to={link} className="inline-flex h-8 items-center gap-1.5 rounded-lg px-2 text-xs font-medium hover:bg-ink-100 dark:hover:bg-ink-800">
+            <Link to={link} aria-label={`${post.kind === 'idea' ? 'Discuss' : post.kind === 'question' ? 'Answer' : 'Comment'}${post.commentCount ? ` (${post.commentCount})` : ''}`} className="inline-flex h-8 items-center gap-1.5 rounded-lg px-2 text-xs font-medium hover:bg-ink-100 dark:hover:bg-ink-800">
               <MessageCircle className="h-4 w-4" /> {post.commentCount || ''} <span className="hidden sm:inline">{post.kind === 'idea' ? 'Discuss' : post.kind === 'question' ? 'Answer' : 'Comment'}</span>
             </Link>
             {post.kind === 'idea' ? (
-              <Link to={`${link}?challenge=1`} className="inline-flex h-8 items-center gap-1.5 rounded-lg px-2 text-xs font-medium hover:bg-ink-100 dark:hover:bg-ink-800">
+              <Link to={`${link}?challenge=1`} aria-label="Challenge this idea" className="inline-flex h-8 items-center gap-1.5 rounded-lg px-2 text-xs font-medium hover:bg-ink-100 dark:hover:bg-ink-800">
                 <ShieldCheck className="h-4 w-4" /> <span className="hidden sm:inline">Challenge</span>
               </Link>
             ) : null}
             <SaveButton itemType={post.kind === 'idea' ? 'idea' : 'post'} itemId={post.id} saved={post.saved} />
-            <button type="button" onClick={() => setShare(true)} className="inline-flex h-8 items-center gap-1.5 rounded-lg px-2 text-xs font-medium hover:bg-ink-100 dark:hover:bg-ink-800"><Send className="h-4 w-4" /> <span className="hidden sm:inline">Share</span></button>
+            <button type="button" onClick={() => setShare(true)} aria-label="Share" className="inline-flex h-8 items-center gap-1.5 rounded-lg px-2 text-xs font-medium hover:bg-ink-100 dark:hover:bg-ink-800"><Send className="h-4 w-4" /> <span className="hidden sm:inline">Share</span></button>
             <Menu
               label="Ask Kotka AI"
               icon={Sparkles}

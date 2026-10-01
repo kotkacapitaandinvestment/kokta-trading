@@ -26,6 +26,7 @@ function Toggle({ checked, onChange, disabled, label, hint }) {
         type="button"
         role="switch"
         aria-checked={checked}
+        aria-label={label}
         disabled={disabled}
         onClick={() => onChange(!checked)}
         className={clsx('h-6 w-11 shrink-0 rounded-full transition-colors disabled:opacity-50', checked ? 'bg-accent-500' : 'bg-ink-200 dark:bg-ink-700')}
