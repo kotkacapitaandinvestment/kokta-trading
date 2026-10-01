@@ -89,6 +89,7 @@ const PUBLIC = [
   'POST /api/auth/verify-email',
   'GET /api/app/config',
   'GET /api/app/game-rules',
+  'GET /api/app/showcase',
   'GET /api/public/achievements/:slug',
   'GET /api/public/achievements/:slug/image',
   'GET /achievement/:slug',
