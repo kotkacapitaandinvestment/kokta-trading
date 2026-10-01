@@ -1,12 +1,19 @@
 # Weekly pull requests for dependency updates, grouped so they're easy to
 # review. Security fixes open straight away, whatever the schedule.
+# Major versions (Prisma 7, Express 5, React Router 7…) change how the code
+# has to be written, so they're upgraded on purpose rather than by a bot PR.
+# Vercel doesn't build Dependabot branches (vercel.json); upgrades are tried
+# on the preview branch like any other change.
 version: 2
 updates:
   - package-ecosystem: npm
     directory: /
     schedule:
       interval: weekly
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 3
+    ignore:
+      - dependency-name: '*'
+        update-types: ['version-update:semver-major']
     groups:
       minor-and-patch:
         update-types: [minor, patch]
@@ -14,7 +21,10 @@ updates:
     directory: /server
     schedule:
       interval: weekly
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 3
+    ignore:
+      - dependency-name: '*'
+        update-types: ['version-update:semver-major']
     groups:
       minor-and-patch:
         update-types: [minor, patch]
@@ -22,3 +32,6 @@ updates:
     directory: /
     schedule:
       interval: monthly
+    groups:
+      actions:
+        patterns: ['*']

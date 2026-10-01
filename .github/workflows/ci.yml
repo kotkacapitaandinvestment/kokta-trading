@@ -4,9 +4,11 @@
 # Vercel preview of the branch has passed these checks and been tested.
 name: CI
 
+# Pushes run on main and preview only; other branches (Dependabot's) run once,
+# as their pull request, instead of twice.
 on:
   push:
-    branches: ['**']
+    branches: [main, preview]
   pull_request:
 
 permissions:
@@ -33,6 +35,10 @@ jobs:
   security-tests:
     name: Security tests (test database)
     needs: build
+    # GitHub doesn't give Dependabot the test-database secrets, so its pull
+    # requests get build and audit only. An upgrade gets the full suite when
+    # it goes through the preview branch.
+    if: github.actor != 'dependabot[bot]'
     runs-on: ubuntu-latest
     timeout-minutes: 75
     # One run at a time: the suite shares one test database.
