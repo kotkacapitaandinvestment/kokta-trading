@@ -3,6 +3,9 @@
 // Built on node:crypto; no third-party dependency.
 
 import crypto from 'node:crypto';
+import { prisma } from './prisma.js';
+import { decryptSecret } from './crypto.js';
+import { hit } from './rateLimit.js';
 
 const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
 export const STEP_SECONDS = 30;
@@ -78,3 +81,22 @@ export function newRecoveryCodes(n = 10) {
   return Array.from({ length: n }, () => pick().replace(/(.{4})(.{4})(.{4})/, '$1-$2-$3'));
 }
 export const hashRecovery = (code) => crypto.createHash('sha256').update(String(code).trim().toLowerCase().replace(/\s+/g, '')).digest('hex');
+
+// A fresh authenticator code for a money action (withdrawals, payout
+// details). Only the app's 6-digit code counts here, not recovery codes, and
+// each code works once. Returns null when it's good, or { status, error, code }.
+export async function confirmWithTwoStep(userId, rawCode) {
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { id: true, mfaEnabledAt: true, mfaSecretCipher: true, mfaLastUsedStep: true } });
+  if (!user?.mfaEnabledAt || !user.mfaSecretCipher) {
+    return { status: 403, code: 'two_step_required', error: 'Turn on two-step verification in Settings → Security first. It keeps your money safe even if someone learns your password.' };
+  }
+  // Its own budget, separate from sign-in, so a busy day of payouts can't lock anyone out of signing in.
+  if (await hit(`mfa-money:${user.id}`, 10, 15 * 60e3)) return { status: 429, code: 'rate_limited', error: 'Too many codes tried. Please wait a few minutes and try again.' };
+  if (!String(rawCode ?? '').trim()) return { status: 400, code: 'two_step_code', error: 'Enter the 6-digit code from your authenticator app.' };
+  const step = verifyCode(decryptSecret(user.mfaSecretCipher), rawCode, { lastUsedStep: user.mfaLastUsedStep });
+  if (step !== null) {
+    const used = await prisma.user.updateMany({ where: { id: user.id, OR: [{ mfaLastUsedStep: null }, { mfaLastUsedStep: { lt: step } }] }, data: { mfaLastUsedStep: step } });
+    if (used.count === 1) return null;
+  }
+  return { status: 400, code: 'two_step_code', error: 'That code didn’t work. Check your authenticator app and try again.' };
+}

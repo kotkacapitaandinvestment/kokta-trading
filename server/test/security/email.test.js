@@ -22,20 +22,34 @@ const mailsTo = (email) => outbox.filter((m) => m.to === email);
 before(startServer);
 after(stopServer);
 
-test('sign-up sends one welcome email whose link confirms the address, once', async () => {
+test('sign-up: a code by email, then the account with its email already confirmed', async () => {
   const email = `new.${runTag}.joiner@kotka.test`;
+  const details = { name: 'New Joiner', email, password: 'Plenty-Long-Passphrase-3' };
   const c = client();
-  const r = await c.post('/api/auth/signup', { name: 'New Joiner', email, password: 'Plenty-Long-Passphrase-3' });
-  assert.equal(r.status, 201);
-  assert.equal(r.json.user.emailVerified, false);
-  const mail = await mailFor(email, (m) => m.tag === 'welcome');
-  assert.ok(mail, 'welcome email sent');
+  const start = await c.post('/api/auth/signup/start', details);
+  assert.equal(start.status, 200, JSON.stringify(start.json));
+  const mail = await mailFor(email, (m) => m.tag === 'signup_code');
+  assert.ok(mail, 'code email sent');
   assert.ok(!mail.html.includes('<script'), 'no active content');
-  const token = linkToken(mail, '/verify-email');
-  assert.ok(token);
-  assert.equal((await client().post('/api/auth/verify-email', { token })).status, 200);
-  assert.equal((await c.get('/api/auth/me')).json.user.emailVerified, true);
-  assert.equal((await client().post('/api/auth/verify-email', { token })).status, 400, 'a link works once');
+  const code = /\b(\d{6})\b/.exec(mail.subject)?.[1];
+  assert.ok(code);
+  const r = await c.post('/api/auth/signup', { ...details, code });
+  assert.equal(r.status, 201, JSON.stringify(r.json));
+  assert.equal(r.json.user.emailVerified, true);
+  const welcome = await mailFor(email, (m) => m.tag === 'welcome');
+  assert.ok(welcome, 'welcome email sent');
+  assert.equal(linkToken(welcome, '/verify-email'), undefined, 'no confirm link needed');
+  assert.equal((await client().post('/api/auth/signup', { ...details, code })).status, 400, 'a code works once');
+});
+
+test('sign-up with an address that has an account: same answer, and its owner is told', async () => {
+  const u = await makeUser('Existing');
+  const r = await client().post('/api/auth/signup/start', { name: 'Someone Else', email: u.email, password: 'Plenty-Long-Passphrase-3' });
+  assert.equal(r.status, 200);
+  const mail = await mailFor(u.email, (m) => m.tag === 'account_exists');
+  assert.ok(mail, 'the owner gets a heads-up');
+  assert.ok(!mailsTo(u.email).some((m) => m.tag === 'signup_code'), 'and no code');
+  assert.equal(await prisma.signupCode.count({ where: { email: u.email } }), 0);
 });
 
 test('password reset: same answer for unknown emails, link works once, signs everyone out', async () => {

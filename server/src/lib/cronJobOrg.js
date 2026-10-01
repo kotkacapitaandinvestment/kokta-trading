@@ -9,6 +9,8 @@ import { cachedSource } from './research/cache.js';
 
 const API = 'https://api.cron-job.org';
 export const CRON_PATH = '/api/research/cron';
+// The uptime check behind the public status page, every 5 minutes, with the same token.
+export const PROBE_PATH = '/api/status/probe';
 
 // The JobStatus codes from the cron-job.org API docs, in plain words.
 export const JOB_STATUS = {
@@ -81,6 +83,16 @@ function jobDefinition({ url, token }) {
 // repoint production's schedule at localhost). A missing job is recreated
 // against `url`, which must be a public https address.
 export async function syncCronJob({ apiKey, jobId, url, token }) {
+  const r = await syncMainJob({ apiKey, jobId, url, token });
+  // The uptime check uses the same token: keep it in step (best effort).
+  const jobs = (await call(apiKey, 'GET', '/jobs').catch(() => ({ jobs: [] }))).jobs ?? [];
+  for (const j of jobs.filter((x) => x.url.includes(PROBE_PATH))) {
+    await call(apiKey, 'PATCH', `/jobs/${j.jobId}`, { job: { extendedData: { headers: { Authorization: `Bearer ${token}` } } } }).catch((err) => console.error('Uptime check token update failed:', err.message));
+  }
+  return r;
+}
+
+async function syncMainJob({ apiKey, jobId, url, token }) {
   if (jobId) {
     try {
       await call(apiKey, 'PATCH', `/jobs/${jobId}`, { job: { enabled: true, extendedData: { headers: { Authorization: `Bearer ${token}` } } } });

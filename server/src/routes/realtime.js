@@ -23,5 +23,10 @@ realtimeRouter.get('/stream', asyncHandler(async (req, res) => {
   }
   for (const c of requested) if (c.startsWith('market:') && instrument(c.slice(7))) channels.push(`market:${instrument(c.slice(7)).symbol}`);
   if (requested.includes('community')) channels.push('community');
-  await openStream(req, res, { channels, onPresence: () => touchPresence(req.userId) });
+  const sessionId = req.sessionId;
+  const stillAllowed = async () => {
+    const s = await prisma.session.findUnique({ where: { id: sessionId }, select: { revokedAt: true, expiresAt: true, user: { select: { status: true } } } });
+    return !!s && !s.revokedAt && s.expiresAt > new Date() && s.user?.status === 'active';
+  };
+  await openStream(req, res, { channels, onPresence: () => touchPresence(req.userId), stillAllowed });
 }));

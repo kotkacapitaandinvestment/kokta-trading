@@ -11,6 +11,8 @@ import { TEMPLATES } from '../lib/game/market.js';
 import { PAIRS, publicPair } from '../lib/game/pairs.js';
 import * as pay from '../lib/game/payments/index.js';
 import { riskSignals } from '../lib/game/risk.js';
+import { grantPromo, revokeGrant } from '../lib/game/promo.js';
+import { limitsView } from '../lib/game/limits.js';
 
 // Trading Game administration. Mounted behind requireAuth + requireRole('admin', 'super_admin').
 // Admins can review withdrawals and mark disputes; super admins change
@@ -41,10 +43,12 @@ adminGameRouter.get('/overview', asyncHandler(async (req, res) => {
     prisma.withdrawal.aggregate({ where: { status: { in: ['requested', 'processing'] } }, _sum: { amountKobo: true }, _count: { _all: true } }),
     prisma.gameMatch.count({ where: { status: 'DISPUTED' } }),
   ]);
-  const totals = await prisma.wallet.aggregate({ where: { kind: 'user' }, _sum: { availableKobo: true, lockedKobo: true, pendingWithdrawKobo: true } });
+  const totals = await prisma.wallet.aggregate({ where: { kind: 'user' }, _sum: { availableKobo: true, lockedKobo: true, pendingWithdrawKobo: true, promoAvailableKobo: true, promoLockedKobo: true, restrictedKobo: true } });
+  const promoCost30 = await sum({ type: 'promo_cost', createdAt: { gte: d30 } });
   res.json({
     houseKobo: kobo(house?.availableKobo),
     playerFunds: { availableKobo: kobo(totals._sum.availableKobo), lockedKobo: kobo(totals._sum.lockedKobo), pendingWithdrawKobo: kobo(totals._sum.pendingWithdrawKobo) },
+    promotions: { outstandingKobo: kobo(totals._sum.promoAvailableKobo) + kobo(totals._sum.promoLockedKobo), restrictedWinningsKobo: kobo(totals._sum.restrictedKobo), cost30dKobo: promoCost30 },
     stakedTodayKobo: staked1,
     staked30dKobo: staked30,
     fees30dKobo: fees30,
@@ -160,7 +164,96 @@ adminGameRouter.get('/wallets', asyncHandler(async (req, res) => {
   const q = String(req.query.q ?? '').trim().slice(0, 100);
   if (q.length < 2) return res.json({ wallets: [] });
   const users = await prisma.user.findMany({ where: { OR: [{ email: { contains: q, mode: 'insensitive' } }, { name: { contains: q, mode: 'insensitive' } }, { username: { contains: q, mode: 'insensitive' } }] }, select: { id: true, name: true, email: true, wallet: true }, take: 20 });
-  res.json({ wallets: users.map((u) => ({ user: { id: u.id, name: u.name, email: u.email }, wallet: walletView(u.wallet) })) });
+  const limits = await prisma.playLimits.findMany({ where: { userId: { in: users.map((u) => u.id) } } });
+  const byUser = new Map(limits.map((l) => [l.userId, limitsView(l)]));
+  res.json({ wallets: users.map((u) => ({ user: { id: u.id, name: u.name, email: u.email }, wallet: walletView(u.wallet), limits: byUser.get(u.id) ?? limitsView(null) })) });
+}));
+
+// ── Promotions (spec §50, §54) ──────────────────────────────────────────────
+// Campaigns and grants of promotional credits. Credits only reach verified
+// traders who aren't on a break; they can be staked, never withdrawn.
+
+const promoView = (c, granted = 0) => ({ id: c.id, name: c.name, description: c.description, amountKobo: kobo(c.amountKobo), expiresInDays: c.expiresInDays, audience: c.audience, active: c.active, maxGrants: c.maxGrants, granted, createdAt: c.createdAt });
+
+adminGameRouter.get('/promotions', asyncHandler(async (req, res) => {
+  const [campaigns, counts, grants] = await Promise.all([
+    prisma.promoCampaign.findMany({ orderBy: { createdAt: 'desc' }, take: 50 }),
+    prisma.promoGrant.groupBy({ by: ['campaignId'], _count: { _all: true } }),
+    prisma.promoGrant.findMany({ where: { OR: [{ campaignId: { not: null } }, { createdBy: { not: null } }] }, orderBy: { createdAt: 'desc' }, take: 100, include: { campaign: { select: { name: true } } } }),
+  ]);
+  const people = await peopleFor(grants.map((g) => g.userId));
+  const countBy = new Map(counts.map((r) => [r.campaignId, r._count._all]));
+  res.json({
+    campaigns: campaigns.map((c) => promoView(c, countBy.get(c.id) ?? 0)),
+    grants: grants.map((g) => ({ id: g.id, user: people.get(g.userId) ? { id: g.userId, name: people.get(g.userId).name, username: people.get(g.userId).username } : { id: g.userId, name: 'Deleted account' }, campaign: g.campaign?.name ?? null, reason: g.reason, amountKobo: kobo(g.amountKobo), remainingKobo: kobo(g.remainingKobo), expiresAt: g.expiresAt, revokedAt: g.revokedAt, createdAt: g.createdAt })),
+  });
+}));
+
+function readCampaign(b) {
+  const name = String(b?.name ?? '').trim().slice(0, 80);
+  const amount = Number(b?.amountKobo);
+  const days = Number(b?.expiresInDays);
+  const audience = ['manual', 'new_verified'].includes(b?.audience) ? b.audience : 'manual';
+  const maxGrants = b?.maxGrants === null || b?.maxGrants === undefined || b?.maxGrants === '' ? null : Number(b.maxGrants);
+  if (name.length < 3) return { error: 'Give the campaign a name traders will recognise.' };
+  if (!Number.isInteger(amount) || amount < 100 || amount > 5_000_000) return { error: 'Credits per trader: from ₦1 to ₦50,000.' };
+  if (!Number.isInteger(days) || days < 1 || days > 365) return { error: 'Credits should expire after 1 to 365 days.' };
+  if (maxGrants !== null && (!Number.isInteger(maxGrants) || maxGrants < 1)) return { error: 'The most traders to give it to is a whole number, or empty for no cap.' };
+  return { data: { name, description: String(b?.description ?? '').trim().slice(0, 300) || null, amountKobo: BigInt(amount), expiresInDays: days, audience, maxGrants } };
+}
+
+adminGameRouter.post('/promotions/campaigns', superOnly, asyncHandler(async (req, res) => {
+  const c = readCampaign(req.body);
+  if (c.error) return res.status(400).json({ error: c.error });
+  const campaign = await prisma.promoCampaign.create({ data: { ...c.data, createdBy: req.user.id } });
+  await audit(req, 'game.promo_campaign_created', { targetType: 'promo_campaign', targetId: campaign.id, detail: { name: campaign.name, amountKobo: kobo(campaign.amountKobo), audience: campaign.audience, expiresInDays: campaign.expiresInDays } });
+  res.status(201).json({ campaign: promoView(campaign) });
+}));
+
+adminGameRouter.patch('/promotions/campaigns/:id', superOnly, asyncHandler(async (req, res) => {
+  const found = await prisma.promoCampaign.findUnique({ where: { id: req.params.id } });
+  if (!found) throw new GameError('We couldn’t find that campaign.', 404);
+  const campaign = await prisma.promoCampaign.update({ where: { id: found.id }, data: { active: req.body?.active === true } });
+  await audit(req, campaign.active ? 'game.promo_campaign_started' : 'game.promo_campaign_stopped', { targetType: 'promo_campaign', targetId: campaign.id, detail: { name: campaign.name } });
+  res.json({ campaign: promoView(campaign) });
+}));
+
+// Give credits to one trader, from a campaign or on their own.
+adminGameRouter.post('/promotions/grants', superOnly, asyncHandler(async (req, res) => {
+  const who = String(req.body?.user ?? '').trim().replace(/^@/, '').toLowerCase();
+  const user = who ? await prisma.user.findFirst({ where: { OR: [{ username: who }, { email: who }] }, select: { id: true, name: true } }) : null;
+  if (!user) throw new GameError('We couldn’t find that trader. Use their username or email.', 404);
+  let amount = Number(req.body?.amountKobo);
+  let days = Number(req.body?.expiresInDays);
+  let campaign = null;
+  if (req.body?.campaignId) {
+    campaign = await prisma.promoCampaign.findUnique({ where: { id: String(req.body.campaignId) } });
+    if (!campaign || !campaign.active) throw new GameError('That campaign isn’t running.', 409);
+    if (campaign.maxGrants && (await prisma.promoGrant.count({ where: { campaignId: campaign.id } })) >= campaign.maxGrants) throw new GameError('That campaign has reached its limit.', 409);
+    amount = kobo(campaign.amountKobo);
+    days = campaign.expiresInDays;
+  }
+  const reason = String(req.body?.reason ?? '').trim().slice(0, 200) || campaign?.name;
+  if (!Number.isInteger(amount) || amount < 100 || amount > 5_000_000) throw new GameError('Credits: from ₦1 to ₦50,000.');
+  if (!Number.isInteger(days) || days < 1 || days > 365) throw new GameError('Credits should expire after 1 to 365 days.');
+  if (!reason || reason.length < 3) throw new GameError('Say what the credits are for; the trader sees it.');
+  let grant;
+  try {
+    grant = await grantPromo({ userId: user.id, amountKobo: amount, expiresAt: new Date(Date.now() + days * 86400e3), campaignId: campaign?.id ?? null, reason, createdBy: req.user.id });
+  } catch (err) {
+    if (err.code === 'P2002') throw new GameError('That trader already has credits from this campaign.', 409);
+    throw err;
+  }
+  await audit(req, 'game.promo_granted', { targetType: 'user', targetId: user.id, detail: { amountKobo: amount, expiresInDays: days, campaign: campaign?.name ?? null, reason } });
+  res.status(201).json({ grant: { id: grant.id, amountKobo: kobo(grant.amountKobo), expiresAt: grant.expiresAt } });
+}));
+
+adminGameRouter.post('/promotions/grants/:id/revoke', superOnly, asyncHandler(async (req, res) => {
+  const reason = String(req.body?.reason ?? '').trim().slice(0, 200);
+  if (reason.length < 5) throw new GameError('Say why the credits are being removed; it’s kept in the ledger.');
+  const r = await revokeGrant(req.params.id, req.user.id, reason);
+  await audit(req, 'game.promo_revoked', { targetType: 'promo_grant', targetId: req.params.id, detail: { reason, removedKobo: r.removedKobo } });
+  res.json(r);
 }));
 
 adminGameRouter.get('/ledger', asyncHandler(async (req, res) => {

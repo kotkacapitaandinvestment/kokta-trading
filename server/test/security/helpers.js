@@ -43,6 +43,7 @@ export async function stopServer() {
   // Accounts made through the sign-up API in tests.
   await prisma.user.deleteMany({ where: { email: { contains: `.${RUN}.` } } }).catch(() => {});
   await prisma.authAttempt.deleteMany({ where: { email: { contains: `.${RUN}.` } } }).catch(() => {});
+  await prisma.signupCode.deleteMany({ where: { email: { contains: `.${RUN}.` } } }).catch(() => {});
   await prisma.rateLimitHit.deleteMany({ where: { key: { contains: RUN } } }).catch(() => {});
   if (server) await new Promise((r) => server.close(r));
   await prisma.$disconnect();
@@ -69,13 +70,15 @@ export async function makeUser(name, { role = 'trader', username = true } = {}) 
   return user;
 }
 
-// A tiny HTTP client that keeps its own session cookie, like one browser.
+// A tiny HTTP client that keeps its own session cookie (and its known-device
+// cookie), like one browser.
 export function client() {
   let cookie = '';
+  let device = '';
   const call = async (method, path, body, headers = {}) => {
     const res = await fetch(`${base}${path}`, {
       method,
-      headers: { ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}), ...(cookie ? { Cookie: cookie } : {}), ...headers },
+      headers: { ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}), ...(cookie || device ? { Cookie: [cookie, device].filter(Boolean).join('; ') } : {}), ...headers },
       body: body !== undefined ? JSON.stringify(body) : undefined,
       redirect: 'manual',
     });
@@ -83,6 +86,8 @@ export function client() {
     if (set) {
       const m = /kotka_session=([^;]*)/.exec(set);
       if (m) cookie = m[1] ? `kotka_session=${m[1]}` : '';
+      const d = /kotka_device=([^;]*)/.exec(set);
+      if (d) device = d[1] ? `kotka_device=${d[1]}` : '';
     }
     const text = await res.text();
     let json;
@@ -104,6 +109,12 @@ export function client() {
     },
     set cookie(v) {
       cookie = v;
+    },
+    get device() {
+      return device;
+    },
+    set device(v) {
+      device = v;
     },
   };
 }

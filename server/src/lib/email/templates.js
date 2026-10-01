@@ -25,7 +25,23 @@ ${footnote ? `<tr><td style="padding-top:24px;font-size:12px;line-height:1.5;col
   return { html, text };
 }
 
+// verifyUrl is left out when the address was already confirmed with a
+// sign-up code.
 export function welcomeEmail({ name, verifyUrl, support }) {
+  const firstDay = 'A good first day: tick the pre-trade checklist before your next trade, log it in your journal, and set one small goal in the Goal Room.';
+  if (!verifyUrl) {
+    return {
+      subject: 'Welcome to Kotka',
+      tag: 'welcome',
+      ...layout({
+        support,
+        title: `Welcome to Kotka, ${firstName(name)}`,
+        intro: 'Your account is ready and your email is confirmed.',
+        paragraphs: [firstDay],
+        button: { label: 'Open Kotka', url: `${CANONICAL_ORIGIN}/app/dashboard` },
+      }),
+    };
+  }
   return {
     subject: 'Welcome to Kotka: confirm your email',
     tag: 'welcome',
@@ -33,9 +49,84 @@ export function welcomeEmail({ name, verifyUrl, support }) {
       support,
       title: `Welcome to Kotka, ${firstName(name)}`,
       intro: 'Please confirm this is your email address, so we can reach you about your account and help you back in if you forget your password.',
-      paragraphs: ['A good first day: tick the pre-trade checklist before your next trade, log it in your journal, and set one small goal in the Goal Room.'],
+      paragraphs: [firstDay],
       button: { label: 'Confirm my email', url: verifyUrl },
       footnote: 'This link works for 48 hours. If you didn’t create a Kotka account, you can ignore this email.',
+    }),
+  };
+}
+
+// To the support inbox: a new help request, or a trader's follow-up.
+export function supportTicketEmail({ ticket, name, body, topicLabel, followUp = false }) {
+  return {
+    subject: `${followUp ? 'Re: ' : ''}[Kotka support] ${ticket.subject}`,
+    tag: 'support',
+    ...layout({
+      title: followUp ? 'A trader replied to their request' : 'New help request',
+      intro: `${topicLabel}${name ? ` · from ${name}` : ''}${ticket.matchId ? ` · about match ${ticket.matchId}` : ''}`,
+      paragraphs: String(body).split(/\n{2,}/).slice(0, 20),
+      button: { label: 'Open in Admin → Support', url: `${CANONICAL_ORIGIN}/admin/support?ticket=${ticket.id}` },
+      footnote: 'Reply from Admin → Support so the trader sees it in the app too.',
+    }),
+  };
+}
+
+// To a trader: support replied.
+export function supportReplyEmail({ subject, body, ticketId }) {
+  return {
+    subject: `Re: ${subject}`,
+    tag: 'support',
+    ...layout({
+      title: 'Kotka support replied',
+      intro: `About: ${subject}`,
+      paragraphs: String(body).split(/\n{2,}/).slice(0, 20),
+      button: { label: 'See the conversation', url: `${CANONICAL_ORIGIN}/app/support/${ticketId}` },
+      footnote: 'You can reply in the app. Kotka staff will never ask for your password or a code.',
+    }),
+  };
+}
+
+// For Super Admins: what needs a person, from the hourly checks.
+export function opsDigestEmail({ items }) {
+  return {
+    subject: `Kotka: ${items.length} thing${items.length === 1 ? '' : 's'} to look at`,
+    tag: 'ops',
+    ...layout({
+      title: 'Things to look at',
+      intro: 'The hourly checks found these. Each links back to the admin pages where you can act on it.',
+      paragraphs: items.map((i) => `• ${i.text}`),
+      button: { label: 'Open System Status', url: `${CANONICAL_ORIGIN}/admin/system-health` },
+      footnote: 'Sent to Super Admins and the support address. You get one of these only when something new comes up.',
+    }),
+  };
+}
+
+export function signupCodeEmail({ code, support }) {
+  return {
+    subject: `${code} is your Kotka code`,
+    tag: 'signup_code',
+    ...layout({
+      support,
+      title: 'Your Kotka sign-up code',
+      intro: `Enter this code to finish creating your account: ${code}`,
+      paragraphs: ['It works once, for 15 minutes.'],
+      footnote: 'If you didn’t try to sign up for Kotka, you can ignore this email: no account is made without the code.',
+    }),
+  };
+}
+
+// Someone tried to sign up with an address that already has an account.
+export function accountExistsEmail({ name, support }) {
+  return {
+    subject: 'You already have a Kotka account',
+    tag: 'account_exists',
+    ...layout({
+      support,
+      title: `You already have an account, ${firstName(name)}`,
+      intro: 'Someone (hopefully you) just tried to create a Kotka account with this email address. It already has one, so no new account was made.',
+      paragraphs: ['If it was you, sign in instead. If you’ve forgotten your password, you can reset it from the sign-in page.'],
+      button: { label: 'Sign in', url: `${CANONICAL_ORIGIN}/login` },
+      footnote: 'If this wasn’t you, you can ignore this email. Nobody can sign in without your password.',
     }),
   };
 }

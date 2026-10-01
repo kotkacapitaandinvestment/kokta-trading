@@ -24,6 +24,8 @@ import {
   Target,
   Gauge,
   Swords,
+  LifeBuoy,
+  TrendingUp,
 } from 'lucide-react';
 
 export const traderNav = [
@@ -41,6 +43,7 @@ export const traderNav = [
 
 export const traderNavSecondary = [
   { to: '/app/notifications', label: 'Notifications', icon: Bell },
+  { to: '/app/support', label: 'Help and support', icon: LifeBuoy },
   { to: '/app/settings', label: 'Settings', icon: Settings },
 ];
 
@@ -48,6 +51,8 @@ export const adminNav = [
   { to: '/admin/overview', label: 'Overview', icon: LayoutDashboard },
   { to: '/admin/users', label: 'Users', icon: Users },
   { to: '/admin/verifications', label: 'Verifications', icon: BadgeCheck },
+  { to: '/admin/support', label: 'Support', icon: LifeBuoy },
+  { to: '/admin/growth', label: 'Growth', icon: TrendingUp },
   { to: '/admin/community', label: 'Community', icon: UsersRound, moderator: true },
   { to: '/admin/announcements', label: 'Announcements', icon: Megaphone },
   { to: '/admin/research', label: 'Fundamental Research', icon: Landmark },

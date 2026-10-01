@@ -10,7 +10,7 @@ import { CONTACT } from '../contact.js';
 import { deviceName, clientIp } from '../requestMeta.js';
 import { sendEmail } from './send.js';
 import { createEmailToken } from './tokens.js';
-import { welcomeEmail, verifyEmail, passwordResetEmail, passwordChangedEmail, newSignInEmail, twoStepEmail } from './templates.js';
+import { welcomeEmail, verifyEmail, passwordResetEmail, passwordChangedEmail, newSignInEmail, twoStepEmail, signupCodeEmail, accountExistsEmail } from './templates.js';
 
 // Replies go to support (the welcome email's go to hello@), and every
 // email's footer names the support address.
@@ -20,8 +20,18 @@ async function send(user, build, extra = {}) {
 }
 
 export async function sendWelcome(user) {
-  const token = await createEmailToken(user.id, 'verify');
-  return send(user, (support) => welcomeEmail({ name: user.name, verifyUrl: `${CANONICAL_ORIGIN}/verify-email?token=${token}`, support }), { replyTo: CONTACT.hello });
+  const token = user.emailVerifiedAt ? null : await createEmailToken(user.id, 'verify');
+  return send(user, (support) => welcomeEmail({ name: user.name, verifyUrl: token ? `${CANONICAL_ORIGIN}/verify-email?token=${token}` : null, support }), { replyTo: CONTACT.hello });
+}
+
+// Sign-up, first step: a code for a new address, or a heads-up to the owner
+// of an address that already has an account.
+export function sendSignupCode(email, code) {
+  return send({ email }, (support) => signupCodeEmail({ code, support }));
+}
+
+export function sendAccountExists(user) {
+  return send(user, (support) => accountExistsEmail({ name: user.name, support }));
 }
 
 export async function sendVerification(user) {

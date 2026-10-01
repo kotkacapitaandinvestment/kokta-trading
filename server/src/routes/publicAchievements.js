@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { prisma } from '../lib/prisma.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 import { publicOrigin } from '../lib/origins.js';
+import { mediaBytes } from '../lib/media.js';
 
 // Public achievement links (no sign-in). They only ever expose the snapshot
 // the trader chose when creating the link, and stop working when revoked.
@@ -23,8 +24,10 @@ publicAchievementsRouter.get('/achievements/:slug/image', asyncHandler(async (re
   const m = s?.imageId ? await prisma.media.findUnique({ where: { id: s.imageId } }) : null;
   if (!m) return res.status(404).end();
   // Social apps fetch this image for link previews, so it may be loaded cross-site.
-  res.set({ 'Content-Type': m.mime, 'Content-Length': String(m.size), 'Cache-Control': 'public, max-age=3600', 'X-Content-Type-Options': 'nosniff', 'Cross-Origin-Resource-Policy': 'cross-origin', 'Content-Security-Policy': "default-src 'none'; sandbox" });
-  res.end(Buffer.from(m.data));
+  const bytes = await mediaBytes(m);
+  if (!bytes) return res.status(503).end();
+  res.set({ 'Content-Type': m.mime, 'Content-Length': String(bytes.length), 'Cache-Control': 'public, max-age=3600', 'X-Content-Type-Options': 'nosniff', 'Cross-Origin-Resource-Policy': 'cross-origin', 'Content-Security-Policy': "default-src 'none'; sandbox" });
+  res.end(bytes);
 }));
 
 // ── Link previews ──────────────────────────────────────────────────────────

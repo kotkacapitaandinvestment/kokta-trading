@@ -75,6 +75,10 @@ test('the daily Kotka AI cap holds under parallel requests', async () => {
 // requests unless it is on this list of deliberately public routes.
 const PUBLIC = [
   'GET /api/health',
+  'POST /api/telemetry/errors',
+  'GET /api/status',
+  'ALL /api/status/probe',
+  'POST /api/auth/signup/start',
   'POST /api/auth/signup',
   'POST /api/auth/login',
   'POST /api/auth/login/mfa',
@@ -84,6 +88,7 @@ const PUBLIC = [
   'POST /api/auth/password-reset/confirm',
   'POST /api/auth/verify-email',
   'GET /api/app/config',
+  'GET /api/app/game-rules',
   'GET /api/public/achievements/:slug',
   'GET /api/public/achievements/:slug/image',
   'GET /achievement/:slug',

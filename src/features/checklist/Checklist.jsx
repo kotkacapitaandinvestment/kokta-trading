@@ -42,7 +42,7 @@ export default function Checklist() {
   const readiness = useMemo(() => {
     if (baseScore >= 100) return { label: 'Ready to trade', tone: 'text-profit-600 dark:text-profit-400' };
     if (baseScore >= 60) return { label: 'Proceed with caution', tone: 'text-amber-600 dark:text-amber-400' };
-    return { label: 'Not ready', tone: 'text-loss-500' };
+    return { label: 'Not ready', tone: 'text-loss-600 dark:text-loss-400' };
   }, [baseScore]);
 
   const toggle = (id) => !loading && persist({ ...checked, [id]: !checked[id] });

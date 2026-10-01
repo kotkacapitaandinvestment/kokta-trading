@@ -2,6 +2,7 @@ import { Component } from 'react';
 import { AlertTriangle } from 'lucide-react';
 import Button from './ui/Button';
 import { CONTACT, mailto } from '../lib/contact';
+import { reportError } from '../lib/errorReporter';
 
 export default class ErrorBoundary extends Component {
   constructor(props) {
@@ -15,6 +16,7 @@ export default class ErrorBoundary extends Component {
 
   componentDidCatch(error, info) {
     console.error('Unhandled UI error:', error, info);
+    reportError(error, { kind: 'page crashed' });
   }
 
   handleReload = () => {

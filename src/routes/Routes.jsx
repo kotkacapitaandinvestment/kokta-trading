@@ -17,6 +17,11 @@ import VerifyEmail from '../features/auth/VerifyEmail';
 import CommunityLayout from '../features/community/CommunityLayout';
 
 const VerifyIdentity = lazyPage(() => import('../features/verification/VerifyIdentity'));
+const Status = lazyPage(() => import('../features/marketing/Status'));
+const Help = lazyPage(() => import('../features/marketing/Help'));
+const Support = lazyPage(() => import('../features/support/Support'));
+const AdminSupport = lazyPage(() => import('../features/admin/AdminSupport'));
+const AdminGrowth = lazyPage(() => import('../features/admin/AdminGrowth'));
 const Dashboard = lazyPage(() => import('../features/dashboard/Dashboard'));
 const KotkaAI = lazyPage(() => import('../features/ai/KotkaAI'));
 const Journal = lazyPage(() => import('../features/journal/Journal'));
@@ -79,6 +84,8 @@ export default function AppRoutes() {
       <Route path="/reset-password" element={<ResetPassword />} />
       <Route path="/verify-email" element={<VerifyEmail />} />
       <Route path="/verify" element={<VerifyIdentity />} />
+      <Route path="/status" element={<Status />} />
+      <Route path="/help" element={<Help />} />
       <Route path="/achievement/:slug" element={<PublicAchievement />} />
 
       <Route
@@ -108,6 +115,8 @@ export default function AppRoutes() {
         <Route path="game/leaderboard" element={<GameLeaderboard />} />
         <Route path="settings" element={<Settings />} />
         <Route path="notifications" element={<Notifications />} />
+        <Route path="support" element={<Support />} />
+        <Route path="support/:id" element={<Support />} />
         <Route path="community" element={<CommunityLayout />}>
           <Route index element={<ForYou />} />
           <Route path="markets" element={<Markets />} />
@@ -135,6 +144,8 @@ export default function AppRoutes() {
         <Route path="overview" element={<AdminOverview />} />
         <Route path="users" element={<AdminUsers />} />
         <Route path="verifications" element={<AdminVerifications />} />
+        <Route path="support" element={<AdminSupport />} />
+        <Route path="growth" element={<AdminGrowth />} />
         <Route path="usage" element={<AdminUsage />} />
         <Route path="game" element={<AdminGame />} />
         <Route path="ai-usage" element={<AdminAIUsage />} />

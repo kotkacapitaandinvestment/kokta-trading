@@ -51,7 +51,7 @@ export default function Sidebar({ brandTo, items, secondaryItems, secondaryLabel
           <>
             <div className="my-3 h-px bg-ink-100 dark:bg-ink-800" />
             {secondaryLabel ? (
-              <p className="mb-1.5 px-3 text-[10px] font-semibold uppercase tracking-wider text-ink-300 dark:text-ink-600">
+              <p className="mb-1.5 px-3 text-[10px] font-semibold uppercase tracking-wider text-ink-500 dark:text-ink-400">
                 {secondaryLabel}
               </p>
             ) : null}

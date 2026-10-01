@@ -15,6 +15,8 @@ import { money, advance, sweep, marketFor, decideResult, TX } from '../../src/li
 import { clearGameSettingsCache } from '../../src/lib/game/config.js';
 import { verifyWebhook } from '../../src/lib/game/payments/whop.js';
 import { post, walletFor, HOUSE_WALLET } from '../../src/lib/game/wallet.js';
+import { requestWithdrawal } from '../../src/lib/game/payments/index.js';
+import { newSecret, codeAt, currentStep } from '../../src/lib/totp.js';
 
 const WHOP_SECRET = `ws_${crypto.randomBytes(32).toString('hex')}`;
 const PAYSTACK_KEY = `sk_test_${crypto.randomBytes(20).toString('hex')}`;
@@ -743,6 +745,22 @@ test('Whop deposit: credited once, only after a verified webhook that matches th
   assert.equal(Number((await balance(c)).availableKobo), beforeBal + naira(2000), 'credited exactly once');
   assert.equal((await prisma.deposit.findUnique({ where: { id: dep.id } })).status, 'succeeded');
   assert.equal(await prisma.walletEntry.count({ where: { depositId: dep.id } }), 1);
+
+  // A refund on that payment puts the wallet on hold (event shape from
+  // Whop's API reference: the Refund, with the payment inside it).
+  const held = async () => (await prisma.wallet.findFirst({ where: { userId: c.id } }));
+  const release = () => prisma.wallet.updateMany({ where: { userId: c.id }, data: { frozenAt: null, frozenReason: null } });
+  assert.equal((await whopDelivery({ type: 'refund.created', data: { id: `ref_${runTag}`, status: 'pending', amount: 2000, currency: 'ngn', payment: { id: 'pay_ok', metadata: { kotka_deposit: dep.id } } } })).status, 200);
+  assert.ok((await held()).frozenAt, 'on hold after a refund');
+  assert.match((await held()).frozenReason, /refund\.created \(pending\), 2000 NGN/);
+  await release();
+  // A dispute that names only the payment (no metadata) is matched by payment id.
+  assert.equal((await whopDelivery({ type: 'dispute.created', data: { id: `dp_${runTag}`, status: 'needs_response', amount: 2000, currency: 'ngn', payment: { id: 'pay_ok' } } })).status, 200);
+  assert.ok((await held()).frozenAt, 'on hold after a dispute');
+  await release();
+  // Someone else's payment changes nothing.
+  assert.equal((await whopDelivery({ type: 'refund.created', data: { id: `ref2_${runTag}`, status: 'succeeded', payment: { id: 'pay_unknown' } } })).status, 200);
+  assert.equal((await held()).frozenAt, null);
 });
 
 test('Paystack deposit (switchable): signed webhook credits once', async () => {
@@ -763,16 +781,31 @@ test('Paystack deposit (switchable): signed webhook credits once', async () => {
 });
 
 test('withdrawals: held, approved by an admin, paid; rejected or failed ones come back', async () => {
+  // Money leaving Kotka, and where it goes, needs two-step verification.
+  const noTwoStep = await cC.post('/api/game/wallet/payout/whop', {});
+  assert.equal(noTwoStep.status, 403);
+  assert.equal(noTwoStep.json.code, 'two_step_required');
+  const secret = newSecret();
+  await prisma.user.update({ where: { id: c.id }, data: { mfaEnabledAt: new Date(), mfaSecretCipher: encryptSecret(secret), mfaLastUsedStep: null } });
+  // Each code works once; the test forgets the last one used so it can act
+  // faster than a new code appears.
+  const code = async () => { await prisma.user.update({ where: { id: c.id }, data: { mfaLastUsedStep: null } }); return codeAt(secret, currentStep()); };
+  const wrongCode = String((Number(codeAt(secret, currentStep())) + 1) % 1e6).padStart(6, '0');
+  assert.equal((await cC.post('/api/game/wallet/payout/whop', { twoStepCode: wrongCode })).json.code, 'two_step_code', 'a wrong code is refused');
   // Payout account on Whop first.
-  const link = await cC.post('/api/game/wallet/payout/whop', {});
+  const once = await code();
+  const link = await cC.post('/api/game/wallet/payout/whop', { twoStepCode: once });
   assert.equal(link.status, 200);
   assert.match(link.json.url, /^https:\/\/whop\.com\//);
+  assert.equal((await cC.post('/api/game/wallet/payout/whop', { twoStepCode: once })).json.code, 'two_step_code', 'a code can’t be used twice');
   const start = Number((await balance(c)).availableKobo);
-  assert.equal((await cC.post('/api/game/wallet/withdrawals', { amountKobo: start + 100 })).status, 400, 'more than the balance');
+  assert.equal((await cC.post('/api/game/wallet/withdrawals', { amountKobo: start + 100, twoStepCode: await code() })).status, 400, 'more than the balance');
 
-  const both = await Promise.all([cC.post('/api/game/wallet/withdrawals', { amountKobo: start }), cC.post('/api/game/wallet/withdrawals', { amountKobo: start })]);
-  assert.equal(both.filter((r) => r.status === 201).length, 1, 'the same money can’t be withdrawn twice');
-  const w = both.find((r) => r.status === 201).json.withdrawal;
+  // Two requests at once for the whole balance (the code check is per request, so this goes to the ledger directly).
+  const me = await prisma.user.findUnique({ where: { id: c.id } });
+  const both = await Promise.allSettled([requestWithdrawal(me, { amountKobo: start }), requestWithdrawal(me, { amountKobo: start })]);
+  assert.equal(both.filter((r) => r.status === 'fulfilled').length, 1, 'the same money can’t be withdrawn twice');
+  const w = both.find((r) => r.status === 'fulfilled').value;
   assert.equal(w.status, 'requested');
   assert.equal(Number((await balance(c)).pendingWithdrawKobo), start);
 
@@ -790,18 +823,18 @@ test('withdrawals: held, approved by an admin, paid; rejected or failed ones com
 
   // Rejected: money back.
   await fund(c, naira(1000));
-  const r2 = (await cC.post('/api/game/wallet/withdrawals', { amountKobo: naira(1000) })).json.withdrawal;
+  const r2 = (await cC.post('/api/game/wallet/withdrawals', { amountKobo: naira(1000), twoStepCode: await code() })).json.withdrawal;
   assert.equal((await adminC.post(`/api/admin/game/withdrawals/${r2.id}/reject`, { note: 'Please verify your payout account' })).status, 200);
   assert.equal(Number((await balance(c)).availableKobo), naira(1000));
   // Failed at the provider: money back.
   transferStatus = 'failed';
-  const r3 = (await cC.post('/api/game/wallet/withdrawals', { amountKobo: naira(1000) })).json.withdrawal;
+  const r3 = (await cC.post('/api/game/wallet/withdrawals', { amountKobo: naira(1000), twoStepCode: await code() })).json.withdrawal;
   await adminC.post(`/api/admin/game/withdrawals/${r3.id}/approve`);
   transferStatus = 'succeeded';
   assert.equal((await prisma.withdrawal.findUnique({ where: { id: r3.id } })).status, 'failed');
   assert.equal(Number((await balance(c)).availableKobo), naira(1000));
   // Cancelled by the person while waiting.
-  const r4 = (await cC.post('/api/game/wallet/withdrawals', { amountKobo: naira(1000) })).json.withdrawal;
+  const r4 = (await cC.post('/api/game/wallet/withdrawals', { amountKobo: naira(1000), twoStepCode: await code() })).json.withdrawal;
   assert.equal((await cC.post(`/api/game/wallet/withdrawals/${r4.id}/cancel`)).status, 200);
   assert.equal(Number((await balance(c)).availableKobo), naira(1000));
 });

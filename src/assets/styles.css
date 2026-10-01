@@ -7,6 +7,24 @@
 :root {
   --bottom-nav: calc(3.5rem + env(safe-area-inset-bottom));
 }
+
+/* Text shades that change with the theme so body text meets WCAG AA
+   (4.5:1) on Kotka's surfaces. Light: ink-400 #766E63, ink-500 #6B6259,
+   accent-600 #836128. Dark: ink-400 #948A7D, ink-500 #918B84, accent-600
+   #B58637 (the brand Supporting Gold). */
+:root {
+  --ink-400: 118 110 99;
+  --ink-500: 107 98 89;
+  --accent-600: 131 97 40;
+}
+.dark,
+/* Panels that are dark in either theme (the landing page, the dashboard and
+   Learn headers, the sign-in side panel) use the dark-mode text shades. */
+.on-dark {
+  --ink-400: 148 138 125;
+  --ink-500: 145 139 132;
+  --accent-600: 181 134 55;
+}
 @media (min-width: 1024px) {
   :root {
     --bottom-nav: 0px;

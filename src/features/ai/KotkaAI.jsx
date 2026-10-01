@@ -237,7 +237,7 @@ export default function KotkaAI() {
   }); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (loadError) return <p role="alert" className="rounded-2xl bg-white p-6 text-sm text-loss-500 dark:bg-ink-900">{loadError}</p>;
-  if (!conversations) return <div className="h-96 animate-pulse rounded-2xl bg-white dark:bg-ink-900" aria-label="Loading your conversations" />;
+  if (!conversations) return <div role="status" className="h-96 animate-pulse rounded-2xl bg-white dark:bg-ink-900" aria-label="Loading your conversations" />;
 
   return (
     <div className="flex h-[calc(100dvh_-_6.5rem_-_var(--bottom-nav)_-_var(--banners,0px))] min-h-[26rem] flex-col sm:h-[calc(100dvh_-_7rem_-_var(--bottom-nav)_-_var(--banners,0px))] lg:h-[calc(100dvh_-_8rem_-_var(--banners,0px))]">

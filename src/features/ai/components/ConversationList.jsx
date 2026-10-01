@@ -38,7 +38,7 @@ export default function ConversationList({ conversations, activeId, onSelect, on
               <p className="truncate text-sm font-medium text-ink-800 dark:text-ink-100">{c.title}</p>
               {c.favorite ? <Star className="h-3.5 w-3.5 shrink-0 fill-amber-400 text-amber-400" /> : null}
             </div>
-            <p className="mt-0.5 truncate text-xs text-ink-400">{c.market} · {new Date(c.updatedAt).toLocaleDateString()}</p>
+            <p className="mt-0.5 truncate text-xs text-ink-500 dark:text-ink-400">{c.market} · {new Date(c.updatedAt).toLocaleDateString()}</p>
           </button>
         ))}
         {filtered.length === 0 ? <p className="px-3 py-6 text-center text-xs text-ink-400">{search ? 'No analyses match your search.' : 'No analyses yet. Start one above.'}</p> : null}

@@ -19,6 +19,7 @@ import { openDetails } from '../../kyc.js';
 import { loadGameSettings } from '../config.js';
 import { post, walletFor, kobo } from '../wallet.js';
 import { GameError, TX } from '../matches.js';
+import { assertDepositWithinLimits } from '../limits.js';
 import * as whop from './whop.js';
 import * as paystack from './paystack.js';
 
@@ -59,6 +60,8 @@ export async function startDeposit(user, { amountKobo, provider }) {
   if (!s.depositsEnabled) throw new GameError('Deposits are paused right now. Please try again later.', 503, 'deposits_paused');
   await assertVerified(user.id);
   if (!Number.isInteger(amountKobo) || amountKobo < s.minDepositKobo || amountKobo > s.maxDepositKobo) throw new GameError(`Deposit from ₦${(s.minDepositKobo / 100).toLocaleString('en-NG')} to ₦${(s.maxDepositKobo / 100).toLocaleString('en-NG')}.`);
+  // The trader's own limits and breaks.
+  await assertDepositWithinLimits(user.id, amountKobo);
   const choice = list.find((p) => p.key === (provider ?? list[0]?.key));
   if (!choice) throw new GameError('Deposits aren’t set up yet. Please check back soon.', 503, 'provider_unavailable');
   const cfg = await configFor(choice.key);
@@ -133,6 +136,8 @@ async function once(provider, eventId, type, fn) {
   }
 }
 
+const WHOP_CLAWBACK = new Set(['refund.created', 'refund.updated', 'dispute.created', 'dispute.updated', 'dispute_alert.created']);
+
 export async function handleWhopWebhook(rawBody, headers) {
   const cfg = await whop.whopSettings();
   if (!cfg?.webhookSecret) return { status: 503, body: { error: 'Whop webhooks aren’t set up.' } };
@@ -146,7 +151,9 @@ export async function handleWhopWebhook(rawBody, headers) {
   }
   await once('whop', v.id, event.type ?? 'unknown', async () => {
     const data = event.data ?? {};
-    const depositId = data.metadata?.kotka_deposit;
+    // Payment events carry our metadata on the payment itself; refund and
+    // dispute events carry it on the payment they point at.
+    const depositId = data.metadata?.kotka_deposit ?? data.payment?.metadata?.kotka_deposit;
     if (event.type === 'payment.succeeded' && depositId) {
       const d = await prisma.deposit.findUnique({ where: { id: String(depositId) } });
       if (!d || d.provider !== 'whop') return 'ignored';
@@ -162,15 +169,18 @@ export async function handleWhopWebhook(rawBody, headers) {
       return 'failed';
     }
     // A refund or chargeback on a deposit: freeze the wallet until a person
-    // reviews it, so the money can't be staked or withdrawn meanwhile. The
-    // event may not carry our metadata, so the deposit is also found by the
-    // Whop payment id.
-    if (/refund|dispute|chargeback/.test(event.type ?? '')) {
-      const paymentId = data.payment_id ?? data.payment?.id ?? (String(data.id ?? '').startsWith('pay_') ? data.id : null);
+    // reviews it, so the money can't be staked or withdrawn meanwhile. Event
+    // names and shapes are from Whop's API reference (checked 2026-09-30):
+    // `data` is the Refund or Dispute, with the original payment in
+    // `data.payment` (id and metadata). Whatever the outcome (a refund that
+    // failed, a dispute won or lost), a person clears the hold.
+    if (WHOP_CLAWBACK.has(event.type) || /refund|dispute|chargeback/.test(event.type ?? '')) {
+      const paymentId = data.payment?.id ?? data.payment_id ?? (String(data.id ?? '').startsWith('pay_') ? data.id : null);
       const d = depositId ? await prisma.deposit.findUnique({ where: { id: String(depositId) } }) : paymentId ? await prisma.deposit.findFirst({ where: { provider: 'whop', providerPaymentId: String(paymentId) } }) : null;
-      if (!d) return 'ignored';
-      await prisma.deposit.update({ where: { id: d.id }, data: { failureReason: `Whop reported ${event.type} after payment. Review this deposit.` } });
-      await freezeWallet(d.userId, `Whop ${event.type} on deposit ${d.id}`);
+      if (!d || d.provider !== 'whop') return 'ignored';
+      const what = `${event.type}${data.status ? ` (${data.status})` : ''}${data.amount != null ? `, ${data.amount} ${String(data.currency ?? '').toUpperCase()}`.trimEnd() : ''}`;
+      await prisma.deposit.update({ where: { id: d.id }, data: { failureReason: `Whop reported ${what} after payment. Review this deposit.` } });
+      await freezeWallet(d.userId, `Whop ${what} on deposit ${d.id}`);
       return 'frozen';
     }
     return 'ignored';

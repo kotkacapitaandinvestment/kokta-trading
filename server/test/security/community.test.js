@@ -77,6 +77,32 @@ test('live updates: a private chat channel cannot be subscribed to', async () =>
   assert.ok(ready.channels.includes(`user:${eve.id}`));
 });
 
+test('live updates stop within seconds once the session is revoked (signed out, suspended or banned)', async () => {
+  const base = await startServer();
+  process.env.KOTKA_RT_RECHECK_MS = '500';
+  const u = await makeUser('Streamer');
+  const c = await signIn(u);
+  const ctrl = new AbortController();
+  const res = await fetch(`${base}/api/realtime/stream`, { headers: { Cookie: c.cookie }, signal: ctrl.signal });
+  const reader = res.body.getReader();
+  let text = '';
+  const until = async (marker, ms) => {
+    const stop = Date.now() + ms;
+    while (!text.includes(marker) && Date.now() < stop) {
+      const { value, done } = await Promise.race([reader.read(), new Promise((r) => setTimeout(() => r({ timeout: true }), stop - Date.now()))]);
+      if (done) break;
+      if (value) text += new TextDecoder().decode(value);
+    }
+    return text.includes(marker);
+  };
+  assert.ok(await until('event: ready', 10000));
+  await prisma.user.update({ where: { id: u.id }, data: { status: 'banned' } });
+  await prisma.session.updateMany({ where: { userId: u.id }, data: { revokedAt: new Date() } });
+  assert.ok(await until('event: ended', 5000), 'the open stream is closed');
+  ctrl.abort();
+  delete process.env.KOTKA_RT_RECHECK_MS;
+});
+
 test("people can't edit or delete others' posts, or update others' trade ideas", async () => {
   const idea = await aliceC.post('/api/community/posts', { kind: 'idea', instrument: 'EURUSD', idea: { direction: 'bullish', timeframe: '4H', entry: 1.1, stop: 1.09, target: 1.13, thesis: 'A long enough explanation of the reasoning behind this idea.' } });
   assert.equal(idea.status, 201);

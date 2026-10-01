@@ -1,11 +1,13 @@
-// Media uploads (images, voice notes) stored in Postgres. There is no file
-// store on this deployment yet; if one is added (e.g. Vercel Blob), only
-// saveMedia/serveMedia need to change. Clients compress before upload, and
-// Vercel caps request bodies at ~4.5 MB.
+// Media uploads (images, voice notes). Files go to Cloudflare R2 when it's
+// connected (lib/storage.js), under a key that includes the file's secret
+// token, and are only ever served through Kotka's own routes. Without R2,
+// or if R2 fails at upload time, the bytes stay in Postgres. Clients
+// compress before upload, and Vercel caps request bodies at ~4.5 MB.
 
 import crypto from 'node:crypto';
 import { prisma } from './prisma.js';
 import { cleanImage } from './imageSafety.js';
+import { objectStore } from './storage.js';
 
 export const MAX_BYTES = { image: 2.5 * 1024 * 1024, audio: 2.5 * 1024 * 1024 };
 // Storage per person: what they can add in a day, and keep in all.
@@ -53,21 +55,58 @@ export async function saveMedia(ownerId, { dataUrl, width, height, durationMs })
   ]);
   if ((today._sum.size ?? 0) + buf.length > DAILY_BYTES) return { error: 'You’ve uploaded a lot today. Try again tomorrow.' };
   if ((total._sum.size ?? 0) + buf.length > TOTAL_BYTES) return { error: 'Your uploads are full. Delete some older posts or messages with images, then try again.' };
+  const token = crypto.randomBytes(18).toString('base64url');
+  // To R2 when connected; if that fails, the database, so an upload never fails because of storage.
+  let storageKey = null;
+  const store = await objectStore();
+  if (store) {
+    const key = store.keyFor(ownerId, `${crypto.randomUUID()}-${token}`);
+    try {
+      await store.put(key, buf, type.mime);
+      storageKey = key;
+    } catch (err) {
+      console.error('R2 upload failed; keeping this file in the database:', err.message);
+    }
+  }
   const media = await prisma.media.create({
     data: {
       ownerId,
-      token: crypto.randomBytes(18).toString('base64url'),
+      token,
       kind: type.kind,
       mime: type.mime,
       size: buf.length,
       width: type.kind === 'image' ? int(width, 20000) : null,
       height: type.kind === 'image' ? int(height, 20000) : null,
       durationMs: type.kind === 'audio' ? int(durationMs, 10 * 60 * 1000) : null,
-      data: buf,
+      data: storageKey ? null : buf,
+      storageKey,
     },
     select: { id: true, token: true, kind: true, mime: true, size: true, width: true, height: true, durationMs: true },
   });
   return { media: { ...media, url: mediaUrl(media) } };
+}
+
+// Removes media rows (and, once files live in object storage, their files).
+// Returns how many were removed.
+export async function removeMedia(ids) {
+  const list = [...new Set((ids ?? []).map(String))];
+  if (!list.length) return 0;
+  const rows = await prisma.media.findMany({ where: { id: { in: list }, storageKey: { not: null } }, select: { storageKey: true } });
+  if (rows.length) {
+    const store = await objectStore();
+    // A file left behind (R2 down right now) is caught by the daily sweep.
+    if (store) await Promise.all(rows.map((r) => store.remove(r.storageKey).catch((err) => console.error('R2 delete failed:', err.message))));
+  }
+  const r = await prisma.media.deleteMany({ where: { id: { in: list } } });
+  return r.count;
+}
+
+// The file's bytes, wherever they live. null if they can't be read.
+export async function mediaBytes(m) {
+  if (m?.data) return Buffer.from(m.data);
+  if (!m?.storageKey) return null;
+  const store = await objectStore();
+  return store ? store.get(m.storageKey) : null;
 }
 
 // A post or message is gone (deleted, or removed by a moderator): its images
@@ -75,8 +114,8 @@ export async function saveMedia(ownerId, { dataUrl, width, height, durationMs })
 export async function dropAttachedMedia(ownerId, attachments) {
   const ids = (Array.isArray(attachments) ? attachments : []).filter((a) => a && (a.type === 'image' || a.type === 'audio') && a.mediaId).map((a) => String(a.mediaId));
   if (!ids.length || !ownerId) return 0;
-  const r = await prisma.media.deleteMany({ where: { id: { in: ids }, ownerId } }).catch(() => ({ count: 0 }));
-  return r.count;
+  const owned = await prisma.media.findMany({ where: { id: { in: ids }, ownerId }, select: { id: true } });
+  return removeMedia(owned.map((m) => m.id)).catch(() => 0);
 }
 
 // Validates an attachment's media reference belongs to the sender.
@@ -92,7 +131,6 @@ export async function serveMedia(req, res) {
   if (!ok) return res.status(404).json({ error: 'Not found' });
   res.set({
     'Content-Type': m.mime,
-    'Content-Length': String(m.size),
     // A day, not a year: removed or deleted uploads drop out of caches soon.
     'Cache-Control': 'private, max-age=86400',
     'X-Content-Type-Options': 'nosniff',
@@ -100,7 +138,10 @@ export async function serveMedia(req, res) {
     // Opened directly, an upload is inert: no scripts, no plugins, no forms.
     'Content-Security-Policy': "default-src 'none'; img-src 'self'; media-src 'self'; sandbox",
   });
-  res.end(Buffer.from(m.data));
+  const bytes = await mediaBytes(m);
+  if (!bytes) return res.status(503).set('Cache-Control', 'no-store').json({ error: 'That file can’t be loaded right now. Please try again shortly.' });
+  res.set('Content-Length', String(bytes.length));
+  res.end(bytes);
 }
 
 // Profile photo URL. The avatar id is in the query so a new photo is a new
@@ -123,6 +164,6 @@ export async function setAvatar(userId, mediaId) {
   }
   if (next === user.avatarId) return { avatarId: next };
   await prisma.user.update({ where: { id: userId }, data: { avatarId: next }, select: { id: true } });
-  if (user.avatarId) await prisma.media.deleteMany({ where: { id: user.avatarId, ownerId: userId } });
+  if (user.avatarId) await removeMedia([user.avatarId]);
   return { avatarId: next };
 }

@@ -197,7 +197,7 @@ export function FactorBar({ score, width = 88 }) {
   }
   const len = (Math.abs(score) / 2) * (half - 2);
   return (
-    <div className="relative h-3" style={{ width }} aria-label={`Score ${signed(score)} of ±2`}>
+    <div role="img" className="relative h-3" style={{ width }} aria-label={`Score ${signed(score)} of ±2`}>
       <span className="absolute top-0 h-3 w-px bg-ink-300 dark:bg-ink-600" style={{ left: half }} />
       {score !== 0 ? (
         <span

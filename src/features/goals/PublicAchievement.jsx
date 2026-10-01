@@ -43,7 +43,7 @@ export default function PublicAchievement() {
     : [];
 
   return (
-    <div className="min-h-[100dvh] bg-ink-950 text-ink-100" style={{ background: 'radial-gradient(ellipse 60% 40% at 20% 0%, rgba(209,168,91,0.12), transparent 60%), #050504' }}>
+    <div className="on-dark min-h-[100dvh] bg-ink-950 text-ink-100" style={{ background: 'radial-gradient(ellipse 60% 40% at 20% 0%, rgba(209,168,91,0.12), transparent 60%), #050504' }}>
       <header className="mx-auto flex max-w-6xl items-center justify-between px-5 py-5 sm:px-8">
         <Link to="/" className="flex items-center gap-2.5"><BrandMark size={30} /><span className="text-sm font-semibold tracking-[0.3em] text-accent-100">KOTKA</span></Link>
         <Link to={user ? '/app/goals' : '/signup'} className="rounded-lg border border-accent-500/50 px-3 py-1.5 text-xs font-medium text-accent-100 hover:bg-white/5">{user ? 'Your Goal Room' : 'Join Kotka'}</Link>

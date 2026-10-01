@@ -113,7 +113,7 @@ export default function CommunityLayout() {
           </form>
           <Link to="/app/community/saved" className="flex h-9 w-9 items-center justify-center rounded-lg text-ink-500 hover:bg-white dark:text-ink-400 dark:hover:bg-ink-800" aria-label="Saved" title="Saved"><Bookmark className="h-4 w-4" /></Link>
           <Link to="/app/community/guidelines" className="flex h-9 w-9 items-center justify-center rounded-lg text-ink-500 hover:bg-white dark:text-ink-400 dark:hover:bg-ink-800" aria-label="Community Guidelines" title="Community Guidelines"><BookOpen className="h-4 w-4" /></Link>
-          <span className={clsx('h-2 w-2 rounded-full', status === 'open' ? 'bg-profit-500' : 'bg-amber-500')} title={status === 'open' ? 'Live updates connected' : 'Reconnecting live updates'} aria-label={status === 'open' ? 'Live updates connected' : 'Reconnecting live updates'} />
+          <span role="img" className={clsx('h-2 w-2 rounded-full', status === 'open' ? 'bg-profit-500' : 'bg-amber-500')} title={status === 'open' ? 'Live updates connected' : 'Reconnecting live updates'} aria-label={status === 'open' ? 'Live updates connected' : 'Reconnecting live updates'} />
         </div>
       </div>
       {fullBleed ? <Suspense fallback={<PageLoading />}><Outlet /></Suspense> : (

@@ -248,7 +248,7 @@ export default function GoalRoom() {
       />
 
       {earned.length ? (
-        <div className="mb-5 flex flex-wrap items-center gap-3 rounded-2xl border border-accent-500/40 bg-ink-950 px-5 py-4 text-ink-100">
+        <div className="on-dark mb-5 flex flex-wrap items-center gap-3 rounded-2xl border border-accent-500/40 bg-ink-950 px-5 py-4 text-ink-100">
           <span className="text-sm">Earned just now: <span className="font-semibold text-accent-300">{earned.map((a) => a.title).join(', ')}</span></span>
           <div className="ml-auto flex gap-2">
             <Button size="sm" variant="accent" icon={Share2} onClick={() => openShare('achievement', earned[0].id)}>Share</Button>
@@ -343,8 +343,8 @@ export default function GoalRoom() {
               {data.badges.map((b) => {
                 const Icon = ICONS[b.icon] ?? ICONS.medal;
                 return (
-                  <li key={b.id} className={clsx('flex gap-3', !b.earned && 'opacity-55')}>
-                    <span className={clsx('flex h-9 w-9 shrink-0 items-center justify-center rounded-full border', b.earned ? 'border-accent-500 bg-accent-500/15 text-accent-700 dark:text-accent-300' : 'border-dashed border-ink-300 text-ink-400 dark:border-ink-600')}><Icon className="h-4 w-4" /></span>
+                  <li key={b.id} className="flex gap-3">
+                    <span className={clsx('flex h-9 w-9 shrink-0 items-center justify-center rounded-full border', b.earned ? 'border-accent-500 bg-accent-500/15 text-accent-700 dark:text-accent-300' : 'border-dashed border-ink-300 text-ink-400 opacity-60 dark:border-ink-600')}><Icon className="h-4 w-4" /></span>
                     <span className="min-w-0">
                       <span className="block text-sm font-medium text-ink-900 dark:text-ink-50">{b.name}{b.earned ? '' : ' · not yet'}</span>
                       <span className="block text-xs text-ink-500 dark:text-ink-400">{b.rule}</span>

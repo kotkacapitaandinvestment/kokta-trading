@@ -20,6 +20,7 @@ const TABS = [
   { value: 'matches', label: 'Matches' },
   { value: 'deposits', label: 'Deposits' },
   { value: 'ledger', label: 'Ledger' },
+  { value: 'promotions', label: 'Promotions' },
   { value: 'risk', label: 'Risk & compliance' },
   { value: 'settings', label: 'Settings' },
 ];
@@ -48,6 +49,7 @@ function Overview() {
     ['Players’ money', naira(data.playerFunds.availableKobo + data.playerFunds.lockedKobo + data.playerFunds.pendingWithdrawKobo), `${naira(data.playerFunds.lockedKobo)} locked in matches`],
     ['Withdrawals waiting', data.pendingWithdrawals.count, naira(data.pendingWithdrawals.amountKobo)],
     ['Disputed matches', data.disputed, 'Stakes locked until reviewed'],
+    ['Promotional credits out', naira(data.promotions?.outstandingKobo ?? 0), `${naira(data.promotions?.cost30dKobo ?? 0)} paid for promotions in 30 days`],
   ];
   return (
     <div className="space-y-6">
@@ -258,6 +260,8 @@ function Ledger({ canEdit }) {
                     {w.user.name} <span className="text-xs text-ink-400">{w.user.email}</span>
                     <span className="block text-xs text-ink-400">{naira(w.wallet.availableKobo)} available · {naira(w.wallet.lockedKobo)} locked · {naira(w.wallet.pendingWithdrawKobo)} withdrawing</span>
                     {w.wallet.onHold ? <span className="mt-0.5 block text-xs font-medium text-loss-600 dark:text-loss-400">On hold: {w.wallet.holdReason}</span> : null}
+                    {w.wallet.promoAvailableKobo || w.wallet.restrictedKobo ? <span className="block text-xs text-ink-400">{naira(w.wallet.promoAvailableKobo)} promotional credits · {naira(w.wallet.restrictedKobo)} winnings not yet withdrawable</span> : null}
+                    {w.limits?.excludedUntil ? <span className="mt-0.5 block text-xs font-medium text-amber-700 dark:text-amber-400">Self-excluded until {when(w.limits.excludedUntil)}. Don’t offer promotions.</span> : w.limits?.breakUntil ? <span className="mt-0.5 block text-xs font-medium text-amber-700 dark:text-amber-400">On a break until {when(w.limits.breakUntil)}</span> : null}
                   </button>
                   {canEdit ? (
                     <span className="flex gap-1">
@@ -299,6 +303,120 @@ function Ledger({ canEdit }) {
 }
 
 // Patterns worth a human look. Nothing here blocks anyone by itself.
+const AUDIENCE = { manual: 'Given by an admin', new_verified: 'Every newly verified trader' };
+
+function Promotions({ canEdit }) {
+  const { data, error, load } = useData('/admin/game/promotions');
+  const [form, setForm] = useState({ name: '', description: '', amount: '1000', days: '30', audience: 'manual', maxGrants: '' });
+  const [grant, setGrant] = useState({ user: '', campaignId: '', amount: '500', days: '14', reason: '' });
+  const [busy, setBusy] = useState(false);
+  const run = async (fn, ok) => {
+    setBusy(true);
+    try {
+      await fn();
+      if (ok) toast(ok);
+      load();
+    } catch (err) {
+      toast(err.message, { tone: 'error' });
+    } finally {
+      setBusy(false);
+    }
+  };
+  if (error) return <LoadError message={error} />;
+  if (!data) return <div className="h-64 animate-pulse rounded-2xl bg-white dark:bg-ink-900" />;
+  const create = () => run(() => api.post('/admin/game/promotions/campaigns', { name: form.name, description: form.description, amountKobo: Math.round(Number(form.amount) * 100), expiresInDays: Number(form.days), audience: form.audience, maxGrants: form.maxGrants ? Number(form.maxGrants) : null }).then(() => setForm((f) => ({ ...f, name: '', description: '' }))), 'Campaign created.');
+  const toggle = (c) => run(() => api.patch(`/admin/game/promotions/campaigns/${c.id}`, { active: !c.active }), c.active ? 'Campaign stopped.' : 'Campaign running.');
+  const give = () => run(() => api.post('/admin/game/promotions/grants', { user: grant.user, campaignId: grant.campaignId || undefined, amountKobo: Math.round(Number(grant.amount) * 100), expiresInDays: Number(grant.days), reason: grant.reason }).then(() => setGrant((g) => ({ ...g, user: '', reason: '' }))), 'Credits given.');
+  const revoke = async (g) => {
+    const reason = await promptDialog({ title: `Remove ${naira(g.remainingKobo)} of ${g.user.name}’s credits?`, message: 'What’s left of this grant leaves their wallet. Credits already staked aren’t affected.', label: 'Reason', confirmLabel: 'Remove credits', danger: true });
+    if (!reason) return;
+    run(() => api.post(`/admin/game/promotions/grants/${g.id}/revoke`, { reason }), 'Credits removed.');
+  };
+  return (
+    <div className="space-y-6">
+      <Card>
+        <CardHeader title="How promotional credits work" />
+        <CardBody className="text-sm leading-relaxed text-ink-600 dark:text-ink-300">
+          Credits go only to verified traders who aren’t on a break or self-excluded. They can be staked, never withdrawn, and they expire. A stake uses them first. If a trader wins with them, that share of the prize is real money but can only be withdrawn after they’ve staked the same amount of their own money. When credits turn into cash, the cost is paid from Kotka’s house wallet and shows in the ledger as “Promotion paid by Kotka”.
+        </CardBody>
+      </Card>
+      <Card>
+        <CardHeader title="Campaigns" subtitle="A named amount of credits with an expiry. Stopping a campaign keeps credits already given." />
+        <CardBody className="space-y-4">
+          {data.campaigns.length ? (
+            <ul className="divide-y divide-ink-100 dark:divide-ink-800">
+              {data.campaigns.map((c) => (
+                <li key={c.id} className="flex flex-wrap items-center justify-between gap-3 py-3 text-sm">
+                  <span>
+                    <span className="font-medium text-ink-900 dark:text-ink-50">{c.name}</span> <Badge tone={c.active ? 'profit' : 'neutral'}>{c.active ? 'Running' : 'Stopped'}</Badge>
+                    <span className="block text-xs text-ink-500">{naira(c.amountKobo)} each · expires {c.expiresInDays} days after it’s given · {AUDIENCE[c.audience]} · given to {c.granted}{c.maxGrants ? ` of ${c.maxGrants}` : ''}</span>
+                  </span>
+                  {canEdit ? <Button size="sm" variant="ghost" disabled={busy} onClick={() => toggle(c)}>{c.active ? 'Stop' : 'Start again'}</Button> : null}
+                </li>
+              ))}
+            </ul>
+          ) : <EmptyState size="inline" title="No campaigns yet" description="Create one below to give traders promotional credits." />}
+          {canEdit ? (
+            <div className="grid grid-cols-1 gap-3 border-t border-ink-100 pt-4 sm:grid-cols-2 lg:grid-cols-3 dark:border-ink-800">
+              <Input label="Name traders see" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Welcome credits" />
+              <Input label="Credits each (₦)" inputMode="numeric" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value.replace(/[^\d.]/g, '') })} />
+              <Input label="Expires after (days)" inputMode="numeric" value={form.days} onChange={(e) => setForm({ ...form, days: e.target.value.replace(/\D/g, '') })} />
+              <Select label="Who gets it" value={form.audience} onChange={(e) => setForm({ ...form, audience: e.target.value })}>
+                <option value="manual">Traders an admin chooses</option>
+                <option value="new_verified">Every newly verified trader</option>
+              </Select>
+              <Input label="At most (traders)" inputMode="numeric" placeholder="No cap" value={form.maxGrants} onChange={(e) => setForm({ ...form, maxGrants: e.target.value.replace(/\D/g, '') })} />
+              <div className="flex items-end"><Button onClick={create} disabled={busy || form.name.trim().length < 3}>Create campaign</Button></div>
+            </div>
+          ) : <p className="text-xs text-ink-400">Only a Super Admin can create campaigns or give credits.</p>}
+        </CardBody>
+      </Card>
+      {canEdit ? (
+        <Card>
+          <CardHeader title="Give credits to a trader" subtitle="From a running campaign, or a one-off amount with a reason they’ll see." />
+          <CardBody className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            <Input label="Username or email" value={grant.user} onChange={(e) => setGrant({ ...grant, user: e.target.value })} placeholder="@trader" />
+            <Select label="Campaign" value={grant.campaignId} onChange={(e) => setGrant({ ...grant, campaignId: e.target.value })}>
+              <option value="">One-off amount</option>
+              {data.campaigns.filter((c) => c.active).map((c) => <option key={c.id} value={c.id}>{c.name} ({naira(c.amountKobo)})</option>)}
+            </Select>
+            {grant.campaignId ? null : (
+              <>
+                <Input label="Credits (₦)" inputMode="numeric" value={grant.amount} onChange={(e) => setGrant({ ...grant, amount: e.target.value.replace(/[^\d.]/g, '') })} />
+                <Input label="Expires after (days)" inputMode="numeric" value={grant.days} onChange={(e) => setGrant({ ...grant, days: e.target.value.replace(/\D/g, '') })} />
+                <Input label="Reason they’ll see" value={grant.reason} onChange={(e) => setGrant({ ...grant, reason: e.target.value })} placeholder="Thanks for reporting a bug" />
+              </>
+            )}
+            <div className="flex items-end"><Button onClick={give} disabled={busy || !grant.user.trim()}>Give credits</Button></div>
+          </CardBody>
+        </Card>
+      ) : null}
+      <Card>
+        <CardHeader title="Credits given" subtitle="The latest 100 grants." />
+        {data.grants.length ? (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[640px] text-sm">
+              <thead><tr className="border-b border-ink-100 text-left text-xs text-ink-400 dark:border-ink-800">{['Trader', 'For', 'Given', 'Left', 'Expires', ''].map((h) => <th key={h} className="px-5 py-3 font-medium">{h}</th>)}</tr></thead>
+              <tbody>
+                {data.grants.map((g) => (
+                  <tr key={g.id} className="border-b border-ink-50 last:border-0 dark:border-ink-800/60">
+                    <td className="px-5 py-2.5">{g.user.name}{g.user.username ? <span className="block text-xs text-ink-400">@{g.user.username}</span> : null}</td>
+                    <td className="px-5 py-2.5 text-ink-600 dark:text-ink-300">{g.campaign ?? g.reason}</td>
+                    <td className="px-5 py-2.5 tabular-nums">{naira(g.amountKobo)}</td>
+                    <td className="px-5 py-2.5 tabular-nums">{g.revokedAt ? <Badge tone="neutral">Removed</Badge> : naira(g.remainingKobo)}</td>
+                    <td className="px-5 py-2.5 text-xs text-ink-500">{when(g.expiresAt)}</td>
+                    <td className="px-5 py-2.5 text-right">{canEdit && !g.revokedAt && g.remainingKobo > 0 ? <Button size="sm" variant="ghost" onClick={() => revoke(g)}>Remove</Button> : null}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : <CardBody><EmptyState size="inline" title="No credits given yet" description="Grants from campaigns and one-off credits appear here." /></CardBody>}
+      </Card>
+    </div>
+  );
+}
+
 function Risk() {
   const [days, setDays] = useState(14);
   const { data, error } = useData(`/admin/game/risk?days=${days}`);
@@ -520,6 +638,7 @@ export default function AdminGame() {
       {tab === 'matches' ? <Matches /> : null}
       {tab === 'deposits' ? <Deposits /> : null}
       {tab === 'ledger' ? <Ledger canEdit={canEdit} /> : null}
+      {tab === 'promotions' ? <Promotions canEdit={canEdit} /> : null}
       {tab === 'risk' ? <Risk /> : null}
       {tab === 'settings' ? <Settings /> : null}
     </div>

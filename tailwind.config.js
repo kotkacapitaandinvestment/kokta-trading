@@ -18,8 +18,11 @@ export default {
           800: '#171512',
           700: '#262320',
           600: '#3D3833',
-          500: '#6B6259',
-          400: '#948A7D',
+          // 500 and 400 are text greys, so they change with the theme to keep
+          // body text at WCAG AA (4.5:1): 400 is darker in light mode, 500 is
+          // lighter in dark mode. Values live in styles.css (--ink-400/500).
+          500: 'rgb(var(--ink-500) / <alpha-value>)',
+          400: 'rgb(var(--ink-400) / <alpha-value>)',
           300: '#B8AE9F',
           200: '#DDD6C9',
           100: '#EDE8DD',
@@ -34,7 +37,7 @@ export default {
           300: '#E4C078',
           400: '#F4D48E', // Highlight Gold
           500: '#D1A85B', // Primary Gold
-          600: '#B58637', // Supporting Gold
+          600: 'rgb(var(--accent-600) / <alpha-value>)', // Supporting Gold (#B58637); deeper as light-mode text, see styles.css
           700: '#936E33', // Bronze
           800: '#654F2F', // Deep Bronze
           900: '#49351E', // Dark Bronze

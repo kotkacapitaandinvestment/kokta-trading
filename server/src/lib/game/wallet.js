@@ -29,12 +29,17 @@ export async function walletFor(userId, db = prisma) {
   return db.wallet.upsert({ where: { userId }, update: {}, create: { userId, kind: 'user' } });
 }
 
+export const RESTRICTED_EXPLAINED = 'Part of your balance was won with promotional credits. It can be withdrawn once you’ve staked the same amount of your own money in competitions.';
+
 /**
- * post(tx, { walletId, type, amount, available, locked, pending, key, ... })
- * available/locked/pending are signed deltas (kobo). Must run inside
- * prisma.$transaction. Returns { entry, wallet, duplicate }.
+ * post(tx, { walletId, type, amount, available, locked, pending, promo,
+ *            promoLocked, restricted, key, ... })
+ * All movement fields are signed deltas (kobo). promo/promoLocked move
+ * promotional credits; restricted moves the part of `available` won with
+ * them, which can't be withdrawn yet. Must run inside prisma.$transaction.
+ * Returns { entry, wallet, duplicate }.
  */
-export async function post(tx, { walletId, userId = null, type, amount, available = 0, locked = 0, pending = 0, key, creditType = 'cash', matchId = null, depositId = null, withdrawalId = null, reason = null, createdBy = null }) {
+export async function post(tx, { walletId, userId = null, type, amount, available = 0, locked = 0, pending = 0, promo = 0, promoLocked = 0, restricted = 0, key, creditType = 'cash', matchId = null, depositId = null, withdrawalId = null, reason = null, createdBy = null }) {
   if (!key) throw new Error('Every ledger entry needs an idempotency key.');
   const [w] = await tx.$queryRaw`SELECT * FROM "Wallet" WHERE "id" = ${walletId} FOR UPDATE`;
   if (!w) throw new Error(`Wallet ${walletId} not found.`);
@@ -43,9 +48,28 @@ export async function post(tx, { walletId, userId = null, type, amount, availabl
   const dA = big(available);
   const dL = big(locked);
   const dP = big(pending);
-  const next = { availableKobo: w.availableKobo + dA, lockedKobo: w.lockedKobo + dL, pendingWithdrawKobo: w.pendingWithdrawKobo + dP };
-  if (next.availableKobo < 0n) throw new InsufficientFunds();
-  if (next.lockedKobo < 0n || next.pendingWithdrawKobo < 0n) throw new Error(`Ledger would go negative on wallet ${walletId} (${type}).`);
+  const dPr = big(promo);
+  const dPrL = big(promoLocked);
+  const dR = big(restricted);
+  const next = {
+    availableKobo: w.availableKobo + dA,
+    lockedKobo: w.lockedKobo + dL,
+    pendingWithdrawKobo: w.pendingWithdrawKobo + dP,
+    promoAvailableKobo: w.promoAvailableKobo + dPr,
+    promoLockedKobo: w.promoLockedKobo + dPrL,
+    restrictedKobo: w.restrictedKobo + dR,
+  };
+  // Kotka's own (house) wallet pays for promotions, so it alone may go below zero, and only for that.
+  const houseCost = w.kind === 'house' && type === 'promo_cost';
+  if (next.availableKobo < 0n && !houseCost) throw new InsufficientFunds();
+  if (next.promoAvailableKobo < 0n) throw new InsufficientFunds('You don’t have enough promotional credits for that.');
+  if (next.lockedKobo < 0n || next.pendingWithdrawKobo < 0n || next.promoLockedKobo < 0n || next.restrictedKobo < 0n) throw new Error(`Ledger would go negative on wallet ${walletId} (${type}).`);
+  // Restricted winnings are part of the available balance: money can leave
+  // `available` only down to what's restricted.
+  if (next.restrictedKobo > next.availableKobo && !houseCost) {
+    if (dA < 0n && dR === 0n) throw new InsufficientFunds(RESTRICTED_EXPLAINED);
+    throw new Error(`Restricted winnings would exceed the available balance on wallet ${walletId} (${type}).`);
+  }
   const wallet = await tx.wallet.update({ where: { id: walletId }, data: next });
   const entry = await tx.walletEntry.create({
     data: {
@@ -63,6 +87,15 @@ export async function post(tx, { walletId, userId = null, type, amount, availabl
       lockedAfter: next.lockedKobo,
       pendingBefore: w.pendingWithdrawKobo,
       pendingAfter: next.pendingWithdrawKobo,
+      promoDelta: dPr,
+      promoLockedDelta: dPrL,
+      restrictedDelta: dR,
+      promoBefore: w.promoAvailableKobo,
+      promoAfter: next.promoAvailableKobo,
+      promoLockedBefore: w.promoLockedKobo,
+      promoLockedAfter: next.promoLockedKobo,
+      restrictedBefore: w.restrictedKobo,
+      restrictedAfter: next.restrictedKobo,
       matchId,
       depositId,
       withdrawalId,
@@ -78,7 +111,20 @@ export function walletView(w) {
   const available = kobo(w?.availableKobo);
   const locked = kobo(w?.lockedKobo);
   const pending = kobo(w?.pendingWithdrawKobo);
-  return { availableKobo: available, lockedKobo: locked, pendingWithdrawKobo: pending, totalKobo: available + locked + pending, promoAvailableKobo: kobo(w?.promoAvailableKobo), onHold: !!w?.frozenAt, holdReason: w?.frozenAt ? w.frozenReason ?? null : null };
+  const restricted = kobo(w?.restrictedKobo);
+  return {
+    availableKobo: available,
+    lockedKobo: locked,
+    pendingWithdrawKobo: pending,
+    totalKobo: available + locked + pending,
+    // Real money you can take out now: available, less winnings still tied to promotional credits.
+    withdrawableKobo: Math.max(0, available - restricted),
+    restrictedKobo: restricted,
+    promoAvailableKobo: kobo(w?.promoAvailableKobo),
+    promoLockedKobo: kobo(w?.promoLockedKobo),
+    onHold: !!w?.frozenAt,
+    holdReason: w?.frozenAt ? w.frozenReason ?? null : null,
+  };
 }
 
 const TYPE_LABEL = {
@@ -94,7 +140,10 @@ const TYPE_LABEL = {
   withdrawal_release: 'Withdrawal returned to your balance',
   withdrawal_paid: 'Withdrawal paid',
   adjustment: 'Adjustment',
-  promo_credit: 'Promotional credit',
+  promo_credit: 'Promotional credits added',
+  promo_expired: 'Promotional credits expired',
+  promo_revoked: 'Promotional credits removed',
+  promo_cost: 'Promotion paid by Kotka',
 };
 
 export function entryView(e) {
@@ -109,6 +158,10 @@ export function entryView(e) {
     pendingDeltaKobo: kobo(e.pendingDelta),
     availableAfterKobo: kobo(e.availableAfter),
     lockedAfterKobo: kobo(e.lockedAfter),
+    promoDeltaKobo: kobo(e.promoDelta),
+    promoLockedDeltaKobo: kobo(e.promoLockedDelta),
+    restrictedDeltaKobo: kobo(e.restrictedDelta),
+    promoAfterKobo: kobo(e.promoAfter),
     status: e.status,
     matchId: e.matchId,
     depositId: e.depositId,

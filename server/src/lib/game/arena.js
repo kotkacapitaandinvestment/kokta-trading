@@ -161,8 +161,9 @@ export async function quickMatch(user, { stakeKobo, durationSec }) {
     try {
       // The trader who waited longer opens the match; you join it.
       match = await createMatch(them, { mode: 'duel', stakeKobo, durationSec, opponentId: user.id, quick: true });
-    } catch {
+    } catch (err) {
       // They can't play now (balance spent, another match): drop them and look again.
+      if (!(err instanceof GameError)) console.error('Quick Match: could not open the match for the waiting trader:', err.message);
       await prisma.gameQueue.deleteMany({ where: { id: other.id } });
       continue;
     }

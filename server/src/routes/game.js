@@ -6,13 +6,16 @@ import { limit } from '../lib/rateLimit.js';
 import { auditLater } from '../lib/audit.js';
 import { loadGameSettings, publicGameRules } from '../lib/game/config.js';
 import { walletFor, walletView, entryView, stakedToday } from '../lib/game/wallet.js';
-import { createMatch, joinMatch, confirmMatch, cancelMatch, act, matchView, chartCandles, lobby, history, rematch, personOf, GameError } from '../lib/game/matches.js';
+import { createMatch, joinMatch, confirmMatch, cancelMatch, act, matchView, chartCandles, lobby, history, rematch, personOf, GameError, closeOpenFor } from '../lib/game/matches.js';
+import { promoGrantsFor } from '../lib/game/promo.js';
+import { limitsFor, limitsView, setLimits, takeBreak } from '../lib/game/limits.js';
 import { PAIRS, publicPair } from '../lib/game/pairs.js';
 import { profileFor } from '../lib/game/progression.js';
 import * as arena from '../lib/game/arena.js';
 import { learnData } from '../lib/game/learn.js';
 import { TEMPLATES } from '../lib/game/market.js';
 import * as pay from '../lib/game/payments/index.js';
+import { confirmWithTwoStep } from '../lib/totp.js';
 
 // The Trading Game for players. Money routes need a verified identity
 // (checked in the services); practice matches don't.
@@ -60,15 +63,34 @@ gameRouter.get('/home', asyncHandler(async (req, res) => {
 gameRouter.get('/wallet', asyncHandler(async (req, res) => {
   const user = await me(req);
   arena.touch(user.id);
-  const [wallet, entries, deposits, withdrawals, payout, s] = await Promise.all([
+  const [wallet, entries, deposits, withdrawals, payout, s, promo, limits] = await Promise.all([
     walletFor(user.id),
     prisma.walletEntry.findMany({ where: { userId: user.id }, orderBy: { createdAt: 'desc' }, take: 100 }),
     prisma.deposit.findMany({ where: { userId: user.id }, orderBy: { createdAt: 'desc' }, take: 20 }),
     prisma.withdrawal.findMany({ where: { userId: user.id }, orderBy: { createdAt: 'desc' }, take: 20 }),
     pay.payoutStatus(user),
     loadGameSettings(),
+    promoGrantsFor(user.id),
+    limitsFor(user.id),
   ]);
-  res.json({ wallet: walletView(wallet), entries: entries.map(entryView), deposits: deposits.map(pay.depositView), withdrawals: withdrawals.map(pay.withdrawalView), payout, rules: publicGameRules(s) });
+  res.json({ wallet: walletView(wallet), promo, limits: limitsView(limits), entries: entries.map(entryView), deposits: deposits.map(pay.depositView), withdrawals: withdrawals.map(pay.withdrawalView), payout, rules: publicGameRules(s) });
+}));
+
+// ── Responsible play: the trader's own limits and breaks ────────────────────
+
+gameRouter.put('/limits', limit('profile'), asyncHandler(async (req, res) => {
+  const r = await setLimits(req.userId, req.body ?? {});
+  auditLater(req, 'game.limits_changed', { targetType: 'user', targetId: req.userId, detail: { applied: r.applied, waiting24h: r.pending } });
+  res.json(r);
+}));
+
+gameRouter.post('/limits/break', limit('profile'), asyncHandler(async (req, res) => {
+  const r = await takeBreak(req.userId, String(req.body?.kind ?? ''));
+  // Open challenges close and any search stops; a match already running finishes.
+  await closeOpenFor(req.userId, r.exclusion ? 'self-excluded' : 'taking a break');
+  await arena.setReady({ id: req.userId }, false).catch(() => {});
+  auditLater(req, r.exclusion ? 'game.self_excluded' : 'game.break_started', { targetType: 'user', targetId: req.userId, detail: { kind: req.body?.kind, until: r.until } });
+  res.json(r);
 }));
 
 gameRouter.post('/wallet/deposits', limit('deposit'), asyncHandler(async (req, res) => {
@@ -82,7 +104,15 @@ gameRouter.post('/wallet/deposits/:id/check', limit('depositCheck'), asyncHandle
   res.json({ deposit: await pay.refreshDeposit(await me(req), req.params.id) });
 }));
 
-gameRouter.post('/wallet/payout/whop', limit('payoutSetup'), asyncHandler(async (req, res) => {
+// Money leaving Kotka, and where it goes, needs a fresh code from the
+// trader's authenticator app: a stolen password alone can't move it.
+const twoStep = asyncHandler(async (req, res, next) => {
+  const problem = await confirmWithTwoStep(req.userId, req.body?.twoStepCode);
+  if (problem) return res.status(problem.status).json({ error: problem.error, code: problem.code });
+  next();
+});
+
+gameRouter.post('/wallet/payout/whop', limit('payoutSetup'), twoStep, asyncHandler(async (req, res) => {
   const link = await pay.whopOnboardingLink(await me(req), req.body?.use === 'payouts_portal' ? 'payouts_portal' : 'account_onboarding');
   res.json(link);
 }));
@@ -91,13 +121,13 @@ gameRouter.get('/wallet/payout/paystack/banks', asyncHandler(async (req, res) =>
   res.json({ banks: await pay.paystackBanks() });
 }));
 
-gameRouter.post('/wallet/payout/paystack', limit('payoutSetup'), asyncHandler(async (req, res) => {
+gameRouter.post('/wallet/payout/paystack', limit('payoutSetup'), twoStep, asyncHandler(async (req, res) => {
   const r = await pay.setPaystackAccount(await me(req), { bankCode: String(req.body?.bankCode ?? ''), accountNumber: String(req.body?.accountNumber ?? '') });
   auditLater(req, 'game.payout_account_set', { targetType: 'user', targetId: req.userId, detail: { provider: 'paystack', nameMatchesId: r.nameMatchesId } });
   res.json(r);
 }));
 
-gameRouter.post('/wallet/withdrawals', limit('withdrawal'), asyncHandler(async (req, res) => {
+gameRouter.post('/wallet/withdrawals', limit('withdrawal'), twoStep, asyncHandler(async (req, res) => {
   const w = await pay.requestWithdrawal(await me(req), { amountKobo: int(req.body?.amountKobo), provider: req.body?.provider });
   auditLater(req, 'game.withdrawal_requested', { targetType: 'withdrawal', targetId: w.id, detail: { amountKobo: w.amountKobo, provider: w.provider } });
   res.status(201).json({ withdrawal: w });

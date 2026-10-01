@@ -138,7 +138,7 @@ export default function Journal() {
           action={<Button onClick={() => setShowForm(true)}>Log a trade</Button>}
         />
       ) : (
-        <Card className="overflow-x-auto">
+        <Card className="overflow-x-auto" tabIndex={0} role="region" aria-label="Your trades (scroll sideways on small screens)">
           <table className="w-full min-w-[720px] text-sm">
             <thead>
               <tr className="border-b border-ink-100 text-left text-xs uppercase tracking-wide text-ink-400 dark:border-ink-800">

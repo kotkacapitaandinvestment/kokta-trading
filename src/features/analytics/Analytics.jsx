@@ -23,7 +23,7 @@ export default function Analytics() {
   }, []);
 
   if (failed) return <p role="alert" className="rounded-2xl bg-white p-6 text-sm text-loss-500 dark:bg-ink-900">We couldn’t load your analytics. Refresh the page to try again.</p>;
-  if (!data) return <div className="h-96 animate-pulse rounded-2xl bg-white dark:bg-ink-900" aria-label="Loading your analytics" />;
+  if (!data) return <div role="status" className="h-96 animate-pulse rounded-2xl bg-white dark:bg-ink-900" aria-label="Loading your analytics" />;
 
   const hasTrades = data.totalTrades > 0;
 
@@ -78,7 +78,8 @@ export default function Analytics() {
             <Card>
               <CardHeader title="Emotion Breakdown" subtitle="Pre-trade emotional state" />
               <CardBody>
-                <div className="h-48 w-full">
+                {/* The list below gives the same numbers to screen readers. */}
+                <div className="h-48 w-full" aria-hidden="true" inert="">
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
                       <Pie data={data.emotionBreakdown} dataKey="value" nameKey="emotion" innerRadius={45} outerRadius={70} paddingAngle={2}>

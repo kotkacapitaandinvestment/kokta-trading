@@ -47,6 +47,18 @@ async function kycBlocks(req, access) {
 const upgraded = new Map();
 
 const ENDED = 'Your session has ended. Please sign in again.';
+
+// One row per person per day they used the app (for admin Growth), written
+// at most once per person per day per server instance, after the response path.
+const activeToday = new Set();
+function recordActivity(userId) {
+  const day = new Date().toISOString().slice(0, 10);
+  const key = `${userId}:${day}`;
+  if (activeToday.has(key)) return;
+  if (activeToday.size > 50_000) activeToday.clear();
+  activeToday.add(key);
+  prisma.activityDay.createMany({ data: [{ userId, day }], skipDuplicates: true }).catch(() => activeToday.delete(key));
+}
 const PER_USER_PER_MINUTE = 300;
 
 export function requireAuth(req, res, next) {
@@ -82,6 +94,7 @@ export function requireAuth(req, res, next) {
       }
     }
     req.userId = payload.sub;
+    recordActivity(payload.sub);
     // From the database (cached ~60s), never the client. Usage Control uses it
     // for the staff exemption.
     req.userRole = access.role;

@@ -172,6 +172,7 @@ const PROVIDERS = [
   { key: 'finnhub', name: 'Finnhub', role: 'Market news headlines in Community' },
   { key: 'resend', name: 'Resend', role: 'Account emails: welcome, email confirmation, password reset, security alerts' },
   { key: 'inbox', name: 'INBOX', role: 'Newsletter list, and backup for account emails if Resend is down' },
+  { key: 'r2', name: 'Cloudflare R2', role: 'Stores photos, voice notes and share cards (without it they stay in the database)' },
 ];
 
 adminStatsRouter.get('/system', asyncHandler(async (req, res) => {
@@ -242,4 +243,67 @@ adminStatsRouter.get('/system', asyncHandler(async (req, res) => {
     platform: await loadAppSettings(),
     runtime: { node: process.version, region: process.env.VERCEL_REGION ?? 'local', deployment: process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 7) ?? null },
   });
+}));
+
+// ── Growth: the sign-up funnel, active people, and retention ───────────────
+// All from real rows. Retention needs daily activity, which Kotka records
+// from the day this shipped; earlier weeks show as not available, never as
+// a guess. Staff accounts are left out.
+adminStatsRouter.get('/growth', asyncHandler(async (req, res) => {
+  const days = [30, 90, 365].includes(Number(req.query.days)) ? Number(req.query.days) : 90;
+  const since = new Date(Date.now() - days * 86400e3);
+  const traders = { role: 'trader', createdAt: { gte: since } };
+  const cohort = await prisma.user.findMany({ where: traders, select: { id: true } });
+  const ids = cohort.map((u) => u.id);
+  const has = async (fn) => (ids.length ? fn() : 0);
+  const [emailConfirmed, identity, journal, checklist, ai, practice, staked, deposited] = await Promise.all([
+    has(() => prisma.user.count({ where: { ...traders, emailVerifiedAt: { not: null } } })),
+    has(() => prisma.kycProfile.count({ where: { userId: { in: ids }, status: 'approved' } })),
+    has(() => prisma.journalEntry.groupBy({ by: ['userId'], where: { userId: { in: ids } } }).then((r) => r.length)),
+    has(() => prisma.checklistDay.groupBy({ by: ['userId'], where: { userId: { in: ids } } }).then((r) => r.length)),
+    has(() => prisma.aIConversation.groupBy({ by: ['userId'], where: { userId: { in: ids }, messages: { some: {} } } }).then((r) => r.length)),
+    has(() => prisma.gamePlayer.groupBy({ by: ['userId'], where: { userId: { in: ids }, match: { mode: 'practice' } } }).then((r) => r.length)),
+    has(() => prisma.gamePlayer.groupBy({ by: ['userId'], where: { userId: { in: ids }, match: { mode: 'duel', status: 'SETTLED' } } }).then((r) => r.length)),
+    has(() => prisma.deposit.groupBy({ by: ['userId'], where: { userId: { in: ids }, status: 'succeeded' } }).then((r) => r.length)),
+  ]);
+  const funnel = [
+    ['Signed up', ids.length],
+    ['Confirmed email', emailConfirmed],
+    ['Identity verified', identity],
+    ['Logged a trade in the journal', journal],
+    ['Used the pre-trade checklist', checklist],
+    ['Asked Kotka AI', ai],
+    ['Played a practice match', practice],
+    ['Played a staked match', staked],
+    ['Added money', deposited],
+  ].map(([label, n]) => ({ label, count: n, pct: ids.length ? Math.round((n / ids.length) * 1000) / 10 : null }));
+
+  // Active people (any role but staff) from daily activity.
+  const dayKey = (d) => d.toISOString().slice(0, 10);
+  const first = await prisma.activityDay.findFirst({ orderBy: { day: 'asc' }, select: { day: true } });
+  const staff = (await prisma.user.findMany({ where: { role: { in: ['moderator', 'admin', 'super_admin'] } }, select: { id: true } })).map((u) => u.id);
+  const activeSince = async (n) => (await prisma.activityDay.groupBy({ by: ['userId'], where: { day: { gte: dayKey(new Date(Date.now() - (n - 1) * 86400e3)) }, userId: { notIn: staff } } })).length;
+  const [dau, wau, mau] = await Promise.all([activeSince(1), activeSince(7), activeSince(30)]);
+  const daily = await prisma.activityDay.groupBy({ by: ['day'], where: { day: { gte: dayKey(new Date(Date.now() - 29 * 86400e3)) }, userId: { notIn: staff } }, _count: { _all: true }, orderBy: { day: 'asc' } });
+
+  // Weekly cohorts: of the people who signed up in a week, how many came back
+  // in their 2nd, 3rd and 5th weeks.
+  const WEEK = 7 * 86400e3;
+  const trackingFrom = first ? new Date(`${first.day}T00:00:00Z`) : null;
+  const cohorts = await Promise.all(Array.from({ length: 8 }, (_, i) => i + 1).map(async (w) => {
+    const start = new Date(Date.now() - (w + 1) * WEEK);
+    const end = new Date(start.getTime() + WEEK);
+    const members = (await prisma.user.findMany({ where: { role: 'trader', createdAt: { gte: start, lt: end } }, select: { id: true, createdAt: true } }));
+    const back = async (k) => {
+      const from = new Date(start.getTime() + k * WEEK);
+      const to = new Date(from.getTime() + WEEK);
+      if (!trackingFrom || from < trackingFrom || to > new Date()) return null;
+      if (!members.length) return null;
+      const n = (await prisma.activityDay.groupBy({ by: ['userId'], where: { userId: { in: members.map((m) => m.id) }, day: { gte: dayKey(from), lt: dayKey(to) } } })).length;
+      return Math.round((n / members.length) * 1000) / 10;
+    };
+    const [week2, week3, week5] = await Promise.all([back(1), back(2), back(4)]);
+    return { weekOf: dayKey(start), size: members.length, week2, week3, week5 };
+  }));
+  res.json({ days, funnel, active: { dau, wau, mau, daily: daily.map((d) => ({ day: d.day, count: d._count._all })) }, cohorts, trackingFrom: first?.day ?? null });
 }));

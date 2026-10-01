@@ -7,13 +7,14 @@ import { asyncHandler } from '../lib/asyncHandler.js';
 import { auditLater } from '../lib/audit.js';
 import { loadAppSettings, supportAddress } from '../lib/appSettings.js';
 import { loginBlocked, signupBlocked, recordAttempt } from '../lib/authThrottle.js';
-import { startSession, revokeSession, readToken, hashSid, signPurposeToken, readPurposeToken } from '../lib/sessions.js';
+import { startSession, revokeSession, readToken, hashSid, signPurposeToken, readPurposeToken, trustThisDevice, knownDevice } from '../lib/sessions.js';
 import { hashPassword, checkPassword, needsRehash, passwordProblem, MAX_LENGTH } from '../lib/passwords.js';
 import { decryptSecret } from '../lib/crypto.js';
 import { verifyCode, hashRecovery } from '../lib/totp.js';
 import { hit, LIMITS, memoryHit } from '../lib/rateLimit.js';
 import { waitUntil } from '@vercel/functions';
-import { sendWelcome, sendPasswordReset, alertPasswordChanged, alertIfNewDevice, emailDomainAcceptsMail } from '../lib/email/notices.js';
+import { sendWelcome, sendPasswordReset, alertPasswordChanged, alertIfNewDevice, emailDomainAcceptsMail, sendSignupCode, sendAccountExists } from '../lib/email/notices.js';
+import { issueSignupCode, useSignupCode } from '../lib/signupCodes.js';
 import { consumeEmailToken, peekEmailToken } from '../lib/email/tokens.js';
 import { subscribe } from '../lib/email/inbox.js';
 import { revokeUserSessions } from '../lib/sessions.js';
@@ -35,44 +36,88 @@ export function initialsFor(name) {
 const normalizeEmail = (e) => (typeof e === 'string' ? e.trim().toLowerCase() : '');
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 const TOO_MANY = 'Too many attempts. Please wait a few minutes and try again.';
+const LOCKED = 'Too many attempts on this account. Wait 15 minutes, or reset your password to sign in straight away.';
 const WRONG = 'That email and password don’t match. Check them and try again.';
 const MFA_TTL_SECONDS = 5 * 60;
 
-authRouter.post('/signup', asyncHandler(async (req, res) => {
-  const settings = await loadAppSettings();
-  if (!settings.signupsOpen) return res.status(403).json({ error: 'New sign-ups are paused right now. Please check back soon.' });
-
-  const name = typeof req.body?.name === 'string' ? req.body.name.trim().replace(/\s+/g, ' ').slice(0, 80) : '';
-  const email = normalizeEmail(req.body?.email);
-  const password = typeof req.body?.password === 'string' ? req.body.password : '';
-  if (!name || !email || !password) return res.status(400).json({ error: 'Enter your name, email and a password.' });
+// Sign-up is two steps. /signup/start checks the details and emails a
+// 6-digit code; /signup creates the account with that code. The answer to
+// /signup/start is the same whether or not the address already has an
+// account (that address's owner gets an email saying so), so the form can't
+// be used to find out who uses Kotka. Every new account starts with its
+// email confirmed.
+function readSignup(body) {
+  const name = typeof body?.name === 'string' ? body.name.trim().replace(/\s+/g, ' ').slice(0, 80) : '';
+  const email = normalizeEmail(body?.email);
+  const password = typeof body?.password === 'string' ? body.password : '';
+  if (!name || !email || !password) return { error: 'Enter your name, email and a password.' };
   // Your name is how Community shows you: it can't suggest you work for Kotka.
   const nameProblem = impersonationError(name);
-  if (nameProblem) return res.status(400).json({ error: nameProblem, field: 'name' });
-  if (!EMAIL_RE.test(email) || email.length > 254) return res.status(400).json({ error: 'Enter a valid email address.' });
+  if (nameProblem) return { error: nameProblem, field: 'name' };
+  if (!EMAIL_RE.test(email) || email.length > 254) return { error: 'Enter a valid email address.', field: 'email' };
   const problem = passwordProblem(password, { email, name });
-  if (problem) return res.status(400).json({ error: problem, field: 'password' });
+  if (problem) return { error: problem, field: 'password' };
+  return { name, email, password };
+}
 
+const signupsPaused = async (res) => {
+  const settings = await loadAppSettings();
+  if (settings.signupsOpen) return false;
+  res.status(403).json({ error: 'New sign-ups are paused right now. Please check back soon.' });
+  return true;
+};
+
+authRouter.post('/signup/start', asyncHandler(async (req, res) => {
+  if (await signupsPaused(res)) return;
+  const s = readSignup(req.body);
+  if (s.error) return res.status(400).json({ error: s.error, field: s.field });
   if (await signupBlocked(req)) return res.status(429).json({ error: TOO_MANY });
-  await recordAttempt(req, 'signup', email, false);
-
-  const existing = await prisma.user.findUnique({ where: { email }, select: { id: true } });
-  if (existing) return res.status(409).json({ error: 'An account with this email already exists. Try signing in instead.' });
+  if (await hit(`signup-code:${s.email}`, 5, 3600e3)) return res.status(429).json({ error: 'We’ve sent a few codes to this address already. Check your inbox (and spam), or try again in an hour.' });
   // A quick check that the address can receive email at all (typos like gmial.com).
-  if (process.env.KOTKA_TEST_DB !== '1' && !(await emailDomainAcceptsMail(email))) {
+  if (process.env.KOTKA_TEST_DB !== '1' && !(await emailDomainAcceptsMail(s.email))) {
     return res.status(400).json({ error: 'That email address can’t receive email. Check it for typos.', field: 'email' });
   }
+  await recordAttempt(req, 'signup', s.email, false);
+  res.json({ ok: true, message: `We’ve sent a 6-digit code to ${s.email}. It works for 15 minutes.` });
+  // After the reply, so its timing doesn't depend on whether the address is known.
+  waitUntil((async () => {
+    const existing = await prisma.user.findUnique({ where: { email: s.email }, select: { id: true, name: true, email: true, status: true } });
+    if (existing) {
+      if (existing.status === 'active') await sendAccountExists(existing);
+      return;
+    }
+    await sendSignupCode(s.email, await issueSignupCode(s.email));
+  })().catch((err) => console.error('Sign-up code email failed:', err.message)));
+}));
+
+authRouter.post('/signup', asyncHandler(async (req, res) => {
+  if (await signupsPaused(res)) return;
+  const s = readSignup(req.body);
+  if (s.error) return res.status(400).json({ error: s.error, field: s.field });
+  const code = String(req.body?.code ?? '').replace(/\s+/g, '');
+  if (!code) return res.status(400).json({ error: 'Enter the 6-digit code we emailed you.', field: 'code', code: 'code_required' });
+  if (await signupBlocked(req)) return res.status(429).json({ error: TOO_MANY });
+
+  const result = await useSignupCode(s.email, code);
+  if (result === 'expired') return res.status(400).json({ error: 'That code has expired or was used up. Send a new one and try again.', field: 'code', code: 'code_expired' });
+  if (result === 'wrong') return res.status(400).json({ error: 'That code isn’t right. Check the email and try again.', field: 'code', code: 'code_wrong' });
+
+  // Only possible in a race: codes are never sent to addresses with an account.
+  const existing = await prisma.user.findUnique({ where: { email: s.email }, select: { id: true } });
+  if (existing) return res.status(409).json({ error: 'This email already has a Kotka account. Sign in instead.' });
   const newsletter = req.body?.newsletter === true;
 
   const user = await prisma.user.create({
     data: {
-      name,
-      email,
-      passwordHash: await hashPassword(password),
-      initials: initialsFor(name),
+      name: s.name,
+      email: s.email,
+      passwordHash: await hashPassword(s.password),
+      initials: initialsFor(s.name),
       role: 'trader',
       plan: 'Free',
       lastLoginAt: new Date(),
+      // The code proved this person reads the inbox.
+      emailVerifiedAt: new Date(),
       newsletterOptIn: newsletter,
       newsletterOptInAt: newsletter ? new Date() : null,
       settings: { create: {} },
@@ -81,9 +126,9 @@ authRouter.post('/signup', asyncHandler(async (req, res) => {
   });
 
   await startSession(req, res, user.id);
+  trustThisDevice(res, user.id);
   auditLater(req, 'auth.signed_up', { targetType: 'user', targetId: user.id, actor: user, detail: newsletter ? { newsletter: true } : undefined });
   res.status(201).json({ user: toPublicUser(user) });
-  // Welcome + confirm-your-email, and the newsletter list if they opted in.
   waitUntil(sendWelcome(user).catch((err) => console.error('Welcome email failed:', err.message)));
   if (newsletter) waitUntil(subscribe(user.email).then((id) => id && prisma.user.update({ where: { id: user.id }, data: { newsletterContactId: String(id) } })).catch((err) => console.error('Newsletter sign-up failed:', err.message)));
 }));
@@ -92,6 +137,7 @@ async function completeSignIn(req, res, user) {
   await recordAttempt(req, 'login', user.email, true);
   const updated = await prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() }, include: PUBLIC_USER_INCLUDE });
   const sessionId = await startSession(req, res, updated.id);
+  trustThisDevice(res, updated.id);
   auditLater(req, 'auth.signed_in', { targetType: 'user', targetId: updated.id, actor: updated, detail: user.mfaEnabledAt ? { twoStep: true } : undefined });
   res.json({ user: toPublicUser(updated) });
   waitUntil(alertIfNewDevice(updated, req, sessionId).catch((err) => console.error('New sign-in alert failed:', err.message)));
@@ -102,9 +148,13 @@ authRouter.post('/login', asyncHandler(async (req, res) => {
   const password = typeof req.body?.password === 'string' ? req.body.password : '';
   if (!email || !password) return res.status(400).json({ error: 'Email and password are required.' });
 
-  if (await loginBlocked(req, email)) {
-    auditLater(req, 'auth.sign_in_blocked', { actor: { id: null, email }, detail: { reason: 'Too many attempts' } });
-    return res.status(429).json({ error: TOO_MANY });
+  // On a device this account already signs in from, only that device's own
+  // attempts count; elsewhere, failures per email and per network do.
+  const device = knownDevice(req);
+  const trusted = device ? (await prisma.user.findUnique({ where: { email }, select: { id: true } }))?.id === device.sub : false;
+  if (trusted ? await hit(`login-device:${device.d}`, 20, 15 * 60e3) : await loginBlocked(req, email)) {
+    auditLater(req, 'auth.sign_in_blocked', { actor: { id: null, email }, detail: { reason: 'Too many attempts', knownDevice: trusted } });
+    return res.status(429).json({ error: trusted ? TOO_MANY : LOCKED });
   }
 
   const user = await prisma.user.findUnique({ where: { email }, include: PUBLIC_USER_INCLUDE });

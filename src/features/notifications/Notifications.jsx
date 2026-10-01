@@ -95,7 +95,7 @@ export default function Notifications() {
         {GROUPS.map( ( [v, l] ) => (
           <button key={v} type="button" onClick={() => setFilter( v )} className={clsx( 'rounded-full px-3 py-1.5 text-xs font-medium transition-colors', filter === v ? 'bg-ink-900 text-white dark:bg-white dark:text-ink-900' : 'bg-ink-100 text-ink-600 dark:bg-ink-800 dark:text-ink-300' )}>{l}</button>
         ) )}
-        <button type="button" onClick={() => navigate( '/app/settings?section=notifications' )} className="ml-auto text-xs font-medium text-accent-700 hover:underline dark:text-accent-300">Notification settings</button>
+        <button type="button" onClick={() => navigate( '/app/settings?section=notifications' )} className="ml-auto text-xs font-medium text-accent-800 hover:underline dark:text-accent-300">Notification settings</button>
       </div>
       {!items ? <div className="h-64 animate-pulse rounded-2xl bg-white dark:bg-ink-900" /> : !filtered.length ? (
         <EmptyState icon={Sparkles} title="You're all caught up" description="No notifications match this filter." />
@@ -117,7 +117,7 @@ export default function Notifications() {
                   </span>
                   {n.body ? <span className="mt-0.5 line-clamp-2 block whitespace-pre-line text-xs leading-relaxed text-ink-500 dark:text-ink-400">{n.body}</span> : null}
                 </span>
-                {!n.read ? <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-accent-500" aria-label="Unread" /> : null}
+                {!n.read ? <span role="img" className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-accent-500" aria-label="Unread" /> : null}
               </button>
             );
           } )}

@@ -69,6 +69,25 @@ export function readPurposeToken(purpose, token) {
   }
 }
 
+// Known devices. A browser that has signed in to an account keeps a signed
+// cookie naming that account for 180 days (nothing is stored server-side).
+// Failed guesses by someone else can lock an email for a while, but never on
+// a device its owner already uses: there, only that device's own attempts
+// count. The cookie can't be forged, and it only helps sign in to the
+// account that set it.
+export const DEVICE_COOKIE = 'kotka_device';
+const DEVICE_TTL_S = 180 * 86400;
+
+export function trustThisDevice(res, userId) {
+  const token = signPurposeToken('device', { sub: userId, d: crypto.randomBytes(12).toString('base64url') }, DEVICE_TTL_S);
+  res.cookie(DEVICE_COOKIE, token, cookieOptions(DEVICE_TTL_S * 1000));
+}
+
+export function knownDevice(req) {
+  const claim = readPurposeToken('device', req.cookies?.[DEVICE_COOKIE]);
+  return claim?.sub && claim?.d ? claim : null;
+}
+
 const cache = new Map();
 
 // The live session row for a token's sid, or null if revoked/expired/unknown.

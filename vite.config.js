@@ -36,6 +36,8 @@ function klinechartsClickFix() {
 
 export default defineConfig({
   plugins: [react(), klinechartsClickFix()],
+  // Which build an error came from, for error tracking.
+  define: { __KOTKA_RELEASE__: JSON.stringify((process.env.VERCEL_GIT_COMMIT_SHA ?? 'dev').slice(0, 7)) },
   // Served through the plugin pipeline in dev too, so the click fix applies.
   optimizeDeps: { exclude: ['klinecharts'] },
   server: { port: 5173, proxy: { '/api': api } },

@@ -91,6 +91,9 @@ model User {
   usageOverrides    UsageOverride[]
   usageResets       UsageReset[]
   wallet            Wallet?
+  promoGrants       PromoGrant[]
+  playLimits        PlayLimits?
+  supportTickets    SupportTicket[]
   deposits          Deposit[]
   withdrawals       Withdrawal[]
   payoutAccounts    PayoutAccount[]
@@ -553,6 +556,20 @@ model EmailToken {
   @@index([userId, purpose])
 }
 
+// A 6-digit code emailed before an account exists. Signing up needs it, so
+// the sign-up form never has to say whether an address already has an
+// account: that address's owner is told by email instead. Only a keyed hash
+// of the code is kept; a code works once, for 15 minutes, 5 tries.
+model SignupCode {
+  email     String   @id
+  codeHash  String
+  attempts  Int      @default(0)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([expiresAt])
+}
+
 // Sliding-window rate limits shared by every server instance.
 model RateLimitHit {
   id        BigInt   @id @default(autoincrement())
@@ -589,7 +606,10 @@ model Media {
   width      Int?
   height     Int?
   durationMs Int?
-  data       Bytes
+  // The file itself: in Cloudflare R2 under storageKey when that's
+  // connected, otherwise here in the database (older uploads, or no R2).
+  data       Bytes?
+  storageKey String?
   createdAt  DateTime @default(now())
 
   @@index([ownerId, createdAt])
@@ -1139,7 +1159,11 @@ model Wallet {
   lockedKobo          BigInt        @default(0) // stakes in live competitions
   pendingWithdrawKobo BigInt        @default(0) // requested withdrawals not yet paid
   promoAvailableKobo  BigInt        @default(0) // promotional credits: never withdrawable
-  promoLockedKobo     BigInt        @default(0)
+  promoLockedKobo     BigInt        @default(0) // promotional credits staked in live competitions
+  // The part of availableKobo won with promotional credits: it can be staked
+  // but not withdrawn until the owner has staked the same amount of their
+  // own money (each own-money stake releases that much).
+  restrictedKobo      BigInt        @default(0)
   // A card refund or chargeback on a deposit freezes the wallet: no stakes
   // and no withdrawals until an admin clears it.
   frozenAt            DateTime?
@@ -1168,6 +1192,17 @@ model WalletEntry {
   lockedAfter     BigInt
   pendingBefore   BigInt
   pendingAfter    BigInt
+  // Promotional credits (available and staked) and restricted winnings, with
+  // the same before/after chain as cash.
+  promoDelta          BigInt   @default(0)
+  promoLockedDelta    BigInt   @default(0)
+  restrictedDelta     BigInt   @default(0)
+  promoBefore         BigInt   @default(0)
+  promoAfter          BigInt   @default(0)
+  promoLockedBefore   BigInt   @default(0)
+  promoLockedAfter    BigInt   @default(0)
+  restrictedBefore    BigInt   @default(0)
+  restrictedAfter     BigInt   @default(0)
   currency        String   @default("NGN")
   status          String   @default("completed")
   matchId         String?
@@ -1319,6 +1354,11 @@ model GamePlayer {
   report         Json?
   outcome        String? // win | loss | draw | refund | practice
   payoutKobo     BigInt    @default(0)
+  // Where this player's stake came from: promotional credits and restricted
+  // winnings (the rest is their own money). Returns go back the same way.
+  stakePromoKobo      BigInt    @default(0)
+  stakeRestrictedKobo BigInt    @default(0)
+  stakePromoExpiresAt DateTime?
   xpAwarded      Int       @default(0)
   createdAt      DateTime  @default(now())
 
@@ -1416,4 +1456,138 @@ model GameChartLayout {
   updatedAt DateTime @updatedAt
 
   @@unique([userId, scope])
+}
+
+// Promotional credits (spec §50). A campaign gives verified traders credits
+// that can only be staked, never withdrawn, and expire. Each grant tracks
+// what's left of it, so credits expire on time and the wallet's promo
+// balance always equals the sum of its live grants.
+model PromoCampaign {
+  id            String       @id @default(cuid())
+  name          String
+  description   String?
+  amountKobo    BigInt
+  expiresInDays Int
+  // manual: admins grant it to chosen traders; new_verified: every trader
+  // whose identity is approved while the campaign is active gets it once.
+  audience      String       @default("manual")
+  active        Boolean      @default(true)
+  maxGrants     Int?
+  createdBy     String?
+  createdAt     DateTime     @default(now())
+  grants        PromoGrant[]
+}
+
+model PromoGrant {
+  id            String         @id @default(cuid())
+  userId        String
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  campaignId    String?
+  campaign      PromoCampaign? @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+  amountKobo    BigInt
+  remainingKobo BigInt
+  expiresAt     DateTime
+  reason        String?
+  createdBy     String?
+  revokedAt     DateTime?
+  createdAt     DateTime       @default(now())
+
+  @@unique([userId, campaignId])
+  @@index([userId, expiresAt])
+  @@index([expiresAt])
+}
+
+// Responsible play (spec §49). Limits a trader sets for themselves, and
+// breaks they choose. Lowering a limit works at once; raising or removing
+// one waits 24 hours (pendingLimits), so it isn't a decision made in the
+// heat of a losing streak. A break or self-exclusion can't be ended early.
+model PlayLimits {
+  userId           String    @id
+  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  depositDayKobo   BigInt?
+  depositWeekKobo  BigInt?
+  depositMonthKobo BigInt?
+  stakeDayKobo     BigInt?
+  pendingLimits    Json?
+  pendingFrom      DateTime?
+  breakUntil       DateTime?
+  excludedUntil    DateTime?
+  excludedAt       DateTime?
+  updatedAt        DateTime  @updatedAt
+}
+
+// Errors from the app and the server, grouped by what they are (fingerprint),
+// with anything personal stripped before storing. Admins see them in System
+// Status; new ones are emailed to Super Admins in the ops digest.
+model ErrorGroup {
+  id          String    @id @default(cuid())
+  fingerprint String    @unique
+  source      String // client | server
+  message     String
+  stack       String?
+  path        String? // the page or API route, without its query
+  release     String?
+  count       Int       @default(1)
+  sample      Json? // browser and screen size of the latest one
+  lastUserId  String?
+  status      String    @default("open") // open | resolved | muted
+  firstSeenAt DateTime  @default(now())
+  lastSeenAt  DateTime  @default(now())
+  alertedAt   DateTime?
+
+  @@index([status, lastSeenAt])
+}
+
+// What the public status page shows: each check's state, sampled by the
+// scheduled jobs. Only real samples are shown; days without any are blank.
+model StatusSample {
+  id     BigInt   @id @default(autoincrement())
+  at     DateTime @default(now())
+  checks Json // { key: 'ok' | 'degraded' | 'down' | 'off' }
+
+  @@index([at])
+}
+
+// Help requests to Kotka support, including "something went wrong with this
+// match". A thread of messages between the trader and staff; each reply is
+// emailed and shows in the app.
+model SupportTicket {
+  id            String           @id @default(cuid())
+  userId        String?
+  user          User?            @relation(fields: [userId], references: [id], onDelete: SetNull)
+  email         String
+  topic         String // account | payments | game | match | community | ai | bug | other
+  subject       String
+  status        String           @default("open") // open | answered | closed
+  matchId       String?
+  assignedTo    String?
+  lastMessageAt DateTime         @default(now())
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+  messages      SupportMessage[]
+
+  @@index([status, lastMessageAt])
+  @@index([userId, createdAt])
+}
+
+model SupportMessage {
+  id        String        @id @default(cuid())
+  ticketId  String
+  ticket    SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  authorId  String?
+  fromStaff Boolean       @default(false)
+  body      String
+  createdAt DateTime      @default(now())
+
+  @@index([ticketId, createdAt])
+}
+
+// One row per person per day they used the app: the base for retention and
+// active-user numbers in admin Growth. Nothing about what they did.
+model ActivityDay {
+  userId String
+  day    String // YYYY-MM-DD (UTC)
+
+  @@id([userId, day])
+  @@index([day])
 }

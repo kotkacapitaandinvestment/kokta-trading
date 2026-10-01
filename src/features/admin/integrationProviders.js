@@ -1,4 +1,4 @@
-import { Sparkles, CreditCard, Globe2, Landmark, CalendarClock, Mail, Wallet } from 'lucide-react';
+import { Sparkles, CreditCard, Globe2, Landmark, CalendarClock, Mail, Wallet, HardDrive } from 'lucide-react';
 
 export const INTEGRATION_PROVIDERS = [
   {
@@ -131,6 +131,21 @@ export const INTEGRATION_PROVIDERS = [
       { key: 'secret', label: 'INBOX account password', type: 'password', placeholder: 'Your INBOX password' },
       { key: 'config.listId', label: 'Newsletter list id', type: 'text', placeholder: 'Shown by Test connection once signed in', hint: 'The INBOX contact list opted-in traders are added to.' },
       { key: 'config.senderEmail', label: 'Backup sender address (optional)', type: 'email', placeholder: 'e.g. no-reply@kotkafinance.online', hint: 'Must be a sender you’ve added and activated in INBOX Notify.' },
+    ],
+  },
+  {
+    id: 'r2',
+    name: 'Cloudflare R2',
+    category: 'File storage',
+    icon: HardDrive,
+    description: 'Stores photos, voice notes and achievement share cards. Files stay private: Kotka serves each one only to people allowed to see it.',
+    fallbackNote: 'Without it, uploads are kept in the database, which fills up quickly. Don’t connect this bucket to www.kotkafinance.online as a custom domain: that takes the app offline.',
+    fields: [
+      { key: 'config.accountId', label: 'Cloudflare account ID', type: 'text', placeholder: '32 characters', hint: 'Cloudflare dashboard → R2 → the account ID on the right.' },
+      { key: 'config.accessKeyId', label: 'Access key ID', type: 'text', placeholder: 'From R2 → Manage API tokens' },
+      { key: 'secret', label: 'Secret access key', type: 'password', placeholder: 'Shown once when the R2 token is created' },
+      { key: 'config.bucket', label: 'Bucket name', type: 'text', placeholder: 'kotka', default: 'kotka' },
+      { key: 'config.prefix', label: 'Folder in the bucket', type: 'text', placeholder: 'media', default: 'media', hint: 'Keep production and test copies in different folders.' },
     ],
   },
 ];

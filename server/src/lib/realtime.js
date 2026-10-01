@@ -19,6 +19,9 @@ const POLL_MS = 1000;
 const STREAM_MS = 240 * 1000;
 const HEARTBEAT_MS = 20 * 1000;
 const PRESENCE_MS = 60 * 1000;
+// How often an open stream re-checks that its session is still valid, so a
+// signed-out, suspended or banned account stops receiving within seconds.
+const RECHECK_MS = 20 * 1000;
 const RETAIN_HOURS = 6;
 
 const subscribers = new Set();
@@ -111,7 +114,7 @@ function parseLastId(req) {
 }
 
 // Opens an SSE stream for already-authorised channels.
-export async function openStream(req, res, { channels, onPresence }) {
+export async function openStream(req, res, { channels, onPresence, stillAllowed }) {
   res.status(200);
   res.set({
     'Content-Type': 'text/event-stream; charset=utf-8',
@@ -140,17 +143,24 @@ export async function openStream(req, res, { channels, onPresence }) {
     subscribers.delete(sub);
     clearInterval(heartbeat);
     clearInterval(presence);
+    clearInterval(recheck);
     clearTimeout(lifetime);
+  };
+  // The browser reconnects on 'ended' only to be refused, and stops.
+  const end = (event) => {
+    if (closed) return;
+    res.write(`event: ${event}\ndata: {}\n\n`);
+    close();
+    res.end();
   };
   req.on('close', close);
 
   const heartbeat = setInterval(() => res.write(': ping\n\n'), HEARTBEAT_MS);
   const presence = setInterval(() => onPresence?.().catch(() => {}), PRESENCE_MS);
-  const lifetime = setTimeout(() => {
-    res.write('event: reconnect\ndata: {}\n\n');
-    close();
-    res.end();
-  }, STREAM_MS);
+  const recheck = setInterval(() => {
+    stillAllowed?.().then((ok) => { if (!ok) end('ended'); }).catch(() => {});
+  }, Number(process.env.KOTKA_RT_RECHECK_MS) || RECHECK_MS);
+  const lifetime = setTimeout(() => end('reconnect'), STREAM_MS);
 
   onPresence?.().catch(() => {});
   try {

@@ -180,3 +180,27 @@ meStatsRouter.get('/announcements', asyncHandler(async (req, res) => {
   const me = await prisma.user.findUnique({ where: { id: req.userId }, select: { role: true } });
   res.json({ announcements: await announcementsFor(me?.role ?? 'trader', { sinceDays: 14 }) });
 }));
+
+// "Get started" on the Dashboard: the first things worth doing, each ticked
+// from what the trader has actually done.
+meStatsRouter.get('/getting-started', asyncHandler(async (req, res) => {
+  const id = req.userId;
+  const [u, journal, checklist, ai, practice] = await Promise.all([
+    prisma.user.findUnique({ where: { id }, select: { emailVerifiedAt: true, username: true, avatarId: true, mfaEnabledAt: true, kyc: { select: { status: true } } } }),
+    prisma.journalEntry.count({ where: { userId: id }, take: 1 }),
+    prisma.checklistDay.count({ where: { userId: id }, take: 1 }),
+    prisma.aIConversation.count({ where: { userId: id, messages: { some: { role: 'user' } } }, take: 1 }),
+    prisma.gamePlayer.count({ where: { userId: id, match: { mode: 'practice' } }, take: 1 }),
+  ]);
+  const steps = [
+    { key: 'email', label: 'Confirm your email', done: !!u?.emailVerifiedAt, to: '/app/settings?section=profile' },
+    { key: 'identity', label: 'Verify your identity', done: ['approved', 'pending'].includes(u?.kyc?.status), to: '/verify' },
+    { key: 'profile', label: 'Pick a Community name', done: !!u?.username, to: '/app/community' },
+    { key: 'journal', label: 'Log a trade in your journal', done: journal > 0, to: '/app/journal' },
+    { key: 'checklist', label: 'Run the pre-trade checklist', done: checklist > 0, to: '/app/checklist' },
+    { key: 'ai', label: 'Ask Kotka AI to challenge an idea', done: ai > 0, to: '/app/ai' },
+    { key: 'practice', label: 'Play a free practice match', done: practice > 0, to: '/app/game' },
+    { key: 'twoStep', label: 'Turn on two-step verification', done: !!u?.mfaEnabledAt, to: '/app/settings?section=security' },
+  ];
+  res.json({ steps, done: steps.filter((s) => s.done).length });
+}));

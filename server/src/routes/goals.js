@@ -4,7 +4,7 @@ import { prisma } from '../lib/prisma.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 import { auditLater } from '../lib/audit.js';
 import { requireAuth } from '../middleware/auth.js';
-import { saveMedia } from '../lib/media.js';
+import { saveMedia, removeMedia } from '../lib/media.js';
 import { overLimit } from '../lib/community/throttle.js';
 import { screenText } from '../lib/community/safety.js';
 import { BADGES, LEVELS, METRICS, PERIODS, addDays, computeStats, evaluate, goalProgress, goalRoomPrefs, loadContext, localDate, monthLabel, monthStats } from '../lib/goals/engine.js';
@@ -244,7 +244,7 @@ goalsRouter.post('/shares', asyncHandler(async (req, res) => {
     if (saved.error) return res.status(400).json({ error: saved.error });
     // A public card is always a picture, whatever the upload claimed to be.
     if (saved.media.kind !== 'image') {
-      await prisma.media.deleteMany({ where: { id: saved.media.id } });
+      await removeMedia([saved.media.id]);
       return res.status(400).json({ error: 'The card must be an image.' });
     }
     imageId = saved.media.id;
@@ -265,7 +265,7 @@ goalsRouter.delete('/shares/:id', asyncHandler(async (req, res) => {
   if (!s) return res.status(404).json({ error: 'That link was already removed.' });
   await prisma.achievementShare.update({ where: { id: s.id }, data: { revokedAt: new Date() } });
   auditLater(req, 'goals.public_link_removed', { targetType: 'share', targetId: s.id, detail: { headline: s.snapshot?.headline } });
-  if (s.imageId) await prisma.media.deleteMany({ where: { id: s.imageId, ownerId: req.userId } });
+  if (s.imageId) await removeMedia([s.imageId]);
   res.json({ ok: true });
 }));
 

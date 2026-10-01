@@ -194,7 +194,7 @@ export function ReleaseCalendar({ days = 14, onLoaded }) {
                   <span className="mt-0.5 w-fit rounded bg-ink-100 px-1.5 py-0.5 font-mono text-[10px] font-semibold text-ink-700 dark:bg-ink-800 dark:text-ink-200">{e.currency}</span>
                   <span className="min-w-0">
                     <span className="flex items-start gap-1.5">
-                      {e.importance === 'High' ? <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-accent-500" title="High importance" aria-label="High importance" /> : null}
+                      {e.importance === 'High' ? <span role="img" className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-accent-500" title="High importance" aria-label="High importance" /> : null}
                       <span className="leading-snug text-ink-800 dark:text-ink-100">{txt(e.title)}</span>
                     </span>
                     <a href={safeHref(e.source.url)} target="_blank" rel="noopener noreferrer" className="mt-0.5 inline-flex items-center gap-1 text-[11px] text-ink-400 hover:text-accent-600 dark:hover:text-accent-400">

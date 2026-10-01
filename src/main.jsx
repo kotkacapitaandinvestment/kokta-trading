@@ -5,6 +5,9 @@ import '@fontsource-variable/geist';
 import '@fontsource-variable/geist-mono';
 import './assets/styles.css';
 import { registerServiceWorker } from './lib/pwa';
+import { startErrorReporting } from './lib/errorReporter';
+
+startErrorReporting();
 
 const container = document.getElementById('root');
 if (!container) throw new Error('Root element not found');

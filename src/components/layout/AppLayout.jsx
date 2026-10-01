@@ -53,7 +53,7 @@ function EmailBanner({ user }) {
       <MailWarning className="h-3.5 w-3.5 shrink-0" />
       <span className="min-w-0 flex-1">Please confirm your email, so you can reset your password if you ever forget it.</span>
       <button type="button" disabled={busy} onClick={resend} className="shrink-0 font-medium underline-offset-2 hover:underline disabled:opacity-50">{busy ? 'Sending…' : 'Send confirmation link'}</button>
-      <button type="button" onClick={() => setHidden(true)} className="shrink-0 text-accent-700/70 hover:underline dark:text-accent-300/70">Later</button>
+      <button type="button" onClick={() => setHidden(true)} className="shrink-0 text-accent-800 hover:underline dark:text-accent-300">Later</button>
     </div>
   );
 }

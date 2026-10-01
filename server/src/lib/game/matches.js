@@ -20,7 +20,10 @@ import { pairOf, publicPair } from './pairs.js';
 import { newMarketSecret } from './rng.js';
 import { simulate, validateAction } from './trading.js';
 import { scorePlayer } from './scoring.js';
-import { post, walletFor, HOUSE_WALLET, stakedToday, kobo } from './wallet.js';
+import { stakedToday, kobo } from './wallet.js';
+import { GameError } from './errors.js';
+import { lockStake, returnStake, settleStakes } from './promo.js';
+import { assertMayPlay, assertStakeWithinLimits } from './limits.js';
 import { awardProgress } from './progression.js';
 import { notify } from '../community/notify.js';
 import { avatarUrl } from '../media.js';
@@ -32,14 +35,7 @@ export const FINAL = ['SETTLED', 'CANCELLED', 'EXPIRED', 'ABANDONED', 'DISPUTED'
 // once); the defaults (2s wait, 5s run) are too short on a remote database.
 export const TX = { maxWait: 15000, timeout: 20000 };
 
-export class GameError extends Error {
-  constructor(message, status = 400, code) {
-    super(message);
-    this.expose = true;
-    this.status = status;
-    this.code = code;
-  }
-}
+export { GameError };
 
 const now = () => new Date();
 const newCode = () => crypto.randomBytes(5).toString('base64url').replace(/[-_]/g, 'X').slice(0, 7).toUpperCase();
@@ -112,6 +108,8 @@ export async function assertCanPlayForMoney(userId, s) {
   const u = await prisma.user.findUnique({ where: { id: userId }, select: { status: true, kyc: { select: { status: true } } } });
   if (!u || u.status !== 'active') throw new GameError('Your account can’t enter competitions.', 403);
   if (u.kyc?.status !== 'approved') throw new GameError('Competitions with a stake need your identity to be verified first. You can play practice matches meanwhile.', 403, 'kyc_required_for_money');
+  // A break or self-exclusion the trader chose.
+  await assertMayPlay(userId);
 }
 
 export function checkStake(stakeKobo, s) {
@@ -202,13 +200,14 @@ export async function createMatch(user, { mode = 'duel', stakeKobo = 0, duration
     await assertFree(tx, user.id, null, 'Finish the match you’re in first.');
     const pendingNow = await tx.gameMatch.count({ where: { creatorId: user.id, status: 'WAITING_FOR_OPPONENT' } });
     if (pendingNow >= s.maxOpenChallenges) throw new GameError(`You already have ${pendingNow} challenges waiting. Cancel one or wait for them to be accepted.`);
-    if ((await stakedToday(user.id, tx)) + stakeKobo > s.dailyStakeLimitKobo) throw new GameError(`That would take your stakes today over the daily limit of ₦${(s.dailyStakeLimitKobo / 100).toLocaleString('en-NG')}.`);
+    const today = await stakedToday(user.id, tx);
+    if (today + stakeKobo > s.dailyStakeLimitKobo) throw new GameError(`That would take your stakes today over the daily limit of ₦${(s.dailyStakeLimitKobo / 100).toLocaleString('en-NG')}.`);
+    await assertStakeWithinLimits(tx, user.id, stakeKobo, today);
     const minutes = opponentId ? s.directChallengeMinutes : s.openChallengeMinutes;
-    const m = await tx.gameMatch.create({ data: { ...base, status: 'WAITING_FOR_OPPONENT', expiresAt: new Date(at.getTime() + minutes * 60e3), players: { create: { userId: user.id, role: 'creator' } } } });
+    const m = await tx.gameMatch.create({ data: { ...base, status: 'WAITING_FOR_OPPONENT', expiresAt: new Date(at.getTime() + minutes * 60e3), players: { create: { userId: user.id, role: 'creator' } } }, include: { players: true } });
     await record(tx, m.id, null, 'CREATED', user.id);
     await record(tx, m.id, 'CREATED', 'WAITING_FOR_OPPONENT', user.id);
-    const w = await walletFor(user.id, tx);
-    await post(tx, { walletId: w.id, userId: user.id, type: 'stake_lock', amount: stakeKobo, available: -stakeKobo, locked: stakeKobo, key: `stake_lock:${m.id}:${user.id}`, matchId: m.id });
+    await lockStake(tx, { userId: user.id, matchId: m.id, playerId: m.players[0].id, stake: stakeKobo });
     return m;
   }, TX);
 
@@ -246,10 +245,11 @@ export async function joinMatch(user, matchId, { quick = false } = {}) {
     if (creator?.status !== 'active') throw new GameError('That challenge is no longer available.', 409);
     const blocked = await tx.userRelation.findFirst({ where: { kind: 'block', OR: [{ userId: user.id, targetId: m.creatorId }, { userId: m.creatorId, targetId: user.id }] }, select: { userId: true } });
     if (blocked) throw new GameError('That challenge isn’t available to you.', 403);
-    if ((await stakedToday(user.id, tx)) + stake > s.dailyStakeLimitKobo) throw new GameError('That would take your stakes today over the daily limit.');
-    await tx.gamePlayer.create({ data: { matchId: m.id, userId: user.id, role: 'opponent' } });
-    const w = await walletFor(user.id, tx);
-    await post(tx, { walletId: w.id, userId: user.id, type: 'stake_lock', amount: stake, available: -stake, locked: stake, key: `stake_lock:${m.id}:${user.id}`, matchId: m.id });
+    const today = await stakedToday(user.id, tx);
+    if (today + stake > s.dailyStakeLimitKobo) throw new GameError('That would take your stakes today over the daily limit.');
+    await assertStakeWithinLimits(tx, user.id, stake, today);
+    const player = await tx.gamePlayer.create({ data: { matchId: m.id, userId: user.id, role: 'opponent' } });
+    await lockStake(tx, { userId: user.id, matchId: m.id, playerId: player.id, stake });
     await move(tx, m, 'WAITING_FOR_OPPONENT', 'READY', { readyBy: new Date(at.getTime() + s.lobbyMinutes * 60e3), invitedUserId: user.id }, user.id);
     // In a match now: both traders' other open challenges are withdrawn.
     await withdrawOtherChallenges(tx, user.id, m.id);
@@ -339,8 +339,8 @@ async function releaseStakes(tx, m, type, why) {
   if (!stake) return;
   const players = await tx.gamePlayer.findMany({ where: { matchId: m.id } });
   for (const p of players) {
-    const w = await walletFor(p.userId, tx);
-    await post(tx, { walletId: w.id, userId: p.userId, type, amount: stake, available: stake, locked: -stake, key: `release:${m.id}:${p.userId}`, matchId: m.id, reason: why });
+    if (!p.userId) continue;
+    await returnStake(tx, { player: p, matchId: m.id, stake, type, reason: why });
     await tx.gamePlayer.update({ where: { id: p.id }, data: { outcome: 'refund', payoutKobo: BigInt(stake) } });
   }
 }
@@ -461,22 +461,11 @@ async function finish(matchId) {
         await releaseStakes(tx, m, 'refund', 'neither player traded');
         for (const x of scored) payouts.set(x.userId, stake);
       } else {
-        for (const x of scored) {
-          const w = await walletFor(x.userId, tx);
-          await post(tx, { walletId: w.id, userId: x.userId, type: 'stake_debit', amount: stake, locked: -stake, key: `stake_debit:${m.id}:${x.userId}`, matchId: m.id });
-        }
-        await post(tx, { walletId: HOUSE_WALLET, type: 'fee', amount: cash.fee + (decision.draw ? cash.drawRemainder : 0), available: cash.fee + (decision.draw ? cash.drawRemainder : 0), key: `fee:${m.id}`, matchId: m.id, reason: `${m.feeBps / 100}% of a ₦${cash.pool / 100} pool` });
-        if (decision.draw) {
-          for (const x of scored) {
-            const w = await walletFor(x.userId, tx);
-            await post(tx, { walletId: w.id, userId: x.userId, type: 'draw_return', amount: cash.drawEach, available: cash.drawEach, key: `draw:${m.id}:${x.userId}`, matchId: m.id });
-            payouts.set(x.userId, cash.drawEach);
-          }
-        } else {
-          const w = await walletFor(decision.winnerId, tx);
-          await post(tx, { walletId: w.id, userId: decision.winnerId, type: 'winnings', amount: cash.prize, available: cash.prize, key: `win:${m.id}:${decision.winnerId}`, matchId: m.id });
-          payouts.set(decision.winnerId, cash.prize);
-        }
+        // Stakes into the pool, prize or draw shares out, fee to the house,
+        // each part following where the stake came from (promotional credits,
+        // restricted winnings, own money).
+        const paid = await settleStakes(tx, { match: m, players: scored.map((x) => x.player), stake, fee: cash.fee + (decision.draw ? cash.drawRemainder : 0), winnerId: decision.winnerId, draw: decision.draw, prize: cash.prize, drawEach: cash.drawEach });
+        for (const [userId, amount] of paid) payouts.set(userId, amount);
       }
     }
 
@@ -561,8 +550,8 @@ export async function refundMatch(adminId, matchId, reason) {
     const stake = kobo(m.stakeKobo);
     for (const p of players) {
       if (!stake) break;
-      const w = await walletFor(p.userId, tx);
-      await post(tx, { walletId: w.id, userId: p.userId, type: 'refund', amount: stake, available: stake, locked: -stake, key: `release:${m.id}:${p.userId}`, matchId: m.id, reason, createdBy: adminId });
+      if (!p.userId) continue;
+      await returnStake(tx, { player: p, matchId: m.id, stake, type: 'refund', reason, createdBy: adminId });
       await tx.gamePlayer.update({ where: { id: p.id }, data: { outcome: 'refund', payoutKobo: BigInt(stake) } });
     }
     await move(tx, m, LIVE.concat('DISPUTED'), 'REFUNDED', {}, adminId, reason);

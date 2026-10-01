@@ -4,6 +4,8 @@ import { asyncHandler } from '../lib/asyncHandler.js';
 import { forgetUserAccess } from '../middleware/auth.js';
 import { kycView, KYC_STATUSES } from '../lib/kyc.js';
 import { audit } from '../lib/audit.js';
+import { waitUntil } from '@vercel/functions';
+import { grantNewVerifiedCampaigns } from '../lib/game/promo.js';
 
 // Mounted behind requireAuth + requireRole('admin', 'super_admin').
 export const adminKycRouter = Router();
@@ -58,4 +60,6 @@ adminKycRouter.post('/:id/decision', asyncHandler(async (req, res) => {
   forgetUserAccess(profile.userId);
   await audit(req, `kyc.${decision}`, { targetType: 'kyc', targetId: profile.id, detail: { userEmail: profile.user.email, previous: profile.status, note: note || undefined } });
   res.json({ kyc: { ...kycView(updated, { withDetails: true }), reviewNote: updated.reviewNote, user: updated.user } });
+  // Welcome campaigns for newly verified traders (each gives at most once).
+  if (decision === 'approved') waitUntil(grantNewVerifiedCampaigns(profile.userId).catch((err) => console.error('Welcome promotional credits failed:', err.message)));
 }));

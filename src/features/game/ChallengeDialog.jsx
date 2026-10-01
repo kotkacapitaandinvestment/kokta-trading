@@ -39,7 +39,7 @@ export function MoneySummary({ stakeKobo, rules, className }) {
   );
 }
 
-export default function ChallengeDialog({ open, onClose, rules, available, onCreated, presetOpponent = null, pairs = [] }) {
+export default function ChallengeDialog({ open, onClose, rules, available, promoKobo = 0, onCreated, presetOpponent = null, pairs = [] }) {
   const [stake, setStake] = useState(rules.minStakeKobo);
   const [duration, setDuration] = useState(rules.defaultDurationSec);
   const [symbol, setSymbol] = useState('');
@@ -141,7 +141,7 @@ export default function ChallengeDialog({ open, onClose, rules, available, onCre
 
         <MoneySummary stakeKobo={stake} rules={rules} />
         <ul className="space-y-1 rounded-xl bg-ink-50 px-4 py-3 text-xs leading-relaxed text-ink-700 dark:bg-ink-800/60 dark:text-ink-200">
-          {stakeWords({ stakeKobo: stake, startingCapital: rules.startingCapital, feeBps: rules.feeBps }).map((line) => <li key={line}>{line}</li>)}
+          {stakeWords({ stakeKobo: stake, startingCapital: rules.startingCapital, feeBps: rules.feeBps, promoKobo }).map((line) => <li key={line}>{line}</li>)}
         </ul>
 
         <label className="flex items-start gap-2 text-xs leading-relaxed text-ink-600 dark:text-ink-300">

@@ -14,6 +14,7 @@ import { runCommunityJobs } from '../lib/community/jobs.js';
 import { sweep as sweepGameMatches } from '../lib/game/matches.js';
 import { cryptoContext, CRYPTO } from '../lib/research/crypto.js';
 import { instrument } from '../lib/instruments.js';
+import { runMaintenance } from '../lib/ops/maintenance.js';
 
 export const researchRouter = Router();
 
@@ -39,6 +40,8 @@ researchRouter.all('/cron', asyncHandler(async (req, res) => {
   jobs.push(runCommunityJobs().catch((err) => console.error('Community jobs failed:', err)));
   // Trading Game: expire, start and settle anything that's due.
   jobs.push(sweepGameMatches().catch((err) => console.error('Game sweep failed:', err)));
+  // Housekeeping (unused uploads and the like); each task throttles itself.
+  jobs.push(runMaintenance().catch((err) => console.error('Maintenance failed:', err)));
   waitUntil(Promise.all(jobs));
   res.status(202).json({
     ok: true,

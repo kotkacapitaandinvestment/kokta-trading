@@ -5,6 +5,7 @@ import assert from 'node:assert/strict';
 import jwt from 'jsonwebtoken';
 import { startServer, stopServer, makeUser, client, signIn, prisma, PASSWORD, runTag } from './helpers.js';
 import { codeAt, currentStep } from '../../src/lib/totp.js';
+import { issueSignupCode } from '../../src/lib/signupCodes.js';
 
 let alice;
 before(async () => {
@@ -81,10 +82,64 @@ test('weak passwords are refused', async () => {
 test('a client cannot choose its own role at sign-up', async () => {
   const c = client();
   const email = `role.${runTag}.pick@kotka.test`;
-  const r = await c.post('/api/auth/signup', { name: 'Role Picker', email, password: 'A-Decent-Passphrase-42', role: 'super_admin', plan: 'Premium' });
+  const code = await issueSignupCode(email);
+  const r = await c.post('/api/auth/signup', { name: 'Role Picker', email, password: 'A-Decent-Passphrase-42', code, role: 'super_admin', plan: 'Premium' });
   assert.equal(r.status, 201);
   assert.equal(r.json.user.role, 'trader');
+  assert.equal(r.json.user.emailVerified, true, 'the code confirmed the email');
   await prisma.user.deleteMany({ where: { email } });
+});
+
+test('sign-up never says whether an email already has an account', async () => {
+  const fresh = `fresh.${runTag}.x@kotka.test`;
+  const body = (email) => ({ name: 'Somebody New', email, password: 'A-Decent-Passphrase-42' });
+  const known = await client().post('/api/auth/signup/start', body(alice.email));
+  const unknown = await client().post('/api/auth/signup/start', body(fresh));
+  assert.equal(known.status, 200);
+  assert.equal(unknown.status, 200);
+  assert.deepEqual(Object.keys(known.json).sort(), Object.keys(unknown.json).sort());
+  assert.equal(known.json.message.replace(alice.email, '<email>'), unknown.json.message.replace(fresh, '<email>'), 'the same answer, word for word');
+  // Creating an account needs the emailed code; there is none for a known address.
+  const noCode = await client().post('/api/auth/signup', { ...body(alice.email), code: '123456' });
+  assert.equal(noCode.status, 400);
+  assert.equal(noCode.json.code, 'code_expired');
+  assert.equal((await client().post('/api/auth/signup', body(fresh))).json.code, 'code_required');
+});
+
+test('sign-up codes: wrong codes count, five tries then a new code is needed, a code works once', async () => {
+  const email = `codes.${runTag}.x@kotka.test`;
+  const body = { name: 'Code Tester', email, password: 'A-Decent-Passphrase-42' };
+  const code = await issueSignupCode(email);
+  const wrong = String((Number(code) + 1) % 1e6).padStart(6, '0');
+  for (let i = 0; i < 4; i++) assert.equal((await client().post('/api/auth/signup', { ...body, code: wrong })).json.code, 'code_wrong');
+  // The fifth wrong try uses the code up.
+  assert.equal((await client().post('/api/auth/signup', { ...body, code: wrong })).json.code, 'code_wrong');
+  assert.equal((await client().post('/api/auth/signup', { ...body, code })).json.code, 'code_expired', 'out of tries, even with the right code');
+  // A new code: parallel attempts can't use it twice.
+  const fresh = await issueSignupCode(email);
+  const both = await Promise.all([client().post('/api/auth/signup', { ...body, code: fresh }), client().post('/api/auth/signup', { ...body, code: fresh })]);
+  assert.deepEqual(both.map((r) => r.status).sort(), [201, 400]);
+  assert.equal(await prisma.user.count({ where: { email } }), 1);
+  await prisma.user.deleteMany({ where: { email } });
+});
+
+test('someone else’s wrong guesses can’t lock you out on your own device', async () => {
+  const owner = await makeUser('Lockout');
+  const mine = await signIn(owner);
+  assert.ok(mine.device, 'signing in remembers this device');
+  const attacker = client();
+  for (let i = 0; i < 8; i++) await attacker.post('/api/auth/login', { email: owner.email, password: `wrong-${i}` });
+  const blocked = await attacker.post('/api/auth/login', { email: owner.email, password: PASSWORD });
+  assert.equal(blocked.status, 429, 'a new device is locked for now');
+  assert.match(blocked.json.error, /reset your password/);
+  const again = await mine.post('/api/auth/login', { email: owner.email, password: PASSWORD });
+  assert.equal(again.status, 200, 'the owner’s own device still signs in');
+  // The device cookie only helps the account that set it.
+  const other = await makeUser('Lockout2');
+  for (let i = 0; i < 8; i++) await attacker.post('/api/auth/login', { email: other.email, password: `wrong-${i}` });
+  const borrowed = client();
+  borrowed.device = mine.device;
+  assert.equal((await borrowed.post('/api/auth/login', { email: other.email, password: PASSWORD })).status, 429, 'someone else’s device cookie doesn’t unlock this account');
 });
 
 test('cookies from before revocable sessions still work once, then follow the new rules', async () => {

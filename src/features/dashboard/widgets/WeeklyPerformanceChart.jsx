@@ -59,7 +59,7 @@ export default function WeeklyPerformanceChart({ data }) {
 
   return (
     <div ref={ref} className="relative">
-      <svg viewBox={`0 0 ${W} ${H}`} width={W} height={H} className="block max-w-full" role="img" aria-label={`Daily realized P&L, last 7 days: ${data.map((d) => `${d.day} ${money(d.pnl)}`).join(', ')}`}>
+      <svg viewBox={`0 0 ${W} ${H}`} width={W} height={H} className="block max-w-full" role="group" aria-label={`Daily realized P&L, last 7 days: ${data.map((d) => `${d.day} ${money(d.pnl)}`).join(', ')}`}>
         {ticks.map((t) => (
           <g key={t}>
             <line x1={PAD.left} x2={W - PAD.right} y1={y(t)} y2={y(t)} className={t === 0 ? 'stroke-ink-300 dark:stroke-ink-600' : 'stroke-ink-100 dark:stroke-ink-800'} strokeWidth={t === 0 ? 1.5 : 1} />
@@ -92,6 +92,7 @@ export default function WeeklyPerformanceChart({ data }) {
                 onFocus={() => setActive(i)}
                 onBlur={() => setActive(null)}
                 tabIndex={0}
+                role="img"
                 aria-label={`${d.day}: ${money(d.pnl)}`}
               />
             </g>

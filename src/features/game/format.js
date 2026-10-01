@@ -20,14 +20,22 @@ export const mmss = (seconds) => {
 export const minutes = (sec) => `${Math.round(sec / 60)} min`;
 
 // What entering a competition means, shown before anyone commits money.
-export function stakeWords({ stakeKobo, startingCapital, feeBps }) {
+// promoKobo: the trader's promotional credits, which a stake uses first.
+export function stakeWords({ stakeKobo, startingCapital, feeBps, promoKobo = 0 }) {
+  const fromPromo = Math.min(stakeKobo, Math.max(0, promoKobo || 0));
   return [
-    `You are staking ${naira(stakeKobo)} of your available balance.`,
+    fromPromo
+      ? `You are staking ${naira(stakeKobo)}: ${naira(fromPromo)} from your promotional credits (they’re used first)${fromPromo < stakeKobo ? ` and ${naira(stakeKobo - fromPromo)} of your available balance` : ''}.`
+      : `You are staking ${naira(stakeKobo)} of your available balance.`,
     `You will receive ${virtual(startingCapital)} in virtual trading capital for this match.`,
     'Virtual trading capital has no cash value.',
     `Kotka charges a ${feeBps / 100}% competition platform fee.`,
+    ...(fromPromo ? ['If you win, the share of the prize won with promotional credits can be withdrawn once you’ve staked the same amount of your own money.'] : []),
   ];
 }
+
+// What a trader can stake: their available balance plus promotional credits.
+export const stakeable = (w) => (w?.availableKobo ?? 0) + (w?.promoAvailableKobo ?? 0);
 
 // Stakes to offer: the usual amounts that the current rules allow.
 export function stakeOptions(rules) {

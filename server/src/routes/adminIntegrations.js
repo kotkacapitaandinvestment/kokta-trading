@@ -13,6 +13,7 @@ import { massiveTestConnection } from '../lib/massive.js';
 import { fredTestConnection } from '../lib/research/sources/timeseries.js';
 import { cronJobOrgTestConnection } from '../lib/cronJobOrg.js';
 import { inboxTestConnection } from '../lib/email/inbox.js';
+import { makeStore, forgetObjectStore } from '../lib/storage.js';
 
 // Resend: which sending domains are verified.
 async function resendTestConnection(key) {
@@ -28,9 +29,9 @@ import { asyncHandler } from '../lib/asyncHandler.js';
 export const adminIntegrationsRouter = Router();
 adminIntegrationsRouter.use(requireAuth, requireRole('super_admin'));
 
-const CONFIG_KEYS = { nvidia: ['model', 'chatFallbacks', 'visionModel', 'visionFallbacks', 'baseUrl'], whop: ['companyId', 'webhookSecret'], paystack: [], finnhub: [], massive: [], fred: [], cronjob: [], resend: [], inbox: ['listId', 'senderEmail'] };
+const CONFIG_KEYS = { nvidia: ['model', 'chatFallbacks', 'visionModel', 'visionFallbacks', 'baseUrl'], whop: ['companyId', 'webhookSecret'], paystack: [], finnhub: [], massive: [], fred: [], cronjob: [], resend: [], inbox: ['listId', 'senderEmail'], r2: ['accountId', 'accessKeyId', 'bucket', 'prefix'] };
 
-const SERVICE_NAME = { nvidia: 'NVIDIA', whop: 'Whop', paystack: 'Paystack', finnhub: 'Finnhub', massive: 'Massive', fred: 'FRED', cronjob: 'cron-job.org', resend: 'Resend', inbox: 'INBOX' };
+const SERVICE_NAME = { nvidia: 'NVIDIA', whop: 'Whop', paystack: 'Paystack', finnhub: 'Finnhub', massive: 'Massive', fred: 'FRED', cronjob: 'cron-job.org', resend: 'Resend', inbox: 'INBOX', r2: 'Cloudflare R2' };
 
 const TEST_CONNECTIONS = {
   nvidia: async (row) => {
@@ -65,6 +66,19 @@ const TEST_CONNECTIONS = {
   cronjob: async (row) => cronJobOrgTestConnection(decryptSecret(row.secretCipher)),
   resend: async (row) => resendTestConnection(decryptSecret(row.secretCipher)),
   inbox: async (row) => inboxTestConnection(row),
+  // Writes, reads back and deletes a small file in the bucket.
+  r2: async (row) => {
+    const c = row.config ?? {};
+    if (!c.accountId || !c.accessKeyId || !c.bucket) throw new Error('Add the account ID, access key ID and bucket name.');
+    const store = makeStore({ accountId: c.accountId, accessKeyId: c.accessKeyId, secretAccessKey: decryptSecret(row.secretCipher), bucket: c.bucket, prefix: 'connection-test' });
+    const key = store.keyFor('kotka', `check-${Date.now()}`);
+    const bytes = Buffer.from('Kotka connection test');
+    await store.put(key, bytes, 'text/plain');
+    const back = await store.get(key);
+    await store.remove(key);
+    if (!back?.equals(bytes)) throw new Error('The test file didn’t read back the same.');
+    return 'Connected. Kotka saved, read and deleted a test file in the bucket. New uploads are stored here.';
+  },
 };
 
 function toPublicIntegration(row, extras = {}) {
@@ -144,6 +158,7 @@ adminIntegrationsRouter.put('/:provider', asyncHandler(async (req, res) => {
     targetId: provider,
     detail: { secretChanged: !!secret, ...(typeof enabled === 'boolean' ? { enabled } : {}), ...(config ? { configKeys: Object.keys(config) } : {}) },
   });
+  if (provider === 'r2') forgetObjectStore();
   res.json({ integration: toPublicIntegration(row, { narrativePreferred: await narrativePreference() }) });
 }));
 

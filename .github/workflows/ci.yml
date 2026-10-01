@@ -1,0 +1,66 @@
+# Every push and pull request: build the app, check dependencies for known
+# high-risk vulnerabilities, and run the security test suite against the
+# Neon test branch (never production). Work reaches production only after a
+# Vercel preview of the branch has passed these checks and been tested.
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build and audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx vite build
+      - name: Known vulnerabilities in production dependencies
+        run: |
+          npm audit --omit=dev --audit-level=high
+          npm audit --omit=dev --audit-level=high --prefix server
+
+  security-tests:
+    name: Security tests (test database)
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    # One run at a time: the suite shares one test database.
+    concurrency:
+      group: test-database
+      cancel-in-progress: false
+    env:
+      KOTKA_TEST_DB: '1'
+      NODE_ENV: test
+      DATABASE_URL: ${{ secrets.TEST_DATABASE_URL }}
+      JWT_SECRET: ${{ secrets.TEST_JWT_SECRET }}
+      ENCRYPTION_KEY: ${{ secrets.TEST_ENCRYPTION_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+      - name: Refuse to run against production
+        run: |
+          case "$DATABASE_URL" in *ep-old-snow-axm62xcb*) echo "DATABASE_URL is production"; exit 1;; "") echo "TEST_DATABASE_URL is not set"; exit 1;; esac
+      - run: npm ci
+        working-directory: server
+      - run: npx prisma generate
+        working-directory: server
+      - name: Bring the test database up to date
+        run: npx prisma migrate deploy
+        working-directory: server
+      - run: npm run test:security
+        working-directory: server

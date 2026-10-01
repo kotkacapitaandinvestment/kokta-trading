@@ -8,7 +8,7 @@ import { Select } from '../../../components/ui/Input';
 import { api } from '../../../lib/api';
 import { confirmDialog, toast } from '../../../lib/dialogs';
 import StakePicker, { stakeReady } from './StakePicker';
-import { naira, minutes, mmss, stakeWords } from '../format';
+import { naira, minutes, mmss, stakeWords, stakeable } from '../format';
 
 const prizeOf = (stake, feeBps) => {
   const pool = stake * 2;
@@ -62,13 +62,13 @@ export default function QuickMatch({ rules, wallet, verified, queue, looking, on
   }, []);
 
   const { prize, drawEach } = prizeOf(stake, rules.feeBps);
-  const short = stake > wallet.availableKobo;
+  const short = stake > stakeable(wallet);
 
   const start = async () => {
     const ok = await confirmDialog({
       title: `Find an opponent for ${naira(stake)}?`,
       message: [
-        ...stakeWords({ stakeKobo: stake, startingCapital: rules.startingCapital, feeBps: rules.feeBps }),
+        ...stakeWords({ stakeKobo: stake, startingCapital: rules.startingCapital, feeBps: rules.feeBps, promoKobo: wallet.promoAvailableKobo }),
         `The winner receives ${naira(prize)}. A draw pays ${naira(drawEach)} each.`,
         'Nothing is taken until an opponent is found; then the stake is held for the match. You must be 18 or older, and you can lose your stake.',
       ].join('\n'),
@@ -134,7 +134,7 @@ export default function QuickMatch({ rules, wallet, verified, queue, looking, on
     <div className="space-y-4">
       <div>
         <p className="mb-2 text-xs font-medium text-ink-500 dark:text-ink-400">Stake</p>
-        <StakePicker rules={rules} value={stake} onChange={setStake} available={wallet.availableKobo} />
+        <StakePicker rules={rules} value={stake} onChange={setStake} available={stakeable(wallet)} />
       </div>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <Select label="Match length" value={duration} onChange={(e) => setDuration(Number(e.target.value))}>

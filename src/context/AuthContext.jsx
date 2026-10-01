@@ -42,8 +42,11 @@ export function AuthProvider({ children }) {
     return user;
   };
 
-  const signup = async ({ name, email, password, newsletter = false }) => {
-    const { user } = await api.post('/auth/signup', { name, email, password, newsletter });
+  // Sign-up is two steps: the details (a code is emailed), then the code.
+  const startSignup = ({ name, email, password }) => api.post('/auth/signup/start', { name, email, password });
+
+  const signup = async ({ name, email, password, code, newsletter = false }) => {
+    const { user } = await api.post('/auth/signup', { name, email, password, code, newsletter });
     setUser(user);
     return user;
   };
@@ -59,7 +62,7 @@ export function AuthProvider({ children }) {
   const patchUser = useCallback((changes) => setUser((prev) => (prev ? { ...prev, ...changes } : prev)), []);
 
   const value = useMemo(
-    () => ({ user, loading, login, verifyMfa, signup, logout, refreshUser, patchUser, setUser, isAuthenticated: !!user }),
+    () => ({ user, loading, login, verifyMfa, startSignup, signup, logout, refreshUser, patchUser, setUser, isAuthenticated: !!user }),
     [user, loading, refreshUser, patchUser],
   );
 

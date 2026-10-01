@@ -14,6 +14,7 @@ import { eventView } from '../../lib/community/posts.js';
 import { eventReaction } from '../../lib/community/events.js';
 import { AiUnavailable, summarizeDiscussion, challengeThesis, explainNews, analyzeChart, factCheck, instrumentsIn } from '../../lib/community/ai.js';
 import { requireProfile } from './context.js';
+import { mediaBytes } from '../../lib/media.js';
 
 export const aiRouter = Router();
 
@@ -122,7 +123,9 @@ aiRouter.post('/ai/analyze-chart', requireProfile, aiAction('community_chart', a
     context = p.body;
   } else if (media.ownerId !== req.me.id) return void res.status(403).json({ error: 'Kotka AI can only look at images you can see in this conversation or post.' });
   const key = `community:chart:${media.id}`;
-  const { data, cached } = await cachedSource(key, 7 * 24 * 3600e3, () => analyzeChart({ imageDataUrl: `data:${media.mime};base64,${Buffer.from(media.data).toString('base64')}`, context }));
+  const bytes = await mediaBytes(media);
+  if (!bytes) return void res.status(503).json({ error: 'That image can’t be loaded right now. Please try again shortly.' });
+  const { data, cached } = await cachedSource(key, 7 * 24 * 3600e3, () => analyzeChart({ imageDataUrl: `data:${media.mime};base64,${bytes.toString('base64')}`, context }));
   return { result: data, cached, charged: !cached };
 }));
 

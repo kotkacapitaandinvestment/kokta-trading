@@ -49,6 +49,8 @@ export const LIMITS = {
   withdrawal: [10, 3600e3],
   payoutSetup: [10, 3600e3],
   chartSave: [240, 3600e3],
+  supportCreate: [10, 86400e3], // new help requests per day
+  supportReply: [60, 3600e3],
 };
 
 function prune() {

@@ -31,6 +31,9 @@ import { usageRouter } from './routes/usage.js';
 import { adminUsageRouter } from './routes/adminUsage.js';
 import { gameRouter, gameWebhookRouter } from './routes/game.js';
 import { adminGameRouter } from './routes/adminGame.js';
+import { opsRouter, adminErrorsRouter } from './routes/ops.js';
+import { supportRouter, adminSupportRouter } from './routes/support.js';
+import { recordError } from './lib/ops/errors.js';
 import { requireAuth, requireRole } from './middleware/auth.js';
 import { securityHeaders, sameOriginWrites } from './middleware/security.js';
 import { isAllowedOrigin } from './lib/origins.js';
@@ -59,6 +62,7 @@ app.use('/api', sameOriginWrites);
 const requireAdmin = [requireAuth, requireRole('admin', 'super_admin')];
 
 app.get('/api/health', (req, res) => res.json({ ok: true }));
+app.use('/api', opsRouter);
 // Signed-out routes get a per-IP ceiling on top of their own checks.
 app.use('/api/auth', memoryLimit('auth', 40, 60e3), authRouter);
 app.use('/api/app', memoryLimit('app', 120, 60e3), appConfigRouter);
@@ -92,6 +96,9 @@ app.use('/api/market', marketDataRouter);
 app.use('/api/research', researchRouter);
 app.use('/api/admin/research', adminResearchRouter);
 app.use('/api/admin/community', adminCommunityRouter);
+app.use('/api/admin/errors', requireAdmin, adminErrorsRouter);
+app.use('/api/support', supportRouter);
+app.use('/api/admin/support', requireAdmin, adminSupportRouter);
 
 app.use((err, req, res, next) => {
   // Body-parser errors: too large, or not valid JSON.
@@ -101,5 +108,12 @@ app.use((err, req, res, next) => {
   // (Game and payment errors marked `expose` may be 502/503: still written for people.)
   if (err?.expose && typeof err.message === 'string') return res.status(err.status ?? 400).json({ error: err.message, ...(err.code ? { code: err.code } : {}) });
   console.error(err);
+  recordError({ source: 'server', message: err?.message ?? String(err), stack: err?.stack, path: `${req.method} ${req.baseUrl ?? ''}${req.route?.path ?? req.path}`, release: process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 7) ?? null, userId: req.userId ?? null });
   res.status(500).json({ error: 'Internal server error' });
+});
+
+// Promises nobody awaited that failed (background work after a response).
+process.on('unhandledRejection', (reason) => {
+  console.error('Unhandled rejection:', reason);
+  recordError({ source: 'server', message: reason?.message ?? String(reason), stack: reason?.stack, path: 'background', release: process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 7) ?? null });
 });

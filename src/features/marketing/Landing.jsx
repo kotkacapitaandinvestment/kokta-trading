@@ -362,7 +362,7 @@ export default function Landing() {
   useReveal();
 
   return (
-    <div className="min-h-[100dvh] overflow-x-clip bg-ink-950 text-ink-100 antialiased">
+    <div className="on-dark min-h-[100dvh] overflow-x-clip bg-ink-950 text-ink-100 antialiased">
       <Nav user={user} signupsOpen={signupsOpen} />
       <main>
         <Hero signupsOpen={signupsOpen} />

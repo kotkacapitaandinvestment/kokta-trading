@@ -31,7 +31,7 @@ const CAT = {
 };
 const LABEL = Object.fromEntries(SUBSCORES);
 const AREA_LABEL = { risk: 'Risk', decision: 'Decision', execution: 'Execution', consistency: 'Consistency' };
-const TONE = { good: [CheckCircle2, 'text-profit-600 dark:text-profit-400'], bad: [AlertTriangle, 'text-loss-500'], neutral: [Info, 'text-ink-400'] };
+const TONE = { good: [CheckCircle2, 'text-profit-600 dark:text-profit-400'], bad: [AlertTriangle, 'text-loss-600 dark:text-loss-400'], neutral: [Info, 'text-ink-400'] };
 const pctOf = (weights) => {
   const total = Object.values(weights).reduce((s, x) => s + x, 0) || 1;
   return Object.fromEntries(Object.entries(weights).map(([k, v]) => [k, Math.round((v / total) * 1000) / 10]));
@@ -119,8 +119,8 @@ function Explorer({ rules, dark }) {
         {SUBSCORES.map(([k, label]) => {
           const I = CAT[k].icon;
           return (
-            <li key={k} className="shrink-0">
-              <button type="button" role="tab" aria-selected={open === k} onClick={() => setOpen(k)} className={clsx('flex w-full items-center gap-3 rounded-xl border px-3 py-2.5 text-left transition-colors', open === k ? 'border-ink-900 bg-ink-900 text-white dark:border-white dark:bg-white dark:text-ink-900' : 'border-ink-100 hover:border-ink-300 dark:border-ink-800 dark:hover:border-ink-600')}>
+            <li key={k} className="shrink-0" role="presentation">
+              <button type="button" role="tab" id={`part-tab-${k}`} aria-controls="part-panel" aria-selected={open === k} onClick={() => setOpen(k)} className={clsx('flex w-full items-center gap-3 rounded-xl border px-3 py-2.5 text-left transition-colors', open === k ? 'border-ink-900 bg-ink-900 text-white dark:border-white dark:bg-white dark:text-ink-900' : 'border-ink-100 hover:border-ink-300 dark:border-ink-800 dark:hover:border-ink-600')}>
                 <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg" style={{ background: `${CAT[k][dark ? 'dark' : 'light']}22`, color: CAT[k][dark ? 'dark' : 'light'] }}><I className="h-4 w-4" /></span>
                 <span className="min-w-0 flex-1 text-sm font-medium">{label}</span>
                 <span className="text-sm font-semibold tabular-nums">{pct[k]}%</span>
@@ -129,7 +129,7 @@ function Explorer({ rules, dark }) {
           );
         })}
       </ul>
-      <div className="rounded-2xl border border-ink-100 p-5 dark:border-ink-800" role="tabpanel">
+      <div id="part-panel" className="rounded-2xl border border-ink-100 p-5 dark:border-ink-800" role="tabpanel" aria-labelledby={`part-tab-${open}`}>
         <div className="flex items-start gap-3">
           <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl" style={{ background: `${CAT[open][dark ? 'dark' : 'light']}22`, color: CAT[open][dark ? 'dark' : 'light'] }}><Icon className="h-5 w-5" /></span>
           <div>
@@ -143,7 +143,7 @@ function Explorer({ rules, dark }) {
             <ul className="mt-2 space-y-1.5 text-sm text-ink-700 dark:text-ink-200">{c.up.map((x) => <li key={x} className="flex gap-2"><span className="mt-2 h-1 w-1 shrink-0 rounded-full bg-profit-500" />{x}</li>)}</ul>
           </div>
           <div>
-            <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-loss-500"><AlertTriangle className="h-3.5 w-3.5" /> Lowers it</p>
+            <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-loss-600 dark:text-loss-400"><AlertTriangle className="h-3.5 w-3.5" /> Lowers it</p>
             <ul className="mt-2 space-y-1.5 text-sm text-ink-700 dark:text-ink-200">{c.down.map((x) => <li key={x} className="flex gap-2"><span className="mt-2 h-1 w-1 shrink-0 rounded-full bg-loss-500" />{x}</li>)}</ul>
           </div>
         </div>
@@ -281,7 +281,7 @@ export default function Learn() {
       <GameNav />
 
       {/* Hero */}
-      <section className="relative overflow-hidden rounded-3xl bg-ink-900 text-white dark:bg-ink-950 dark:ring-1 dark:ring-ink-800">
+      <section className="on-dark relative overflow-hidden rounded-3xl bg-ink-900 text-white dark:bg-ink-950 dark:ring-1 dark:ring-ink-800">
         <div className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full bg-accent-500/20 blur-3xl" />
         <div className="relative grid grid-cols-1 gap-8 p-6 sm:p-10 lg:grid-cols-[1.4fr_1fr] lg:items-end">
           <div>

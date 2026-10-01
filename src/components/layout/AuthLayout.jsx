@@ -7,7 +7,7 @@ export default function AuthLayout({ title, subtitle, children }) {
   const { supportEmail } = useAppConfig();
   return (
     <div className="flex min-h-screen bg-white dark:bg-ink-950">
-      <div className="relative hidden w-1/2 flex-col justify-between overflow-hidden bg-ink-950 p-12 text-white lg:flex">
+      <div className="on-dark relative hidden w-1/2 flex-col justify-between overflow-hidden bg-ink-950 p-12 text-white lg:flex">
         <div className="pointer-events-none absolute -right-40 top-1/3 h-[36rem] w-[36rem] rounded-full bg-accent-500/[0.08] blur-[110px]" aria-hidden />
         <Link to="/" className="relative z-10 flex items-center gap-3">
           <BrandMark size={32} />

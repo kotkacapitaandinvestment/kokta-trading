@@ -17,7 +17,7 @@ import QuickMatch from './arena/QuickMatch';
 import ReadyToTrade from './arena/ReadyToTrade';
 import OpenChallenges from './arena/OpenChallenges';
 import { RecentResults, FeaturedTraders } from './arena/ArenaFeed';
-import { naira, minutes, STATUS_LABEL, SUBSCORES, stakeWords } from './format';
+import { naira, minutes, STATUS_LABEL, SUBSCORES, stakeWords, stakeable } from './format';
 import { startPractice } from './pairs';
 
 function MatchRow({ m, meId, onChanged }) {
@@ -86,7 +86,7 @@ export default function GameHome() {
     if (!verified) return toast('Verify your identity to play for a stake.', { tone: 'error' });
     const ok = await confirmDialog({
       title: `Accept ${m.creator?.name}’s challenge?`,
-      message: [...stakeWords({ stakeKobo: m.stakeKobo, startingCapital: m.startingCapital, feeBps: m.feeBps }), `The winner receives ${naira(m.prizeKobo)} (the pool of ${naira(m.poolKobo)} less the fee). A draw pays ${naira(m.drawEachKobo)} each.`, 'Your stake is held from now until the match ends. You must be 18 or older, and you can lose your stake.'].join('\n'),
+      message: [...stakeWords({ stakeKobo: m.stakeKobo, startingCapital: m.startingCapital, feeBps: m.feeBps, promoKobo: wallet.promoAvailableKobo }), `The winner receives ${naira(m.prizeKobo)} (the pool of ${naira(m.poolKobo)} less the fee). A draw pays ${naira(m.drawEachKobo)} each.`, 'Your stake is held from now until the match ends. You must be 18 or older, and you can lose your stake.'].join('\n'),
       confirmLabel: `Stake ${naira(m.stakeKobo)} and accept`,
     });
     if (!ok) return;
@@ -128,13 +128,13 @@ export default function GameHome() {
 
       {/* Phones: one line, so Quick Match stays near the top. */}
       <p className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl border border-ink-100 bg-white px-4 py-2.5 text-xs text-ink-600 dark:border-ink-800 dark:bg-ink-900 dark:text-ink-300 md:hidden">
-        <span className="font-semibold tabular-nums text-ink-900 dark:text-ink-50">{naira(wallet.availableKobo)} available</span>
+        <span className="font-semibold tabular-nums text-ink-900 dark:text-ink-50">{naira(stakeable(wallet))} available</span>
         <span className="flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-profit-500" />{arena.stats.online} online</span>
         <span>{arena.stats.looking} looking</span>
         <span>{arena.stats.activeMatches} live</span>
       </p>
       <div className="hidden grid-cols-5 gap-3 md:grid">
-        <Stat icon={Wallet} label="Available credits" value={naira(wallet.availableKobo)} hint="1 credit = ₦1" />
+        <Stat icon={Wallet} label="Available credits" value={naira(stakeable(wallet))} hint={wallet.promoAvailableKobo ? `Includes ${naira(wallet.promoAvailableKobo)} promotional credits` : '1 credit = ₦1'} />
         <Stat icon={Wallet} label="Wallet balance" value={naira(wallet.totalKobo)} hint={wallet.lockedKobo ? `${naira(wallet.lockedKobo)} in matches` : 'Nothing locked'} />
         <Stat icon={Radio} label="Traders online" value={arena.stats.online} hint="In the last 2 minutes" />
         <Stat icon={Users} label="Looking for a match" value={arena.stats.looking} hint={`${arena.stats.ready} ready · ${arena.stats.searching} searching`} />
@@ -172,7 +172,7 @@ export default function GameHome() {
       <Card>
         <CardHeader title="Open challenges" subtitle="Posted by traders looking for an opponent. Joining holds the same stake from your balance." action={<Button size="sm" variant="ghost" icon={Swords} onClick={() => setDialog({})} disabled={!verified || !rules.matchesEnabled}>Post one</Button>} />
         <CardBody>
-          <OpenChallenges rows={arena.board} available={wallet.availableKobo} verified={verified && rules.matchesEnabled} onJoin={join} onCancel={cancelOpen} />
+          <OpenChallenges rows={arena.board} available={stakeable(wallet)} verified={verified && rules.matchesEnabled} onJoin={join} onCancel={cancelOpen} />
         </CardBody>
       </Card>
 
@@ -231,7 +231,7 @@ export default function GameHome() {
         </CardBody>
       </Card>
 
-      {dialog ? <ChallengeDialog open onClose={() => setDialog(null)} rules={rules} pairs={data.pairs ?? []} available={wallet.availableKobo} presetOpponent={dialog.opponent ?? null} onCreated={(id) => navigate(`/app/game/matches/${id}`)} /> : null}
+      {dialog ? <ChallengeDialog open onClose={() => setDialog(null)} rules={rules} pairs={data.pairs ?? []} promoKobo={wallet.promoAvailableKobo} available={stakeable(wallet)} presetOpponent={dialog.opponent ?? null} onCreated={(id) => navigate(`/app/game/matches/${id}`)} /> : null}
     </div>
   );
 }

@@ -94,9 +94,12 @@ export default function MatchResult({ view }) {
               {me.xpAwarded ? <p className="mt-1 text-xs text-ink-400">+{me.xpAwarded} XP</p> : null}
             </div>
           </div>
-          <div className="flex gap-2">
-            <Button icon={RefreshCw} onClick={rematch} disabled={busy}>{m.mode === 'practice' ? 'Practise again' : 'Rematch'}</Button>
-            <Button as={Link} to="/app/game" variant="secondary">Done</Button>
+          <div className="flex flex-col items-end gap-2">
+            <div className="flex gap-2">
+              <Button icon={RefreshCw} onClick={rematch} disabled={busy}>{m.mode === 'practice' ? 'Practise again' : 'Rematch'}</Button>
+              <Button as={Link} to="/app/game" variant="secondary">Done</Button>
+            </div>
+            {m.mode !== 'practice' ? <Link to={`/app/support?new=1&topic=match&match=${m.id}`} className="text-xs font-medium text-ink-500 hover:underline dark:text-ink-400">Report a problem with this match</Link> : null}
           </div>
         </CardBody>
       </Card>

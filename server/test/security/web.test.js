@@ -3,7 +3,9 @@
 // and the public achievement page's handling of forged Host headers.
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { startServer, stopServer, makeUser, signIn } from './helpers.js';
+import { startServer, stopServer, makeUser, signIn, prisma } from './helpers.js';
+import { cleanOrphanMedia } from '../../src/lib/ops/maintenance.js';
+import { objectStore } from '../../src/lib/storage.js';
 
 let base, alice, aliceC;
 before(async () => {
@@ -86,6 +88,30 @@ test('uploads: photo metadata is removed and files are served inert', async () =
   // A wrong token doesn't reveal the file.
   const guess = await fetch(`${base}/api/media/${r.json.media.id}/wrong-token`, { headers: { Cookie: aliceC.cookie } });
   assert.equal(guess.status, 404);
+  // With R2 connected, the file lives there (under a key with its secret token), not in the database.
+  const store = await objectStore();
+  if (store) {
+    const row = await prisma.media.findUnique({ where: { id: r.json.media.id } });
+    assert.ok(row.storageKey && row.data === null, 'stored in R2');
+    assert.ok(row.storageKey.endsWith(row.token), 'the key carries the file’s secret token');
+    assert.ok(await store.get(row.storageKey));
+  }
+});
+
+test('unused uploads are cleaned up after a day; anything in use is kept', async () => {
+  const up = async () => (await aliceC.post('/api/media', { dataUrl: dataUrl('image/jpeg', jpegWithExif()) })).json.media.id;
+  const [unused, avatar, attached, fresh] = [await up(), await up(), await up(), await up()];
+  assert.equal((await aliceC.put('/api/account/avatar', { mediaId: avatar })).status, 200);
+  const post = await aliceC.post('/api/community/posts', { kind: 'post', body: 'A chart worth keeping for the cleanup test.', attachments: [{ type: 'image', mediaId: attached }] });
+  assert.equal(post.status, 201, JSON.stringify(post.json));
+  const old = new Date(Date.now() - 2 * 86400e3);
+  await prisma.media.updateMany({ where: { id: { in: [unused, avatar, attached] } }, data: { createdAt: old } });
+  await cleanOrphanMedia();
+  const left = new Set((await prisma.media.findMany({ where: { id: { in: [unused, avatar, attached, fresh] } }, select: { id: true } })).map((m) => m.id));
+  assert.ok(!left.has(unused), 'a day-old unused upload is removed');
+  assert.ok(left.has(avatar), 'a profile photo is kept');
+  assert.ok(left.has(attached), 'an image in a post is kept');
+  assert.ok(left.has(fresh), 'a new upload (maybe a draft) is kept');
 });
 
 test('achievement pages ignore forged Host headers', async () => {

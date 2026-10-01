@@ -12,6 +12,49 @@ import { localDay } from '../../lib/day';
 import WeeklyPerformanceChart from './widgets/WeeklyPerformanceChart';
 import EmptyState from '../../components/ui/EmptyState';
 
+// "Get started": the first things worth doing, ticked from what the trader
+// has actually done. Hidden once they're all done, or when dismissed.
+function GettingStarted({ userId }) {
+  const key = `kotka:getting-started-hidden:${userId}`;
+  const [hidden, setHidden] = useState(() => {
+    try { return localStorage.getItem(key) === '1'; } catch { return false; }
+  });
+  const [data, setData] = useState(null);
+  useEffect(() => {
+    if (!hidden) api.get('/me/getting-started').then(setData).catch(() => {});
+  }, [hidden]);
+  if (hidden || !data || data.done === data.steps.length) return null;
+  const hide = () => {
+    setHidden(true);
+    try { localStorage.setItem(key, '1'); } catch { /* storage blocked */ }
+  };
+  return (
+    <Card className="p-5">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-sm font-semibold text-ink-900 dark:text-ink-50">Get started</p>
+          <p className="mt-0.5 text-xs text-ink-500 dark:text-ink-400">{data.done} of {data.steps.length} done. Each one takes a minute or two.</p>
+        </div>
+        <button type="button" onClick={hide} className="text-xs font-medium text-ink-400 hover:text-ink-700 dark:hover:text-ink-200">Hide</button>
+      </div>
+      <div className="mt-3 h-1.5 rounded-full bg-ink-100 dark:bg-ink-800" role="progressbar" aria-valuemin={0} aria-valuemax={data.steps.length} aria-valuenow={data.done} aria-label="Getting started progress">
+        <div className="h-1.5 rounded-full bg-accent-500" style={{ width: `${(data.done / data.steps.length) * 100}%` }} />
+      </div>
+      <ul className="mt-3 grid grid-cols-1 gap-1 sm:grid-cols-2">
+        {data.steps.map((s) => (
+          <li key={s.key}>
+            <Link to={s.to} className={clsx('flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm', s.done ? 'text-ink-400 line-through decoration-ink-300' : 'text-ink-700 hover:bg-ink-50 dark:text-ink-200 dark:hover:bg-ink-800')}>
+              <CheckCircle2 className={clsx('h-4 w-4 shrink-0', s.done ? 'text-profit-500' : 'text-ink-300')} aria-hidden="true" />
+              <span>{s.label}</span>
+              <span className="sr-only">{s.done ? '(done)' : '(to do)'}</span>
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </Card>
+  );
+}
+
 const CHECKLIST_TOTAL = 8;
 
 function greeting() {
@@ -50,10 +93,10 @@ function Gauge({ label, value, unit, caption, info, children }) {
   );
 }
 
-function Meter({ value, max, tone = 'gold' }) {
+function Meter({ value, max, tone = 'gold', label }) {
   const pct = Math.min((value / (max || 1)) * 100, 100);
   return (
-    <div className="mt-3 h-1 w-full overflow-hidden rounded-full bg-white/10" role="meter" aria-valuenow={value} aria-valuemin={0} aria-valuemax={max}>
+    <div className="mt-3 h-1 w-full overflow-hidden rounded-full bg-white/10" role="meter" aria-label={label} aria-valuenow={value} aria-valuemin={0} aria-valuemax={max}>
       <div className={clsx('h-full rounded-full transition-[width] duration-700', tone === 'loss' ? 'bg-loss-400' : 'bg-accent-400')} style={{ width: `${pct}%` }} />
     </div>
   );
@@ -67,7 +110,7 @@ function ReadinessPanel({ user, data, checklistDone }) {
   const ready = checklistDone >= CHECKLIST_TOTAL && !overLimit;
 
   return (
-    <section className="relative overflow-hidden rounded-3xl bg-ink-950 p-6 text-white ring-1 ring-ink-800 sm:p-8 dark:bg-ink-900">
+    <section className="on-dark relative overflow-hidden rounded-3xl bg-ink-950 p-6 text-white ring-1 ring-ink-800 sm:p-8 dark:bg-ink-900">
       <div className="pointer-events-none absolute -right-24 -top-32 h-80 w-80 rounded-full bg-accent-500/10 blur-3xl" aria-hidden />
       <div className="relative flex flex-wrap items-end justify-between gap-4">
         <div>
@@ -84,10 +127,10 @@ function ReadinessPanel({ user, data, checklistDone }) {
 
       <div className="relative mt-4 grid grid-cols-1 divide-y divide-white/10 sm:grid-cols-3 sm:divide-x sm:divide-y-0">
         <Gauge label="Risk used today" info={<>R is what you risk on one trade, so 2R means two full losses. This adds up the risk on today's losing trades; hit the limit and you're done for the day. Change it in <Link to="/app/settings?section=trading" className="underline">Settings</Link>.</>} value={risk} unit={`/ ${limit}R`} caption={overLimit ? 'Stop for today. The limit exists for days like this.' : `${Math.max(limit - risk, 0)}R left before your daily stop.`}>
-          <Meter value={risk} max={limit} tone={overLimit ? 'loss' : 'gold'} />
+          <Meter value={risk} max={limit} tone={overLimit ? 'loss' : 'gold'} label="Risk used today" />
         </Gauge>
         <Gauge label="Pre-trade checklist" info="Today's checklist. Work through it before each entry, then tick 'Pre-trade checklist was completed' when you journal the trade so it counts." value={checklistDone} unit={`/ ${CHECKLIST_TOTAL}`} caption={checklistDone >= CHECKLIST_TOTAL ? 'Every condition checked.' : 'Conditions still open for today.'}>
-          <Meter value={checklistDone} max={CHECKLIST_TOTAL} />
+          <Meter value={checklistDone} max={CHECKLIST_TOTAL} label="Checklist items done today" />
         </Gauge>
         <Gauge label="Discipline score" info="The share of your journaled trades entered with the checklist complete. It measures process, not profit." value={data?.disciplineScore ?? 0} unit="/ 100" caption={data?.totalEntries ? `Checklist completion across ${data.totalEntries} journaled trades. ${data.streak} day${data.streak === 1 ? '' : 's'} within your loss limit.` : 'Builds as you journal trades.'} />
       </div>
@@ -243,6 +286,7 @@ export default function Dashboard() {
           We couldn’t load your numbers just now, so some figures below may show zero. Refresh the page to try again.
         </p>
       ) : null}
+      {user ? <GettingStarted userId={user.id} /> : null}
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-12">
         <div className="xl:col-span-8">
           <ReadinessPanel user={user} data={data} checklistDone={checklistDone} />

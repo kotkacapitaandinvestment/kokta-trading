@@ -6,6 +6,9 @@ import PageHeader from '../../components/ui/PageHeader';
 import Card, { CardHeader, CardBody } from '../../components/ui/Card';
 import Button from '../../components/ui/Button';
 import { api } from '../../lib/api';
+import { toast } from '../../lib/dialogs';
+import Badge from '../../components/ui/Badge';
+import EmptyState from '../../components/ui/EmptyState';
 import { modelName, MODEL_STATE } from '../../lib/aiModelNames';
 
 const STATE = {
@@ -38,6 +41,77 @@ function Row({ state, title, detail, meta }) {
   );
 }
 
+// Errors from people's browsers and the server, grouped. Resolve one when
+// it's fixed (it reopens if it comes back); mute noise you don't need.
+function ErrorsCard() {
+  const [status, setStatus] = useState('open');
+  const [data, setData] = useState(null);
+  const [open, setOpen] = useState(null);
+  const load = useCallback(() => api.get(`/admin/errors?status=${status}`).then(setData).catch((err) => toast(err.message, { tone: 'error' })), [status]);
+  useEffect(() => { load(); }, [load]);
+  const show = async (id) => {
+    if (open?.id === id) return setOpen(null);
+    try {
+      setOpen((await api.get(`/admin/errors/${id}`)).error);
+    } catch (err) {
+      toast(err.message, { tone: 'error' });
+    }
+  };
+  const set = async (id, next) => {
+    try {
+      await api.patch(`/admin/errors/${id}`, { status: next });
+      toast(next === 'resolved' ? 'Marked as fixed. It reopens if it happens again.' : next === 'muted' ? 'Muted.' : 'Reopened.');
+      setOpen(null);
+      load();
+    } catch (err) {
+      toast(err.message, { tone: 'error' });
+    }
+  };
+  return (
+    <Card className="lg:col-span-2">
+      <CardHeader
+        title="Errors"
+        subtitle="From people’s browsers and from the server, grouped by kind. Emails, tokens and ids are removed before anything is stored."
+        action={
+          <div className="flex gap-1 text-xs">
+            {['open', 'resolved', 'muted'].map((s) => (
+              <button key={s} type="button" onClick={() => setStatus(s)} aria-pressed={status === s} className={clsx('rounded-lg px-2.5 py-1 font-medium', status === s ? 'bg-ink-900 text-white dark:bg-white dark:text-ink-900' : 'text-ink-500 hover:bg-ink-50 dark:hover:bg-ink-800')}>
+                {s === 'open' ? 'Open' : s === 'resolved' ? 'Fixed' : 'Muted'}{data?.counts?.[s] ? ` ${data.counts[s]}` : ''}
+              </button>
+            ))}
+          </div>
+        }
+      />
+      {!data ? <CardBody><div className="h-24 animate-pulse rounded-xl bg-ink-50 dark:bg-ink-800" /></CardBody> : data.errors.length ? (
+        <ul className="divide-y divide-ink-100 dark:divide-ink-800">
+          {data.errors.map((e) => (
+            <li key={e.id} className="px-5 py-3">
+              <button type="button" onClick={() => show(e.id)} className="flex w-full items-start gap-3 text-left" aria-expanded={open?.id === e.id}>
+                <Badge tone={e.source === 'server' ? 'loss' : 'warning'}>{e.source === 'server' ? 'Server' : 'App'}</Badge>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-medium text-ink-800 dark:text-ink-100">{e.message}</span>
+                  <span className="block text-xs text-ink-400">{e.path ?? 'unknown place'} · {e.count} time{e.count === 1 ? '' : 's'} · last {ago(e.lastSeenAt)}{e.release ? ` · build ${e.release}` : ''}</span>
+                </span>
+              </button>
+              {open?.id === e.id ? (
+                <div className="mt-3 space-y-2">
+                  {open.sample ? <p className="text-xs text-ink-500">Latest: {[open.sample.browser, open.sample.screen, open.sample.standalone ? 'installed app' : null].filter(Boolean).join(' · ')}. First seen {ago(open.firstSeenAt)}.</p> : null}
+                  {open.stack ? <pre className="max-h-64 overflow-auto rounded-lg bg-ink-50 p-3 text-[11px] leading-relaxed text-ink-700 dark:bg-ink-800 dark:text-ink-200">{open.stack}</pre> : <p className="text-xs text-ink-400">No stack trace was sent.</p>}
+                  <div className="flex gap-2">
+                    {e.status !== 'resolved' ? <Button size="sm" onClick={() => set(e.id, 'resolved')}>Mark as fixed</Button> : null}
+                    {e.status !== 'muted' ? <Button size="sm" variant="ghost" onClick={() => set(e.id, 'muted')}>Mute</Button> : null}
+                    {e.status !== 'open' ? <Button size="sm" variant="ghost" onClick={() => set(e.id, 'open')}>Reopen</Button> : null}
+                  </div>
+                </div>
+              ) : null}
+            </li>
+          ))}
+        </ul>
+      ) : <CardBody><EmptyState size="inline" icon={CheckCircle2} title={status === 'open' ? 'No open errors' : status === 'resolved' ? 'Nothing marked as fixed' : 'Nothing muted'} description={status === 'open' ? 'Errors people run into show up here within a minute.' : undefined} /></CardBody>}
+    </Card>
+  );
+}
+
 export default function AdminSystemHealth() {
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
@@ -66,7 +140,7 @@ export default function AdminSystemHealth() {
       <PageHeader
         eyebrow="Admin"
         title="System Status"
-        description="Live checks of Kotka’s data storage, Kotka AI, the hourly update and connected services. Each line shows what the check just found."
+        description={<>Live checks of Kotka’s data storage, Kotka AI, the hourly update and connected services, and the errors people run into. The public version is at <Link to="/status" className="font-medium text-accent-600 hover:underline dark:text-accent-400">/status</Link>.</>}
         actions={
           <Button variant="secondary" size="sm" icon={RefreshCw} disabled={loading} onClick={load}>
             {loading ? 'Checking…' : 'Check again'}
@@ -133,6 +207,8 @@ export default function AdminSystemHealth() {
               ))}
             </CardBody>
           </Card>
+
+          <ErrorsCard />
 
           <Card className="lg:col-span-2">
             <CardHeader title="Accounts and security, last 24 hours" />
