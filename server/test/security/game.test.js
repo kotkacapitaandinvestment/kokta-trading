@@ -215,6 +215,8 @@ test('every Kotka pair generates at its own precision, and timeframes agree with
     const r = candleRange(m, tf, { limit: 1000, upToAbs: m.historyTicks + 120 });
     assert.ok(r.candles.every((c) => c.t <= 120), `tf ${tf}`);
   }
+  // The most background history the admin can set (48 hours) still generates.
+  assert.equal(mk({ scenario: 'range', seed: 3, backgroundTicks: 48 * 3600 }).historyTicks >= 48 * 3600, true);
   // The longest timeframe agrees with the hours inside it.
   const long = mk({ scenario: 'breakout', seed: 31, backgroundTicks: 8 * 3600 });
   const hours = candleRange(long, 3600, { limit: 1000, upToAbs: long.historyTicks - 1 }).candles;

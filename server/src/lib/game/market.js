@@ -252,6 +252,15 @@ function trend(w, { v, H, M, mu, sc }, d) {
  * The full market for a match: prices and volumes per tick, events and
  * the scenario's levels. Pure and deterministic.
  */
+// Puts items in front of arr, in place (the walker keeps a reference to its
+// arrays). unshift(...items) overflows the call stack past ~100k items, and
+// the background history can run to 48 hours of one-second prices.
+function prependAll(arr, items) {
+  const rest = arr.splice(0);
+  for (const x of items) arr.push(x);
+  for (const x of rest) arr.push(x);
+}
+
 export function generateMarket({ scenario, seed, durationSec, candleSec, historyCandles, symbol = null, backgroundTicks = 0, version = GENERATOR_VERSION, secret = null }) {
   if (![1, 2, 3].includes(version)) throw new Error(`Market generator version ${version} is not available.`);
   if (version >= 3 && !secret) throw new Error('Version 3 markets need their secret.');
@@ -285,9 +294,9 @@ export function generateMarket({ scenario, seed, durationSec, candleSec, history
   // Version 2: the long history before the scenario.
   if (B) {
     const bg = background(version >= 3 ? secureRng(secret, `background:${symbol}`) : rng(mix('background', symbol, seed)), startPrice, B, s0);
-    w.prices.unshift(...bg.prices);
-    w.regimes.unshift(...bg.regimes);
-    w.shocks.unshift(...new Array(B).fill(0));
+    prependAll(w.prices, bg.prices);
+    prependAll(w.regimes, bg.regimes);
+    prependAll(w.shocks, new Array(B).fill(0));
     for (const e of built.events) e.tick += B;
   }
   const prices = w.prices.map(roundP);
