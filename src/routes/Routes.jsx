@@ -19,6 +19,7 @@ import CommunityLayout from '../features/community/CommunityLayout';
 const VerifyIdentity = lazyPage(() => import('../features/verification/VerifyIdentity'));
 const Status = lazyPage(() => import('../features/marketing/Status'));
 const Help = lazyPage(() => import('../features/marketing/Help'));
+const GetApp = lazyPage(() => import('../features/marketing/GetApp'));
 const Support = lazyPage(() => import('../features/support/Support'));
 const AdminSupport = lazyPage(() => import('../features/admin/AdminSupport'));
 const AdminGrowth = lazyPage(() => import('../features/admin/AdminGrowth'));
@@ -86,6 +87,7 @@ export default function AppRoutes() {
       <Route path="/verify" element={<VerifyIdentity />} />
       <Route path="/status" element={<Status />} />
       <Route path="/help" element={<Help />} />
+      <Route path="/install" element={<GetApp />} />
       <Route path="/achievement/:slug" element={<PublicAchievement />} />
 
       <Route

@@ -6,6 +6,41 @@ const ua = typeof navigator !== 'undefined' ? navigator.userAgent : '';
 export const isIOS = /iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && typeof navigator !== 'undefined' && navigator.maxTouchPoints > 1);
 export const isStandalone = () => typeof window !== 'undefined' && (window.matchMedia?.('(display-mode: standalone)').matches || window.navigator.standalone === true);
 
+// Where Kotka is open, for the "Get the app" steps: which phone or computer,
+// which browser, and whether it's a browser inside another app (WhatsApp,
+// Instagram, Facebook…), where installing isn't possible at all.
+export function installContext(agent = ua) {
+  const android = /Android/i.test(agent);
+  const ios = isIOS || /iPhone|iPad|iPod/i.test(agent);
+  const inApp = /FBAN|FBAV|FB_IAB|Instagram|Line\/|TikTok|musical_ly|Snapchat|Twitter|Telegram|WhatsApp|LinkedInApp|GSA\//i.test(agent) || (android && /; wv\)/.test(agent));
+  const browser = inApp ? 'inapp'
+    : /SamsungBrowser/i.test(agent) ? 'samsung'
+      : /MiuiBrowser|XiaoMi\/Mi/i.test(agent) ? 'miui'
+        : /OPR\/|Opera|OPiOS|OPT\//i.test(agent) ? 'opera'
+          : /Firefox|FxiOS/i.test(agent) ? 'firefox'
+            : /EdgA?\/|EdgiOS/i.test(agent) ? 'edge'
+              : /CriOS/i.test(agent) ? 'chrome-ios'
+                : /Chrome\//i.test(agent) ? 'chrome'
+                  : ios ? 'safari' : 'other';
+  // Xiaomi, Redmi and POCO phones block home-screen icons from browsers until allowed.
+  const xiaomi = android && /Xiaomi|Redmi|POCO|\bMi \d|M\d{4}[A-Z]\d+[A-Z]*|MIUI|HyperOS/i.test(agent);
+  return { platform: android ? 'android' : ios ? 'ios' : 'desktop', browser, inApp, xiaomi };
+}
+
+// Chrome on Android hides the phone model from the user agent, but tells it
+// when asked. Xiaomi model codes start with the year and month (2305…, M2101…).
+export async function isXiaomiPhone() {
+  try {
+    const { model = '' } = (await navigator.userAgentData?.getHighEntropyValues?.(['model'])) ?? {};
+    return /Xiaomi|Redmi|POCO|^Mi \d|^M?2\d{3}[0-9A-Z]{3,8}$/i.test(model.trim());
+  } catch {
+    return false;
+  }
+}
+
+// Opens this page in Chrome from a browser inside another app (Android).
+export const openInChromeUrl = (path = '/install') => `intent://${typeof window !== 'undefined' ? window.location.host : 'www.kotkafinance.online'}${path}#Intent;scheme=https;package=com.android.chrome;end`;
+
 // ── Service worker ─────────────────────────────────────────────────────────
 let registrationPromise = null;
 
@@ -27,6 +62,7 @@ async function registration() {
 
 // ── Install prompt ─────────────────────────────────────────────────────────
 let deferredPrompt = null;
+let installedNow = false;
 const installListeners = new Set();
 const emitInstall = () => installListeners.forEach((l) => l());
 
@@ -38,6 +74,7 @@ if (typeof window !== 'undefined') {
   });
   window.addEventListener('appinstalled', () => {
     deferredPrompt = null;
+    installedNow = true;
     emitInstall();
   });
 }
@@ -50,9 +87,17 @@ export function useInstallPrompt() {
     },
     () => !!deferredPrompt,
   );
+  const justInstalled = useSyncExternalStore(
+    (l) => {
+      installListeners.add(l);
+      return () => installListeners.delete(l);
+    },
+    () => installedNow,
+  );
   const standalone = isStandalone();
   return {
     canInstall: canPrompt && !standalone,
+    justInstalled,
     // iOS has no prompt; the user adds it from the Share menu.
     iosManual: isIOS && !standalone,
     standalone,

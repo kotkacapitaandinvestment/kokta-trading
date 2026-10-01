@@ -19,6 +19,7 @@ function articles(r) {
       items: [
         ['How do I create an account?', 'Enter your name, email and a password, and Kotka emails you a 6-digit code. Enter the code within 15 minutes and your account is ready, with your email already confirmed. If the address already has an account, we email a sign-in link to it instead, so nobody can use the form to find out who uses Kotka.'],
         ['Why does Kotka ask for my identity?', 'A short identity check keeps accounts real and is required before you can play for a stake or move money. You must be 18 or older. Your details are encrypted and only Kotka’s verification team can open them.'],
+        ['Can I install Kotka as an app?', 'Yes, for free and without an app store: open www.kotkafinance.online/install on your phone and follow the steps it shows for your phone and browser. On Android the app goes to your app list (swipe up and search Kotka); press and hold it to add it to your home screen. If you opened Kotka from WhatsApp or Instagram, open it in Chrome or Safari first.'],
         ['What should I do first?', 'Your Dashboard has a “Get started” list: confirm the basics, log a trade in the journal, run the pre-trade checklist before your next trade, ask Kotka AI to challenge an idea, and try a free practice match.'],
       ],
     },

@@ -375,10 +375,17 @@ export default function Landing() {
       <footer id="contact" className="scroll-mt-16 border-t border-white/5">
         <div className="mx-auto max-w-[1400px] px-5 py-12 sm:px-8">
           <div className="grid grid-cols-1 gap-10 lg:grid-cols-12">
-            <div className="flex items-center gap-3 self-start lg:col-span-4">
-              <BrandMark size={26} />
-              <span className="text-[12px] font-semibold tracking-[0.3em] text-white">KOTKA</span>
-              <span className="text-xs text-ink-500">Discipline is Freedom.</span>
+            <div className="self-start lg:col-span-4">
+              <div className="flex items-center gap-3">
+                <BrandMark size={26} />
+                <span className="text-[12px] font-semibold tracking-[0.3em] text-white">KOTKA</span>
+                <span className="text-xs text-ink-500">Discipline is Freedom.</span>
+              </div>
+              <nav aria-label="More" className="mt-4 flex flex-wrap gap-x-5 gap-y-2 text-sm">
+                <Link to="/install" className="text-ink-200 hover:text-accent-400">Get the app</Link>
+                <Link to="/help" className="text-ink-200 hover:text-accent-400">Help</Link>
+                <Link to="/status" className="text-ink-200 hover:text-accent-400">Status</Link>
+              </nav>
             </div>
             <dl className="grid grid-cols-1 gap-x-10 gap-y-6 sm:grid-cols-2 lg:col-span-8 xl:grid-cols-4">
               {[
