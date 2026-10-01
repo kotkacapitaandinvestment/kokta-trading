@@ -120,7 +120,7 @@ function Explorer({ rules, dark }) {
           const I = CAT[k].icon;
           return (
             <li key={k} className="shrink-0" role="presentation">
-              <button type="button" role="tab" id={`part-tab-${k}`} aria-controls="part-panel" aria-selected={open === k} onClick={() => setOpen(k)} className={clsx('flex w-full items-center gap-3 rounded-xl border px-3 py-2.5 text-left transition-colors', open === k ? 'border-ink-900 bg-ink-900 text-white dark:border-white dark:bg-white dark:text-ink-900' : 'border-ink-100 hover:border-ink-300 dark:border-ink-800 dark:hover:border-ink-600')}>
+              <button type="button" role="tab" id={`part-tab-${k}`} aria-controls="part-panel" aria-selected={open === k} onClick={() => setOpen(k)} className={clsx('flex w-full items-center gap-3 rounded-xl border px-3 py-2.5 text-left transition-colors', open === k ? 'border-ink-900 bg-ink-900 text-white dark:border-accent-500/70 dark:bg-ink-800 dark:text-white' : 'border-ink-100 text-ink-700 hover:border-ink-300 dark:border-ink-800 dark:text-ink-200 dark:hover:border-ink-600')}>
                 <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg" style={{ background: `${CAT[k][dark ? 'dark' : 'light']}22`, color: CAT[k][dark ? 'dark' : 'light'] }}><I className="h-4 w-4" /></span>
                 <span className="min-w-0 flex-1 text-sm font-medium">{label}</span>
                 <span className="text-sm font-semibold tabular-nums">{pct[k]}%</span>
