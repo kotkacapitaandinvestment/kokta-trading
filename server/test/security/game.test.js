@@ -211,9 +211,21 @@ test('every Kotka pair generates at its own precision, and timeframes agree with
     assert.equal(c.v, parts.reduce((s, x) => s + x.v, 0));
   }
   // Nothing past the visible tick, at any timeframe, and history pages join up.
-  for (const tf of [1, 5, 15, 30, 60, 180, 300, 900, 1800, 3600]) {
+  for (const tf of [1, 5, 15, 30, 60, 180, 300, 900, 1800, 3600, 7200, 14400]) {
     const r = candleRange(m, tf, { limit: 1000, upToAbs: m.historyTicks + 120 });
     assert.ok(r.candles.every((c) => c.t <= 120), `tf ${tf}`);
+  }
+  // The longest timeframe agrees with the hours inside it.
+  const long = mk({ scenario: 'breakout', seed: 31, backgroundTicks: 8 * 3600 });
+  const hours = candleRange(long, 3600, { limit: 1000, upToAbs: long.historyTicks - 1 }).candles;
+  const fours = candleRange(long, 14400, { limit: 1000, upToAbs: long.historyTicks - 1 }).candles;
+  const whole = fours.filter((c) => hours.filter((x) => x.t >= c.t && x.t < c.t + 14400).length === 4);
+  assert.ok(whole.length >= 1, 'at least one full 4-hour candle in the background history');
+  for (const c of whole) {
+    const parts = hours.filter((x) => x.t >= c.t && x.t < c.t + 14400);
+    assert.equal(c.c, parts.at(-1).c);
+    assert.equal(c.h, Math.max(...parts.map((x) => x.h)));
+    assert.equal(c.l, Math.min(...parts.map((x) => x.l)));
   }
   const page1 = candleRange(m, 60, { limit: 10, upToAbs: m.historyTicks - 1 });
   const page2 = candleRange(m, 60, { beforeT: page1.candles[0].t, limit: 10, upToAbs: m.historyTicks - 1 });

@@ -121,7 +121,7 @@ function Overview({ room, setRoom }) {
         </section>
         {d?.available ? (
           <section className="rounded-2xl border border-ink-100 bg-white p-5 dark:border-ink-800 dark:bg-ink-900">
-            <h2 className="mb-3 text-sm font-semibold text-ink-900 dark:text-ink-50">Daily closing prices <span className="font-normal text-ink-400">(last {d.history.length} trading days)</span></h2>
+            <h2 className="mb-3 text-sm font-semibold text-ink-900 dark:text-ink-50">Daily prices <span className="font-normal text-ink-400">(one candle a trading day)</span></h2>
             <PriceChart history={d.history} decimals={dec} />
           </section>
         ) : null}
@@ -189,7 +189,7 @@ function ChartsTab({ symbol }) {
     <div className="space-y-4">
       {data?.price ? (
         <section className="rounded-2xl border border-ink-100 bg-white p-5 dark:border-ink-800 dark:bg-ink-900">
-          <h2 className="mb-3 text-sm font-semibold text-ink-900 dark:text-ink-50">Daily closing prices</h2>
+          <h2 className="mb-3 text-sm font-semibold text-ink-900 dark:text-ink-50">Daily prices <span className="font-normal text-ink-400">(one candle a trading day)</span></h2>
           <PriceChart history={data.price.history} decimals={data.price.decimals} height={260} />
         </section>
       ) : null}

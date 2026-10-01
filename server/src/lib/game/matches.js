@@ -703,7 +703,8 @@ export function visibleTick(m, at = now()) {
   return Math.min(tickAt(m, at), m.durationSec - 1);
 }
 
-export const TIMEFRAMES = [1, 5, 15, 30, 60, 180, 300, 900, 1800, 3600];
+// Chart timeframes from one second up to four hours (the longest offered).
+export const TIMEFRAMES = [1, 5, 15, 30, 60, 180, 300, 900, 1800, 3600, 7200, 14400];
 
 // Candles for the chart, any timeframe, page by page. Players only.
 export async function chartCandles(user, matchId, { tf, before = null, limit = 300, until = null }) {

@@ -65,7 +65,7 @@ export function summarizeBars(inst, bars) {
       rangeThird: third,
     },
     closes: bars.slice(-30).map((b) => round(b.c, d)),
-    history: bars.map((b) => ({ t: new Date(b.t).toISOString().slice(0, 10), c: round(b.c, d) })),
+    history: bars.map((b) => ({ t: new Date(b.t).toISOString().slice(0, 10), o: round(b.o, d), h: round(b.h, d), l: round(b.l, d), c: round(b.c, d) })),
   };
 }
 

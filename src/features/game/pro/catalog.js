@@ -128,6 +128,8 @@ export const TIMEFRAMES = [
   { tf: 900, label: '15m', period: { type: 'minute', span: 15 } },
   { tf: 1800, label: '30m', period: { type: 'minute', span: 30 } },
   { tf: 3600, label: '1h', period: { type: 'hour', span: 1 } },
+  { tf: 7200, label: '2h', period: { type: 'hour', span: 2 } },
+  { tf: 14400, label: '4h', period: { type: 'hour', span: 4 } },
 ];
 
 export const CHART_TYPES = [
