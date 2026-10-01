@@ -389,7 +389,7 @@ function Services() {
             <p data-reveal className={EYEBROW}>Kotka services</p>
             <h2 data-reveal style={{ '--i': 1 }} className={clsx('mt-4', SECTION_TITLE)}>Everything in one place, in the order you trade.</h2>
             <p data-reveal style={{ '--i': 2 }} className="mt-6 max-w-[40ch] text-base leading-relaxed text-ink-400">
-              {count} services, all in your free account. Behind them: two-step sign-in, a <Link to="/help" className="text-ink-200 underline-offset-4 hover:underline">help centre</Link> with direct support, and a <Link to="/status" className="text-ink-200 underline-offset-4 hover:underline">live status page</Link>.
+              {count} services, all in your free account. Behind them: two-step sign-in, a <Link to="/help" className="text-ink-200 underline decoration-white/30 underline-offset-4 transition-colors hover:text-accent-400 hover:decoration-accent-400">help centre</Link> with direct support, and a <Link to="/status" className="text-ink-200 underline decoration-white/30 underline-offset-4 transition-colors hover:text-accent-400 hover:decoration-accent-400">live status page</Link>.
             </p>
           </div>
         </div>
