@@ -87,11 +87,18 @@ test('reset links expire, and forged tokens are refused', async () => {
   assert.equal((await client().post('/api/auth/password-reset/confirm', { token: { $ne: null }, password: 'Fine-Passphrase-Here-1' })).status, 400);
 });
 
-test('reset emails are rate-limited per address', async () => {
+test('reset emails are rate-limited per address, and per network across servers', async () => {
+  // The per-network count lives in the shared test database: start this test from zero.
+  await prisma.rateLimitHit.deleteMany({ where: { key: { startsWith: 'reset-ip:' } } });
   const u = await makeUser('Spammed');
   const results = [];
   for (let i = 0; i < 4; i++) results.push((await client().post('/api/auth/password-reset', { email: u.email })).status);
   assert.deepEqual(results, [200, 200, 200, 429]);
+  // Different addresses from one network: 10 an hour (4 used above), then refused.
+  const more = [];
+  for (let i = 0; i < 7; i++) more.push((await client().post('/api/auth/password-reset', { email: `nobody-${runTag}-${i}@kotkafinance.online` })).status);
+  assert.deepEqual(more, [200, 200, 200, 200, 200, 200, 429]);
+  await prisma.rateLimitHit.deleteMany({ where: { key: { startsWith: 'reset-ip:' } } });
 });
 
 test('a sign-in from a new device triggers an alert; the same device does not', async () => {
