@@ -57,6 +57,8 @@ test('only Kotka origins are trusted', () => {
   assert.equal(isAllowedOrigin('https://kotkafinance.online.evil.example'), false);
   assert.equal(isAllowedOrigin('https://evil.example'), false);
   assert.equal(isAllowedOrigin('null'), false);
-  assert.equal(isAllowedOrigin('https://kokta-trading-abc123-kotka.vercel.app'), true);
+  // No *.vercel.app name is trusted (anyone can create a look-alike); previews pass the same-origin check instead.
+  assert.equal(isAllowedOrigin('https://kokta-trading-abc123-kotka.vercel.app'), false);
   assert.equal(isAllowedOrigin('https://kokta-trading-abc123-attacker.vercel.app'), false);
+  assert.equal(isAllowedOrigin('https://kokta-trading.vercel.app'), false);
 });

@@ -154,7 +154,7 @@ test('credits lost on purpose to a friend stay restricted for the winner; fees s
   await settleAs(id, { winnerId: r.id });
   const { prize } = money(naira(500), (await prisma.gameMatch.findUnique({ where: { id } })).feeBps);
   const after = await wallet(r);
-  assert.equal(after.availableKobo - before.availableKobo, BigInt(prize), 'the winner is paid in full');
+  assert.equal(after.availableKobo - before.availableKobo, BigInt(prize - naira(500)), 'the winner is paid in full (their own stake was taken from the same balance)');
   assert.equal(after.restrictedKobo - before.restrictedKobo, BigInt(prize / 2), 'but the half of the pool paid in credits can’t be withdrawn until they stake as much of their own');
 
   // Kotka's house below zero (promotions cost more than fees so far): a fee still comes in.
@@ -195,7 +195,7 @@ test('credits go only to verified traders, a campaign gives once, and only super
   await prisma.kycProfile.update({ where: { userId: unverified.id }, data: { status: 'pending' } });
   await assert.rejects(grantPromo({ userId: unverified.id, amountKobo: naira(100), expiresAt: days(1) }), /verified/);
   assert.equal((await pC.get('/api/admin/game/promotions')).status, 403, 'traders can’t see promotions');
-  assert.equal((await superC.post('/api/admin/game/promotions/campaigns', { name: `No code ${runTag}`, amountKobo: naira(250), expiresInDays: 14, audience: 'manual' })).status, 400, 'giving credits needs a two-step code');
+  assert.match((await superC.post('/api/admin/game/promotions/campaigns', { name: `No code ${runTag}`, amountKobo: naira(250), expiresInDays: 14, audience: 'manual' })).json.code ?? '', /^two_step/, 'giving credits needs a two-step code');
   const created = await superC.post('/api/admin/game/promotions/campaigns', { name: `Welcome ${runTag}`, amountKobo: naira(250), expiresInDays: 14, audience: 'manual', twoStepCode: await twoStepCode(superU) });
   assert.equal(created.status, 201, JSON.stringify(created.json));
   campaigns.push(created.json.campaign.id);

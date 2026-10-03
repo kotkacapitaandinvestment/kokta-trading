@@ -496,7 +496,7 @@ test('a wallet on hold can’t stake or search; suspending a trader closes their
   assert.equal(blocked.json.code, 'wallet_frozen');
   assert.equal((await cC.post('/api/game/quick', { stakeKobo: naira(500), durationSec: 60 })).json.code, 'wallet_frozen');
   assert.equal((await cC.get('/api/game/wallet')).json.wallet.onHold, true, 'the owner is told');
-  assert.equal((await superC.post(`/api/admin/game/wallets/${c.id}/hold`, { on: false })).status, 400, 'clearing a hold needs a two-step code');
+  assert.match((await superC.post(`/api/admin/game/wallets/${c.id}/hold`, { on: false })).json.code ?? '', /^two_step/, 'clearing a hold needs a two-step code');
   assert.equal((await superC.post(`/api/admin/game/wallets/${c.id}/hold`, { on: false, twoStepCode: await twoStepCode(superU) })).status, 200);
   const posted = await cC.post('/api/game/matches', { mode: 'duel', stakeKobo: naira(500), open: true });
   assert.equal(posted.status, 201);
