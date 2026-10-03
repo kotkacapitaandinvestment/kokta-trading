@@ -43,10 +43,11 @@ export default function KotkaAI() {
   const [params, setParams] = useSearchParams();
   const [input, setInput] = useState(() => (params.get('prompt') ?? '').slice(0, 2000));
   const [status, setStatus] = useState(null);
-  // "Ask Kotka" links elsewhere in the app arrive with ?prompt= (and &send=1
-  // to ask straight away); they get a fresh conversation.
+  // "Ask Kotka" links elsewhere in the app arrive with ?prompt=; they open a
+  // fresh conversation with the question filled in. Nothing is sent until the
+  // trader presses send, so a link (from anyone) can't spend their AI allowance.
   const booted = useRef(false);
-  const autoSend = useRef(params.get('prompt') && params.get('send') === '1');
+  const autoSend = useRef(false);
   const [pendingImage, setPendingImage] = useState(null);
   const [thinking, setThinking] = useState(false);
   const [lastSource, setLastSource] = useState(null);

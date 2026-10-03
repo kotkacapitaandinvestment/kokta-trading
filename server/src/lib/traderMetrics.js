@@ -30,7 +30,7 @@ export function computeScores(entries, defaultRisk = 1) {
   const calmEntries = entries.filter((e) => CALM_EMOTIONS.includes(e.emotionBefore)).length;
   const highConviction = entries.filter((e) => e.confidence >= 7).length;
 
-  const byDay = {};
+  const byDay = Object.create(null);
   for (const e of entries) {
     byDay[e.date] = (byDay[e.date] || 0) + e.pnl;
   }
@@ -62,7 +62,7 @@ export function computeScores(entries, defaultRisk = 1) {
 }
 
 function groupBy(entries, key) {
-  const groups = {};
+  const groups = Object.create(null); // no inherited keys: a strategy named "constructor" is just a name
   for (const e of entries) {
     const k = e[key];
     if (!groups[k]) groups[k] = [];
@@ -96,7 +96,7 @@ export function computeIdentity(entries, minSample = 2) {
     .sort((a, b) => b.totalPnl - a.totalPnl);
 
   const losses = entries.filter((e) => e.result === 'loss');
-  const emotionCounts = {};
+  const emotionCounts = Object.create(null);
   for (const e of losses) {
     if (!e.emotionBefore) continue;
     emotionCounts[e.emotionBefore] = (emotionCounts[e.emotionBefore] || 0) + 1;
@@ -104,7 +104,7 @@ export function computeIdentity(entries, minSample = 2) {
   const emotionalTrigger = Object.entries(emotionCounts).sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
 
   const mistakeEntries = entries.filter((e) => e.mistakes && e.mistakes.trim().length > 0);
-  const mistakeCounts = {};
+  const mistakeCounts = Object.create(null);
   for (const e of mistakeEntries) {
     const key = e.mistakes.trim();
     mistakeCounts[key] = (mistakeCounts[key] || 0) + 1;
@@ -160,7 +160,7 @@ export function computeAnalytics(entries, defaultRisk = 1) {
     winRate: pct(list.filter((e) => e.result === 'win').length, list.length),
   }));
 
-  const emotionCounts = {};
+  const emotionCounts = Object.create(null);
   for (const e of entries) {
     if (!e.emotionBefore) continue;
     emotionCounts[e.emotionBefore] = (emotionCounts[e.emotionBefore] || 0) + 1;
@@ -177,7 +177,7 @@ export function computeAnalytics(entries, defaultRisk = 1) {
     { rule: 'Logged a mistake for this trade', count: mistakeCount },
   ];
 
-  const byDate = {};
+  const byDate = Object.create(null);
   for (const e of entries) {
     byDate[e.date] = (byDate[e.date] || 0) + e.pnl;
   }

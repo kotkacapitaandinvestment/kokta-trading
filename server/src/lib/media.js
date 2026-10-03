@@ -49,12 +49,6 @@ export async function saveMedia(ownerId, { dataUrl, width, height, durationMs })
     width = clean.width;
     height = clean.height;
   }
-  const [today, total] = await Promise.all([
-    prisma.media.aggregate({ where: { ownerId, createdAt: { gte: new Date(Date.now() - 86400e3) } }, _sum: { size: true } }),
-    prisma.media.aggregate({ where: { ownerId }, _sum: { size: true } }),
-  ]);
-  if ((today._sum.size ?? 0) + buf.length > DAILY_BYTES) return { error: 'You’ve uploaded a lot today. Try again tomorrow.' };
-  if ((total._sum.size ?? 0) + buf.length > TOTAL_BYTES) return { error: 'Your uploads are full. Delete some older posts or messages with images, then try again.' };
   const token = crypto.randomBytes(18).toString('base64url');
   // To R2 when connected; if that fails, the database, so an upload never fails because of storage.
   let storageKey = null;
@@ -68,21 +62,38 @@ export async function saveMedia(ownerId, { dataUrl, width, height, durationMs })
       console.error('R2 upload failed; keeping this file in the database:', err.message);
     }
   }
-  const media = await prisma.media.create({
-    data: {
-      ownerId,
-      token,
-      kind: type.kind,
-      mime: type.mime,
-      size: buf.length,
-      width: type.kind === 'image' ? int(width, 20000) : null,
-      height: type.kind === 'image' ? int(height, 20000) : null,
-      durationMs: type.kind === 'audio' ? int(durationMs, 10 * 60 * 1000) : null,
-      data: storageKey ? null : buf,
-      storageKey,
-    },
-    select: { id: true, token: true, kind: true, mime: true, size: true, width: true, height: true, durationMs: true },
-  });
+  // The quota check and the new row happen under a lock on the owner, so a
+  // burst of parallel uploads can't all fit under the same remaining space.
+  const result = await prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`kotka-media:${ownerId}`}))`;
+    const [today, total] = await Promise.all([
+      tx.media.aggregate({ where: { ownerId, createdAt: { gte: new Date(Date.now() - 86400e3) } }, _sum: { size: true } }),
+      tx.media.aggregate({ where: { ownerId }, _sum: { size: true } }),
+    ]);
+    if ((today._sum.size ?? 0) + buf.length > DAILY_BYTES) return { error: 'You’ve uploaded a lot today. Try again tomorrow.' };
+    if ((total._sum.size ?? 0) + buf.length > TOTAL_BYTES) return { error: 'Your uploads are full. Delete some older posts or messages with images, then try again.' };
+    const media = await tx.media.create({
+      data: {
+        ownerId,
+        token,
+        kind: type.kind,
+        mime: type.mime,
+        size: buf.length,
+        width: type.kind === 'image' ? int(width, 20000) : null,
+        height: type.kind === 'image' ? int(height, 20000) : null,
+        durationMs: type.kind === 'audio' ? int(durationMs, 10 * 60 * 1000) : null,
+        data: storageKey ? null : buf,
+        storageKey,
+      },
+      select: { id: true, token: true, kind: true, mime: true, size: true, width: true, height: true, durationMs: true },
+    });
+    return { media };
+  }, { maxWait: 10000, timeout: 15000 });
+  if (result.error) {
+    if (storageKey) await store.remove(storageKey).catch(() => {});
+    return { error: result.error };
+  }
+  const { media } = result;
   return { media: { ...media, url: mediaUrl(media) } };
 }
 

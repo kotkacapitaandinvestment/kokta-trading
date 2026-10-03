@@ -16,6 +16,7 @@ import { limit } from '../lib/rateLimit.js';
 import { waitUntil } from '@vercel/functions';
 import { sendVerification, alertPasswordChanged, alertTwoStep } from '../lib/email/notices.js';
 import { subscribe, unsubscribe } from '../lib/email/inbox.js';
+import { cancelResetLinks } from '../lib/email/tokens.js';
 
 // The signed-in user's own account: display name, password, sessions,
 // two-step verification, deletion.
@@ -62,6 +63,7 @@ accountRouter.post('/password', limit('passwordChange'), asyncHandler(async (req
   if (await checkPassword(newPassword, user.passwordHash)) return res.status(400).json({ error: 'Choose a password you have not used here before.' });
   await prisma.user.update({ where: { id: user.id }, data: { passwordHash: await hashPassword(newPassword), sessionsValidAfter: new Date() } });
   const signedOut = await revokeUserSessions(user.id, { except: req.sessionId });
+  await cancelResetLinks(user.id);
   forgetUserAccess(user.id);
   await audit(req, 'account.password_changed', { targetType: 'user', targetId: user.id, actor: user, detail: { otherSessionsSignedOut: signedOut } });
   res.json({ ok: true, signedOut });
@@ -85,6 +87,7 @@ accountRouter.delete('/sessions/:id', limit('sessions'), asyncHandler(async (req
 accountRouter.post('/sessions/revoke-others', limit('sessions'), asyncHandler(async (req, res) => {
   const n = await revokeUserSessions(req.userId, { except: req.sessionId });
   await prisma.user.update({ where: { id: req.userId }, data: { sessionsValidAfter: new Date() } });
+  await cancelResetLinks(req.userId);
   forgetUserAccess(req.userId);
   auditLater(req, 'account.sessions_revoked', { targetType: 'user', targetId: req.userId, detail: { count: n } });
   res.json({ signedOut: n });

@@ -131,7 +131,13 @@ export async function settleStakes(tx, { match, players, stake, fee, winnerId, d
     const P = big(prize);
     const x = players.find((y) => y.userId === winnerId);
     const { p, l } = split(x, S);
-    const held = (P * (p + l)) / S;
+    // Restricted: winnings on the winner's own promotional stake (as before),
+    // plus the part of the pool the loser paid in promotional credits or
+    // restricted winnings. Otherwise losing on purpose to a friend would turn
+    // credits into cash the friend could withdraw.
+    const loser = players.find((y) => y.userId !== winnerId);
+    const fromLoser = loser ? split(loser, S) : { p: 0n, l: 0n };
+    const held = min(P, (P * (p + l)) / S + (P * (fromLoser.p + fromLoser.l)) / (2n * S));
     const w = await walletFor(winnerId, tx);
     await post(tx, { walletId: w.id, userId: winnerId, type: 'winnings', amount: P, available: P, restricted: held, key: `win:${match.id}:${winnerId}`, matchId: match.id, reason: held > 0n ? `₦${kobo(held) / 100} was won with promotional credits: stake the same of your own money to withdraw it` : null });
     cashOut += P;

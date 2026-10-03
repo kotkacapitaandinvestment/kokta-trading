@@ -5,13 +5,15 @@
 
 import crypto from 'node:crypto';
 import { prisma } from '../prisma.js';
-import { memoryHit } from '../rateLimit.js';
+import { hit, memoryHit } from '../rateLimit.js';
 
 const MAX_MESSAGE = 500;
 const MAX_STACK = 4000;
 
 export function scrub(text) {
+  // Capped first: the patterns below must never see a huge input.
   return String(text ?? '')
+    .slice(0, 10000)
     .replace(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g, '<email>')
     .replace(/\?[^\s)'"]*/g, '') // query strings (reset links carry tokens there)
     .replace(/\b(?:eyJ[\w-]+\.[\w-]+\.[\w-]+)\b/g, '<jwt>')
@@ -44,11 +46,16 @@ function fingerprintOf(source, message, stack) {
  */
 export async function recordError({ source, message, stack, path, release, userId = null, sample = null }) {
   try {
-    const msg = scrub(message).trim().slice(0, MAX_MESSAGE) || 'Unknown error';
+    // Links are dropped from messages: anyone can report an error, and the
+    // newest ones are emailed to staff, so they must not carry a link to click.
+    const msg = scrub(message).replace(/\b(?:https?:\/\/|www\.)\S+/gi, '<link>').trim().slice(0, MAX_MESSAGE) || 'Unknown error';
     const st = stack ? scrub(stack).split('\n').slice(0, 25).join('\n').slice(0, MAX_STACK) : null;
     const fingerprint = fingerprintOf(source, msg, st);
     // A burst of the same error from one instance counts, but writes at most once a second.
     if (memoryHit(`errgroup:${fingerprint}`, 1, 1000)) return null;
+    // Errors anyone can report make at most 100 new kinds an hour, across all
+    // servers, so the table can't be flooded with made-up ones.
+    if (source === 'client' && !(await prisma.errorGroup.findUnique({ where: { fingerprint }, select: { id: true } })) && (await hit('telemetry:new-kinds', 100, 3600e3))) return null;
     const now = new Date();
     return await prisma.errorGroup.upsert({
       where: { fingerprint },

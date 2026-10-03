@@ -5,7 +5,7 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
-import { startServer, stopServer, makeUser, signIn, prisma, runTag } from './helpers.js';
+import { startServer, stopServer, makeUser, signIn, prisma, runTag, twoStepCode } from './helpers.js';
 import { clearGameSettingsCache } from '../../src/lib/game/config.js';
 import { money, TX } from '../../src/lib/game/matches.js';
 import { post, walletFor, HOUSE_WALLET, RESTRICTED_EXPLAINED } from '../../src/lib/game/wallet.js';
@@ -146,6 +146,27 @@ test('winning with credits pays real money, withdrawable only after staking the 
   assert.equal(w.availableKobo - w.restrictedKobo, BigInt(naira(500)), 'which can now be withdrawn');
 });
 
+test('credits lost on purpose to a friend stay restricted for the winner; fees still reach a house below zero', async () => {
+  await grantPromo({ userId: q.id, amountKobo: naira(500), expiresAt: days(7), reason: `test ${runTag}` });
+  await fund(r, naira(500));
+  const before = await wallet(r);
+  const id = await duel(qC, rC);
+  await settleAs(id, { winnerId: r.id });
+  const { prize } = money(naira(500), (await prisma.gameMatch.findUnique({ where: { id } })).feeBps);
+  const after = await wallet(r);
+  assert.equal(after.availableKobo - before.availableKobo, BigInt(prize), 'the winner is paid in full');
+  assert.equal(after.restrictedKobo - before.restrictedKobo, BigInt(prize / 2), 'but the half of the pool paid in credits can’t be withdrawn until they stake as much of their own');
+
+  // Kotka's house below zero (promotions cost more than fees so far): a fee still comes in.
+  const house = await prisma.wallet.findUnique({ where: { id: HOUSE_WALLET } });
+  const dip = house.availableKobo + 1000n;
+  await prisma.$transaction((tx) => post(tx, { walletId: HOUSE_WALLET, type: 'promo_cost', amount: dip, available: -dip, key: `test-dip:${crypto.randomUUID()}`, matchId: id }), TX);
+  assert.ok((await prisma.wallet.findUnique({ where: { id: HOUSE_WALLET } })).availableKobo < 0n);
+  await prisma.$transaction((tx) => post(tx, { walletId: HOUSE_WALLET, type: 'fee', amount: 500, available: 500, key: `test-fee:${crypto.randomUUID()}`, matchId: id }), TX);
+  // Anything else taking money out of a house below zero is still refused.
+  await assert.rejects(prisma.$transaction((tx) => post(tx, { walletId: HOUSE_WALLET, type: 'adjustment', amount: 1, available: -1, key: `test-out:${crypto.randomUUID()}`, matchId: id }), TX), /enough|Insufficient/i);
+});
+
 test('a draw gives the promotional part back as credits and the rest as money', async () => {
   const pp = await makeUser('PromoDrawA');
   const qq = await makeUser('PromoDrawB');
@@ -174,10 +195,11 @@ test('credits go only to verified traders, a campaign gives once, and only super
   await prisma.kycProfile.update({ where: { userId: unverified.id }, data: { status: 'pending' } });
   await assert.rejects(grantPromo({ userId: unverified.id, amountKobo: naira(100), expiresAt: days(1) }), /verified/);
   assert.equal((await pC.get('/api/admin/game/promotions')).status, 403, 'traders can’t see promotions');
-  const created = await superC.post('/api/admin/game/promotions/campaigns', { name: `Welcome ${runTag}`, amountKobo: naira(250), expiresInDays: 14, audience: 'manual' });
+  assert.equal((await superC.post('/api/admin/game/promotions/campaigns', { name: `No code ${runTag}`, amountKobo: naira(250), expiresInDays: 14, audience: 'manual' })).status, 400, 'giving credits needs a two-step code');
+  const created = await superC.post('/api/admin/game/promotions/campaigns', { name: `Welcome ${runTag}`, amountKobo: naira(250), expiresInDays: 14, audience: 'manual', twoStepCode: await twoStepCode(superU) });
   assert.equal(created.status, 201, JSON.stringify(created.json));
   campaigns.push(created.json.campaign.id);
-  const give = () => superC.post('/api/admin/game/promotions/grants', { user: r.username, campaignId: created.json.campaign.id });
+  const give = async () => superC.post('/api/admin/game/promotions/grants', { user: r.username, campaignId: created.json.campaign.id, twoStepCode: await twoStepCode(superU) });
   assert.equal((await give()).status, 201);
   assert.equal((await give()).status, 409, 'once per trader per campaign');
   const list = await superC.get('/api/admin/game/promotions');

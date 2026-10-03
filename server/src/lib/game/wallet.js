@@ -60,13 +60,15 @@ export async function post(tx, { walletId, userId = null, type, amount, availabl
     restrictedKobo: w.restrictedKobo + dR,
   };
   // Kotka's own (house) wallet pays for promotions, so it alone may go below zero, and only for that.
+  // Money coming in (a fee) is always accepted, even while the house is below zero.
   const houseCost = w.kind === 'house' && type === 'promo_cost';
-  if (next.availableKobo < 0n && !houseCost) throw new InsufficientFunds();
+  if (next.availableKobo < 0n && dA < 0n && !houseCost) throw new InsufficientFunds();
+  if (next.availableKobo < 0n && w.kind !== 'house') throw new InsufficientFunds();
   if (next.promoAvailableKobo < 0n) throw new InsufficientFunds('You don’t have enough promotional credits for that.');
   if (next.lockedKobo < 0n || next.pendingWithdrawKobo < 0n || next.promoLockedKobo < 0n || next.restrictedKobo < 0n) throw new Error(`Ledger would go negative on wallet ${walletId} (${type}).`);
   // Restricted winnings are part of the available balance: money can leave
   // `available` only down to what's restricted.
-  if (next.restrictedKobo > next.availableKobo && !houseCost) {
+  if (next.restrictedKobo > next.availableKobo && w.kind !== 'house') {
     if (dA < 0n && dR === 0n) throw new InsufficientFunds(RESTRICTED_EXPLAINED);
     throw new Error(`Restricted winnings would exceed the available balance on wallet ${walletId} (${type}).`);
   }
@@ -139,6 +141,7 @@ const TYPE_LABEL = {
   withdrawal_hold: 'Withdrawal requested',
   withdrawal_release: 'Withdrawal returned to your balance',
   withdrawal_paid: 'Withdrawal paid',
+  withdrawal_reversed: 'Withdrawal sent back by the bank: returned to your balance',
   adjustment: 'Adjustment',
   promo_credit: 'Promotional credits added',
   promo_expired: 'Promotional credits expired',

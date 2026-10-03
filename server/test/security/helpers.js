@@ -127,3 +127,20 @@ export async function signIn(user) {
 }
 
 export const runTag = RUN;
+
+// A fresh two-step code for a test user, turning two-step on for them the
+// first time. Each call forgets the last code used, so tests can act faster
+// than a new code appears.
+const twoStepSecrets = new Map();
+export async function twoStepCode(user) {
+  const { newSecret, codeAt, currentStep } = await import('../../src/lib/totp.js');
+  const { encryptSecret } = await import('../../src/lib/crypto.js');
+  let secret = twoStepSecrets.get(user.id);
+  if (!secret) {
+    secret = newSecret();
+    twoStepSecrets.set(user.id, secret);
+    await prisma.user.update({ where: { id: user.id }, data: { mfaEnabledAt: new Date(), mfaSecretCipher: encryptSecret(secret) } });
+  }
+  await prisma.user.update({ where: { id: user.id }, data: { mfaLastUsedStep: null } });
+  return codeAt(secret, currentStep());
+}

@@ -123,7 +123,10 @@ async function once(provider, eventId, type, fn) {
   } catch (err) {
     if (err.code === 'P2002') {
       const seen = await prisma.paymentWebhookEvent.findUnique({ where: { id } });
-      if (seen?.status !== 'failed') return { duplicate: true };
+      // Failed before, or left half-done (the server stopped mid-way) for 5
+      // minutes: handle it again. Every step below is safe to repeat.
+      const stuck = seen?.status === 'received' && seen.receivedAt < new Date(Date.now() - 5 * 60e3);
+      if (seen?.status !== 'failed' && !stuck) return { duplicate: true };
     } else throw err;
   }
   try {
@@ -222,7 +225,9 @@ export async function handlePaystackWebhook(rawBody, signature) {
       const w = await prisma.withdrawal.findUnique({ where: { id: String(data.reference) } });
       if (!w || w.provider !== 'paystack') return 'ignored';
       if (event.event === 'transfer.success') await markPaid(w.id);
-      else await markFailed(w.id, `Paystack: ${event.event.replace('transfer.', 'transfer ')}`);
+      // Reversed after it was paid: the bank sent the money back to Kotka, so it goes back to the trader.
+      else if (event.event === 'transfer.reversed' && w.status === 'paid') await markReversed(w.id, 'Paystack: the bank reversed the transfer');
+      else await markFailed(w.id, `Paystack: ${event.event.replace('transfer.', 'transfer ')}`, 'failed', null, ['processing']);
       return 'updated';
     }
     return 'ignored';
@@ -295,6 +300,9 @@ export async function freezeWallet(userId, reason) {
   if (!userId) return;
   const w = await walletFor(userId);
   await prisma.wallet.update({ where: { id: w.id }, data: { frozenAt: new Date(), frozenReason: String(reason).slice(0, 300) } });
+  // Open challenges and lobbies close too (their stakes go back), so nobody can be paired against a wallet under review.
+  const { closeOpenFor } = await import('../matches.js');
+  await closeOpenFor(userId, 'wallet on hold').catch((err) => console.error('Closing open matches failed:', err.message));
 }
 
 export async function requestWithdrawal(user, { amountKobo, provider }) {
@@ -317,8 +325,12 @@ export async function requestWithdrawal(user, { amountKobo, provider }) {
   // A bank name that doesn't match the verified name always waits for a
   // person, and so does money that came in within the last 72 hours (a card
   // payment can still be charged back).
-  const recent = await prisma.deposit.count({ where: { userId: user.id, status: 'succeeded', createdAt: { gte: new Date(Date.now() - 72 * 3600e3) } } });
-  if (s.withdrawalApproval === 'automatic' && acct.nameMatchesId !== false && !recent) await processWithdrawal(w.id, null).catch((err) => console.error('Automatic withdrawal failed:', err.message));
+  // (By when the money arrived, not when the checkout was opened.) Only a
+  // payout account whose name was checked against the verified identity goes
+  // out without a person: Whop accounts carry no name check, so they wait.
+  const since72h = new Date(Date.now() - 72 * 3600e3);
+  const recent = await prisma.deposit.count({ where: { userId: user.id, status: 'succeeded', OR: [{ completedAt: { gte: since72h } }, { completedAt: null, createdAt: { gte: since72h } }] } });
+  if (s.withdrawalApproval === 'automatic' && acct.nameMatchesId === true && !recent) await processWithdrawal(w.id, null).catch((err) => console.error('Automatic withdrawal failed:', err.message));
   return withdrawalView(await prisma.withdrawal.findUnique({ where: { id: w.id } }));
 }
 
@@ -326,6 +338,10 @@ export async function requestWithdrawal(user, { amountKobo, provider }) {
 export async function processWithdrawal(id, adminId) {
   const w = await prisma.withdrawal.findUnique({ where: { id } });
   if (!w) throw new GameError('We couldn’t find that withdrawal.', 404);
+  // A wallet put on hold (a refund or chargeback, or an admin) stops payouts
+  // already waiting, not only new requests.
+  const hold = await prisma.wallet.findUnique({ where: { userId: w.userId }, select: { frozenAt: true, frozenReason: true } });
+  if (hold?.frozenAt) throw new GameError(`This wallet is on hold${hold.frozenReason ? ` (${hold.frozenReason})` : ''}. Clear the hold before paying out.`, 409, 'wallet_frozen');
   const moved = await prisma.withdrawal.updateMany({ where: { id, status: 'requested' }, data: { status: 'processing', reviewedBy: adminId, reviewedAt: adminId ? new Date() : null } });
   if (!moved.count) throw new GameError('That withdrawal has already been handled.', 409);
   const acct = await prisma.payoutAccount.findUnique({ where: { id: w.payoutAccountId } });
@@ -334,14 +350,14 @@ export async function processWithdrawal(id, adminId) {
     const r = w.provider === 'whop' ? await whop.transfer(cfg, { destinationId: acct.externalId, amountKobo: kobo(w.amountKobo), withdrawalId: w.id }) : await paystack.transfer(cfg, { recipient: acct.externalId, amountKobo: kobo(w.amountKobo), withdrawalId: w.id });
     await prisma.withdrawal.update({ where: { id }, data: { providerRef: r.providerRef } });
     if (r.status === 'succeeded' || r.status === 'success') await markPaid(id);
-    else if (r.status === 'failed') await markFailed(id, `${PROVIDER_NAMES[w.provider]} refused the transfer.`);
+    else if (r.status === 'failed') await markFailed(id, `${PROVIDER_NAMES[w.provider]} refused the transfer.`, 'failed', null, ['processing']);
     // Anything else (processing, pending, otp) is settled by webhook or the admin.
   } catch (err) {
     // Only a definite refusal returns the money; a timeout may still go through.
     if (err.retryable) {
       await prisma.withdrawal.update({ where: { id }, data: { failureReason: `Couldn’t confirm with ${PROVIDER_NAMES[w.provider]}: ${String(err.message).slice(0, 200)}. Check the provider before retrying.` } });
     } else {
-      await markFailed(id, String(err.message).slice(0, 300));
+      await markFailed(id, String(err.message).slice(0, 300), 'failed', null, ['processing']);
     }
     throw err instanceof GameError ? err : new GameError(`${PROVIDER_NAMES[w.provider]} didn’t accept the transfer: ${err.message}`, 502, 'provider_error');
   }
@@ -358,25 +374,44 @@ export async function markPaid(id) {
   }, TX);
 }
 
-// Returns the money to the person's available balance.
-export async function markFailed(id, reason, status = 'failed', actor = null) {
-  await prisma.$transaction(async (tx) => {
+// Returns the money to the person's available balance. `from` is the states
+// it may still be in, checked under the row lock: a cancel or a rejection
+// only ever applies to a withdrawal nobody has started sending, so one that
+// moved to 'processing' a moment earlier (its transfer is going out) is left
+// alone. Returns whether it changed anything.
+export async function markFailed(id, reason, status = 'failed', actor = null, from = ['processing', 'requested']) {
+  return prisma.$transaction(async (tx) => {
     const [w] = await tx.$queryRaw`SELECT * FROM "Withdrawal" WHERE "id" = ${id} FOR UPDATE`;
-    if (!w || !['processing', 'requested'].includes(w.status)) return;
+    if (!w || !from.includes(w.status)) return false;
     const wallet = await walletFor(w.userId, tx);
     await post(tx, { walletId: wallet.id, userId: w.userId, type: 'withdrawal_release', amount: kobo(w.amountKobo), available: kobo(w.amountKobo), pending: -kobo(w.amountKobo), key: `withdrawal_release:${w.id}`, withdrawalId: w.id, reason });
     await tx.withdrawal.update({ where: { id }, data: { status, failureReason: reason, completedAt: new Date(), ...(actor ? { reviewedBy: actor, reviewedAt: new Date(), reviewNote: reason } : {}) } });
+    return true;
+  }, TX);
+}
+
+// A payout the bank sent back after it had been paid: the money returns to
+// the trader's available balance, once.
+export async function markReversed(id, reason) {
+  return prisma.$transaction(async (tx) => {
+    const [w] = await tx.$queryRaw`SELECT * FROM "Withdrawal" WHERE "id" = ${id} FOR UPDATE`;
+    if (!w || w.status !== 'paid') return false;
+    const wallet = await walletFor(w.userId, tx);
+    await post(tx, { walletId: wallet.id, userId: w.userId, type: 'withdrawal_reversed', amount: kobo(w.amountKobo), available: kobo(w.amountKobo), key: `withdrawal_reversed:${w.id}`, withdrawalId: w.id, reason });
+    await tx.withdrawal.update({ where: { id }, data: { status: 'reversed', failureReason: reason } });
+    return true;
   }, TX);
 }
 
 export async function cancelWithdrawal(user, id) {
   const w = await prisma.withdrawal.findUnique({ where: { id } });
   if (!w || w.userId !== user.id) throw new GameError('We couldn’t find that withdrawal.', 404);
-  if (w.status !== 'requested') throw new GameError('That withdrawal is already being processed.', 409);
-  await markFailed(id, 'Cancelled by you', 'cancelled');
+  if (w.status !== 'requested' || !(await markFailed(id, 'Cancelled by you', 'cancelled', null, ['requested']))) {
+    throw new GameError('That withdrawal is already being processed.', 409);
+  }
   return withdrawalView(await prisma.withdrawal.findUnique({ where: { id } }));
 }
 
 export function withdrawalView(w) {
-  return { id: w.id, provider: w.provider, providerName: PROVIDER_NAMES[w.provider], amountKobo: kobo(w.amountKobo), status: w.status, failureReason: ['failed', 'rejected'].includes(w.status) ? w.failureReason : null, createdAt: w.createdAt, completedAt: w.completedAt };
+  return { id: w.id, provider: w.provider, providerName: PROVIDER_NAMES[w.provider], amountKobo: kobo(w.amountKobo), status: w.status, failureReason: ['failed', 'rejected', 'reversed'].includes(w.status) ? w.failureReason : null, createdAt: w.createdAt, completedAt: w.completedAt };
 }

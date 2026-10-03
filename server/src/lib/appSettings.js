@@ -6,6 +6,7 @@
 // row on the next save.
 
 import { CONTACT } from './contact.js';
+import { isEmail } from './validate.js';
 import { prisma } from './prisma.js';
 
 export const APP_DEFAULTS = {
@@ -32,7 +33,6 @@ export function appSettingsMeta() {
   return { updatedAt: cache?.updatedAt ?? null, updatedBy: cache?.updatedBy ?? null };
 }
 
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
 // Returns { settings } or { error }. Unknown keys are dropped.
 export function sanitizeAppSettings(input, current) {
@@ -45,7 +45,7 @@ export function sanitizeAppSettings(input, current) {
   }
   if (input.supportEmail !== undefined) {
     const email = typeof input.supportEmail === 'string' ? input.supportEmail.trim().toLowerCase() : '';
-    if (email && !EMAIL_RE.test(email)) return { error: 'That support email doesn’t look right. Check it and try again.' };
+    if (email && !isEmail(email)) return { error: 'That support email doesn’t look right. Check it and try again.' };
     out.supportEmail = email;
   }
   return { settings: out };

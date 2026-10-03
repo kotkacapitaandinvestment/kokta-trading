@@ -9,6 +9,7 @@ import { createMatch, joinMatch, cancelMatch, assertCanPlayForMoney, assertNotIn
 import { notify } from '../community/notify.js';
 import { levelFor } from './progression.js';
 import { TEMPLATES, templateOf } from './market.js';
+import { loadPrefs } from '../community/users.js';
 
 const ONLINE_MS = 2 * 60e3; // seen on a game page this recently counts as online
 const QUEUE_HEARTBEAT_MS = 30e3; // a Quick Match search is dropped if the page stops checking in
@@ -483,10 +484,16 @@ export async function publicMatches(userId, take = 10) {
   });
 }
 
-export async function presenceOf(userId) {
-  const p = await prisma.gameProfile.findUnique({ where: { userId }, select: { lastSeenAt: true, readyToTrade: true } });
-  const online = !!p?.lastSeenAt && p.lastSeenAt > new Date(Date.now() - ONLINE_MS);
-  return { online, ready: online && !!p?.readyToTrade };
+// On someone else's page, "online" follows their Community privacy choice;
+// Ready to Trade is shown either way, since they switched it on to be seen.
+export async function presenceOf(userId, { viewerId = userId } = {}) {
+  const [p, prefs] = await Promise.all([
+    prisma.gameProfile.findUnique({ where: { userId }, select: { lastSeenAt: true, readyToTrade: true } }),
+    viewerId === userId ? null : loadPrefs(userId),
+  ]);
+  const here = !!p?.lastSeenAt && p.lastSeenAt > new Date(Date.now() - ONLINE_MS);
+  const ready = here && !!p?.readyToTrade;
+  return { online: ready || (here && (prefs ? prefs.privacy.showOnline !== false : true)), ready };
 }
 
 export { ONLINE_MS };

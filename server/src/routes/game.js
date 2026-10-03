@@ -143,8 +143,11 @@ gameRouter.post('/wallet/withdrawals/:id/cancel', limit('gameLobby'), asyncHandl
 gameRouter.get('/traders', asyncHandler(async (req, res) => {
   const q = String(req.query.q ?? '').trim().slice(0, 60);
   if (q.length < 2) return res.json({ traders: [] });
+  // Only people with a public Community name, and nobody either side has blocked.
+  const blocks = await prisma.userRelation.findMany({ where: { kind: 'block', OR: [{ userId: req.userId }, { targetId: req.userId }] }, select: { userId: true, targetId: true } });
+  const hidden = [req.userId, ...blocks.map((b) => (b.userId === req.userId ? b.targetId : b.userId))];
   const traders = await prisma.user.findMany({
-    where: { id: { not: req.userId }, status: 'active', OR: [{ username: { contains: q, mode: 'insensitive' } }, { name: { contains: q, mode: 'insensitive' } }] },
+    where: { id: { notIn: hidden }, status: 'active', username: { not: null }, OR: [{ username: { contains: q, mode: 'insensitive' } }, { name: { contains: q, mode: 'insensitive' } }] },
     select: { id: true, name: true, username: true, initials: true, avatarId: true, gameProfile: { select: { level: true } } },
     take: 10,
   });
@@ -245,7 +248,7 @@ gameRouter.get('/profile', asyncHandler(async (req, res) => {
 gameRouter.get('/traders/:username', asyncHandler(async (req, res) => {
   const u = await prisma.user.findUnique({ where: { username: String(req.params.username) }, select: { id: true, name: true, username: true, initials: true, avatarId: true, status: true } });
   if (!u || u.status !== 'active') throw new GameError('We couldn’t find that trader.', 404);
-  const [{ totalStakedKobo, totalWonKobo, ...p }, recent, dna, presence] = await Promise.all([profileFor(u.id), arena.publicMatches(u.id), arena.traderDna(u.id), arena.presenceOf(u.id)]); // eslint-disable-line no-unused-vars
+  const [{ totalStakedKobo, totalWonKobo, ...p }, recent, dna, presence] = await Promise.all([profileFor(u.id), arena.publicMatches(u.id), arena.traderDna(u.id), arena.presenceOf(u.id, { viewerId: req.userId })]); // eslint-disable-line no-unused-vars
   res.json({ trader: { ...personOf(u), ...presence, self: u.id === req.userId }, profile: p, recent, dna });
 }));
 

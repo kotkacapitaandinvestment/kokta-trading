@@ -61,7 +61,7 @@ function Detail({ id, onDecided }) {
     setBusy(true);
     setError(null);
     try {
-      const { kyc: updated } = await api.post(`/admin/kyc/${id}/decision`, { decision, note: decision === 'rejected' ? note : undefined });
+      const { kyc: updated } = await api.post(`/admin/kyc/${id}/decision`, { decision, note: decision === 'rejected' ? note : undefined, submittedAt: kyc.submittedAt });
       setKyc((prev) => ({ ...prev, ...updated }));
       onDecided(updated);
     } catch (err) {

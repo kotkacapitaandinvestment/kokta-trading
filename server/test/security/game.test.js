@@ -5,7 +5,7 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
-import { startServer, stopServer, makeUser, signIn, client, prisma, runTag } from './helpers.js';
+import { startServer, stopServer, makeUser, signIn, twoStepCode, client, prisma, runTag } from './helpers.js';
 import { encryptSecret } from '../../src/lib/crypto.js';
 import { generateMarket, candlesUpTo, candleRange, TEMPLATE_KEYS } from '../../src/lib/game/market.js';
 import { PAIR_SYMBOLS } from '../../src/lib/game/pairs.js';
@@ -15,7 +15,7 @@ import { money, advance, sweep, marketFor, decideResult, TX } from '../../src/li
 import { clearGameSettingsCache } from '../../src/lib/game/config.js';
 import { verifyWebhook } from '../../src/lib/game/payments/whop.js';
 import { post, walletFor, HOUSE_WALLET } from '../../src/lib/game/wallet.js';
-import { requestWithdrawal } from '../../src/lib/game/payments/index.js';
+import { requestWithdrawal, markFailed } from '../../src/lib/game/payments/index.js';
 import { newSecret, codeAt, currentStep } from '../../src/lib/totp.js';
 
 const WHOP_SECRET = `ws_${crypto.randomBytes(32).toString('hex')}`;
@@ -496,7 +496,8 @@ test('a wallet on hold can’t stake or search; suspending a trader closes their
   assert.equal(blocked.json.code, 'wallet_frozen');
   assert.equal((await cC.post('/api/game/quick', { stakeKobo: naira(500), durationSec: 60 })).json.code, 'wallet_frozen');
   assert.equal((await cC.get('/api/game/wallet')).json.wallet.onHold, true, 'the owner is told');
-  assert.equal((await superC.post(`/api/admin/game/wallets/${c.id}/hold`, { on: false })).status, 200);
+  assert.equal((await superC.post(`/api/admin/game/wallets/${c.id}/hold`, { on: false })).status, 400, 'clearing a hold needs a two-step code');
+  assert.equal((await superC.post(`/api/admin/game/wallets/${c.id}/hold`, { on: false, twoStepCode: await twoStepCode(superU) })).status, 200);
   const posted = await cC.post('/api/game/matches', { mode: 'duel', stakeKobo: naira(500), open: true });
   assert.equal(posted.status, 201);
   // Suspension closes it and returns the stake.
@@ -824,13 +825,15 @@ test('withdrawals: held, approved by an admin, paid; rejected or failed ones com
   assert.equal(Number((await balance(c)).pendingWithdrawKobo), start);
 
   assert.equal((await aC.post(`/api/admin/game/withdrawals/${w.id}/approve`)).status, 403, 'traders can’t approve');
-  const ok = await adminC.post(`/api/admin/game/withdrawals/${w.id}/approve`);
+  const noCode = await adminC.post(`/api/admin/game/withdrawals/${w.id}/approve`);
+  assert.ok([400, 403].includes(noCode.status) && /two_step/.test(noCode.json.code), 'staff need a two-step code to send money');
+  const ok = await adminC.post(`/api/admin/game/withdrawals/${w.id}/approve`, { twoStepCode: await twoStepCode(adminU) });
   assert.equal(ok.status, 200, JSON.stringify(ok.json));
   assert.equal(ok.json.withdrawal.status, 'paid');
   const bal = await balance(c);
   assert.equal(Number(bal.pendingWithdrawKobo), 0);
   assert.equal(Number(bal.availableKobo), 0);
-  assert.equal((await adminC.post(`/api/admin/game/withdrawals/${w.id}/approve`)).status, 409, 'once only');
+  assert.equal((await adminC.post(`/api/admin/game/withdrawals/${w.id}/approve`, { twoStepCode: await twoStepCode(adminU) })).status, 409, 'once only');
   const transfer = calls.filter((x) => x.provider === 'whop' && x.path === '/transfers').at(-1);
   assert.equal(transfer.body.idempotence_key, w.id);
   assert.equal(transfer.body.amount, start / 100);
@@ -843,7 +846,7 @@ test('withdrawals: held, approved by an admin, paid; rejected or failed ones com
   // Failed at the provider: money back.
   transferStatus = 'failed';
   const r3 = (await cC.post('/api/game/wallet/withdrawals', { amountKobo: naira(1000), twoStepCode: await code() })).json.withdrawal;
-  await adminC.post(`/api/admin/game/withdrawals/${r3.id}/approve`);
+  await adminC.post(`/api/admin/game/withdrawals/${r3.id}/approve`, { twoStepCode: await twoStepCode(adminU) });
   transferStatus = 'succeeded';
   assert.equal((await prisma.withdrawal.findUnique({ where: { id: r3.id } })).status, 'failed');
   assert.equal(Number((await balance(c)).availableKobo), naira(1000));
@@ -851,6 +854,18 @@ test('withdrawals: held, approved by an admin, paid; rejected or failed ones com
   const r4 = (await cC.post('/api/game/wallet/withdrawals', { amountKobo: naira(1000), twoStepCode: await code() })).json.withdrawal;
   assert.equal((await cC.post(`/api/game/wallet/withdrawals/${r4.id}/cancel`)).status, 200);
   assert.equal(Number((await balance(c)).availableKobo), naira(1000));
+  // A cancel that arrives once sending has started changes nothing: the
+  // transfer is going out, so the money can't also come back.
+  const r5 = (await cC.post('/api/game/wallet/withdrawals', { amountKobo: naira(1000), twoStepCode: await code() })).json.withdrawal;
+  await prisma.withdrawal.update({ where: { id: r5.id }, data: { status: 'processing' } });
+  assert.equal(await markFailed(r5.id, 'Cancelled by you', 'cancelled', null, ['requested']), false);
+  assert.equal((await cC.post(`/api/game/wallet/withdrawals/${r5.id}/cancel`)).status, 409);
+  assert.equal(Number((await balance(c)).pendingWithdrawKobo), naira(1000), 'still set aside for the transfer');
+  await markFailed(r5.id, 'test clean-up', 'failed', null, ['processing']);
+  // Staff never decide their own withdrawal.
+  const own = await prisma.withdrawal.create({ data: { userId: adminU.id, provider: 'whop', amountKobo: BigInt(naira(1000)), payoutAccountId: (await prisma.payoutAccount.findFirst({ where: { userId: c.id } })).id } });
+  assert.equal((await adminC.post(`/api/admin/game/withdrawals/${own.id}/approve`, { twoStepCode: await twoStepCode(adminU) })).status, 403);
+  await prisma.withdrawal.delete({ where: { id: own.id } });
 });
 
 // ── Admin, accounts, the ledger ─────────────────────────────────────────────

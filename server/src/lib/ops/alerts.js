@@ -15,7 +15,8 @@ const H = 3600e3;
 export async function collectDigest({ daily }) {
   const items = [];
   // Newest first: a new error matters more than an old noisy one (which was in an earlier digest).
-  const errors = await prisma.errorGroup.findMany({ where: { status: 'open', alertedAt: null }, orderBy: { firstSeenAt: 'desc' }, take: 15 });
+  // An app error reported once (by anyone, signed in or not) waits for a second sighting before it's emailed.
+  const errors = await prisma.errorGroup.findMany({ where: { status: 'open', alertedAt: null, OR: [{ source: 'server' }, { count: { gte: 2 } }] }, orderBy: { firstSeenAt: 'desc' }, take: 15 });
   for (const e of errors) items.push({ kind: 'error', text: `${e.source === 'client' ? 'In the app' : 'On the server'}${e.path ? ` (${e.path})` : ''}: ${e.message} — seen ${e.count} time${e.count === 1 ? '' : 's'}` });
   const failedHooks = await prisma.paymentWebhookEvent.findMany({ where: { status: 'failed', receivedAt: { gte: new Date(Date.now() - 65 * 60e3) } }, take: 10 });
   for (const w of failedHooks) items.push({ kind: 'payment', text: `A ${w.provider} payment update (${w.type}) couldn’t be processed: ${String(w.error ?? '').slice(0, 160)}` });

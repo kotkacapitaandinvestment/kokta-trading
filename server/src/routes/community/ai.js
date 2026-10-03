@@ -122,7 +122,10 @@ aiRouter.post('/ai/analyze-chart', requireProfile, aiAction('community_chart', a
     if (!p || p.deletedAt || p.removedAt || !(p.attachments ?? []).some((x) => x.mediaId === mediaId)) return void res.status(403).json({ error: 'Kotka AI can only look at images you can see in this conversation or post.' });
     context = p.body;
   } else if (media.ownerId !== req.me.id) return void res.status(403).json({ error: 'Kotka AI can only look at images you can see in this conversation or post.' });
-  const key = `community:chart:${media.id}`;
+  // Per place the image was shared: the analysis reads that message or post's
+  // text, so one from a private chat must never be reused under a public post.
+  const where = req.body?.messageId ? `m:${String(req.body.messageId)}` : req.body?.postId ? `p:${String(req.body.postId)}` : 'own';
+  const key = `community:chart:${media.id}:${where}`;
   const bytes = await mediaBytes(media);
   if (!bytes) return void res.status(503).json({ error: 'That image can’t be loaded right now. Please try again shortly.' });
   const { data, cached } = await cachedSource(key, 7 * 24 * 3600e3, () => analyzeChart({ imageDataUrl: `data:${media.mime};base64,${bytes.toString('base64')}`, context }));

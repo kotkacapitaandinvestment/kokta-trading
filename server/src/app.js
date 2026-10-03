@@ -55,6 +55,9 @@ const big = express.json({ limit: '6mb' });
 app.use('/api/media', big);
 app.use('/api/goals/shares', big);
 app.use(/^\/api\/ai\/conversations\/[^/]+\/messages$/, big);
+// Signing in and error reports never need more than a few kilobytes.
+app.use('/api/auth', express.json({ limit: '16kb' }));
+app.use('/api/telemetry', express.json({ limit: '64kb' }));
 app.use(express.json({ limit: '1mb' }));
 app.use(cookieParser());
 app.use('/api', sameOriginWrites);

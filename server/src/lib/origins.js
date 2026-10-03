@@ -4,7 +4,8 @@
 
 export const CANONICAL_ORIGIN = 'https://www.kotkafinance.online';
 
-const FIXED = ['https://www.kotkafinance.online', 'https://kotkafinance.online', 'https://kokta-trading.vercel.app'];
+// kokta-trading.vercel.app only redirects pages to the main site now (vercel.json).
+const FIXED = ['https://www.kotkafinance.online', 'https://kotkafinance.online'];
 const DEV = ['http://localhost:5173', 'http://127.0.0.1:5173', 'http://localhost:4173', 'http://localhost:4000'];
 
 export function allowedOrigins() {
@@ -12,12 +13,12 @@ export function allowedOrigins() {
   return new Set([...FIXED, ...extra, ...(process.env.NODE_ENV === 'production' ? [] : DEV)]);
 }
 
-// Vercel preview deployments of this project (behind Vercel login).
-const PREVIEW = /^https:\/\/kokta-trading-[a-z0-9-]+-kotka\.vercel\.app$/;
-
+// Preview deployments call their own /api, which the same-origin check in
+// middleware/security.js already allows; no pattern of *.vercel.app names is
+// trusted here, since anyone can create a project with a look-alike name.
 export function isAllowedOrigin(origin) {
   if (!origin) return false;
-  return allowedOrigins().has(origin) || PREVIEW.test(origin);
+  return allowedOrigins().has(origin);
 }
 
 // This server's public origin for building absolute links: the request's host

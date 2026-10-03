@@ -27,6 +27,17 @@ test('wrong password and unknown email get the same answer', async () => {
   assert.equal(a.json.error, b.json.error);
 });
 
+test('a crafted, very long email is turned away at once (it can’t tie up the server)', async () => {
+  const c = client();
+  const crafted = `a@${'a.'.repeat(6000)}@`;
+  const t0 = Date.now();
+  const r = await c.post('/api/auth/password-reset', { email: crafted });
+  assert.equal(r.status, 400);
+  assert.ok(Date.now() - t0 < 3000, `answered in ${Date.now() - t0} ms`);
+  const huge = await c.post('/api/auth/signup/start', { name: 'X', email: `a@${'a.'.repeat(20000)}@`, password: 'long-enough-password-1' });
+  assert.equal(huge.status, 413, 'sign-in and sign-up bodies are kept small');
+});
+
 test('session cookie is HttpOnly and SameSite=Lax', async () => {
   const c = client();
   const r = await fetch(`${(await startServer())}/api/auth/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: alice.email, password: PASSWORD }) });

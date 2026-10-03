@@ -17,7 +17,7 @@ import GameNav from './GameNav';
 import { CONTACT } from '../../lib/contact';
 
 const DEP_STATUS = { initiated: ['Waiting for payment', 'neutral'], succeeded: ['Added', 'profit'], failed: ['Didn’t go through', 'loss'], expired: ['Expired', 'neutral'] };
-const WD_STATUS = { requested: ['Waiting for review', 'warning'], processing: ['Sending', 'neutral'], paid: ['Paid', 'profit'], failed: ['Failed: money returned', 'loss'], rejected: ['Declined: money returned', 'loss'], cancelled: ['Cancelled', 'neutral'] };
+const WD_STATUS = { requested: ['Waiting for review', 'warning'], processing: ['Sending', 'neutral'], paid: ['Paid', 'profit'], failed: ['Failed: money returned', 'loss'], rejected: ['Declined: money returned', 'loss'], cancelled: ['Cancelled', 'neutral'], reversed: ['Sent back by the bank: money returned', 'loss'] };
 const when = (d) => new Date(d).toLocaleString([], { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
 
 function Deposit({ data, reload }) {

@@ -67,6 +67,8 @@ export async function runMaintenance() {
   if (await daily('orphan-media')) {
     out.orphanMedia = await cleanOrphanMedia().catch((err) => ({ error: err.message }));
     out.orphanFiles = await cleanOrphanObjects().catch((err) => ({ error: err.message }));
+    // Errors not seen for 30 days are gone (a new sighting starts a fresh group).
+    out.oldErrors = await prisma.errorGroup.deleteMany({ where: { lastSeenAt: { lt: new Date(Date.now() - 30 * 86400e3) } } }).then((r) => r.count).catch((err) => ({ error: err.message }));
   }
   return out;
 }

@@ -1,0 +1,10 @@
+# Kotka Trading
+User-agent: *
+Allow: /
+Disallow: /app/
+Disallow: /admin/
+Disallow: /api/
+Disallow: /verify
+Disallow: /reset-password
+
+Sitemap: https://www.kotkafinance.online/sitemap.xml

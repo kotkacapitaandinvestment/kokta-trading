@@ -52,11 +52,17 @@ adminKycRouter.post('/:id/decision', asyncHandler(async (req, res) => {
   if (!profile) return res.status(404).json({ error: 'Verification not found.' });
   if (profile.userId === req.user.id) return res.status(403).json({ error: 'You cannot review your own verification.' });
 
-  const updated = await prisma.kycProfile.update({
-    where: { id: profile.id },
+  // The decision is about the details the reviewer saw: if the trader sent
+  // new ones since the page was opened, nothing is decided.
+  const CHANGED = 'The trader sent new details since you opened this. Reload to review the latest ones.';
+  const seen = new Date(req.body?.submittedAt ?? NaN);
+  if (Number.isNaN(seen.getTime()) || seen.getTime() !== profile.submittedAt.getTime()) return res.status(409).json({ error: CHANGED, code: 'kyc_changed' });
+  const moved = await prisma.kycProfile.updateMany({
+    where: { id: profile.id, submittedAt: profile.submittedAt },
     data: { status: decision, reviewNote: note || null, reviewedById: req.user.id, reviewedAt: new Date() },
-    include: { user: { select: userSelect } },
   });
+  if (!moved.count) return res.status(409).json({ error: CHANGED, code: 'kyc_changed' });
+  const updated = await prisma.kycProfile.findUnique({ where: { id: profile.id }, include: { user: { select: userSelect } } });
   forgetUserAccess(profile.userId);
   await audit(req, `kyc.${decision}`, { targetType: 'kyc', targetId: profile.id, detail: { userEmail: profile.user.email, previous: profile.status, note: note || undefined } });
   res.json({ kyc: { ...kycView(updated, { withDetails: true }), reviewNote: updated.reviewNote, user: updated.user } });

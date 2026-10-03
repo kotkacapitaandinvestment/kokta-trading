@@ -33,3 +33,9 @@ export async function peekEmailToken(raw, purpose) {
   const row = await prisma.emailToken.findUnique({ where: { id: hash(raw) }, include: { user: { select: { id: true, email: true, name: true, emailVerifiedAt: true } } } });
   return row && row.purpose === purpose && !row.usedAt && row.expiresAt > new Date() ? row.user : null;
 }
+
+// After a password change, or signing out everywhere, reset links already
+// sent stop working (someone who briefly had the inbox can't use one later).
+export async function cancelResetLinks(userId) {
+  await prisma.emailToken.updateMany({ where: { userId, purpose: 'reset', usedAt: null }, data: { usedAt: new Date() } });
+}

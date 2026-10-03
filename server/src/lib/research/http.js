@@ -2,7 +2,7 @@
 // Some official sites (IMF, BLS) block spoofed browser user agents, so we
 // identify honestly and let Node's fetch send its default headers otherwise.
 
-const USER_AGENT = 'KotkaResearch/1.0 (+https://kokta-trading.vercel.app)';
+const USER_AGENT = 'KotkaResearch/1.0 (+https://www.kotkafinance.online)';
 
 export async function fetchText(url, { timeoutMs = 20000, headers = {}, retries = 1 } = {}) {
   let lastErr;

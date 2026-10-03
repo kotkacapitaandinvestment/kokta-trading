@@ -11,6 +11,7 @@ import { notify } from '../lib/community/notify.js';
 import { publish } from '../lib/realtime.js';
 import { conversationChannels } from '../lib/community/access.js';
 import { revokeUserSessions } from '../lib/sessions.js';
+import { closeOpenFor } from '../lib/game/matches.js';
 
 // Moderators, admins and super admins. Suspending or banning an account is
 // admin-only; moderators can remove content and pause posting.
@@ -218,7 +219,13 @@ adminCommunityRouter.post('/actions', asyncHandler(async (req, res) => {
       const target = await prisma.user.findUnique({ where: { id: targetUserId }, select: { role: true } });
       if (['admin', 'super_admin'].includes(target?.role) && req.user.role !== 'super_admin') return res.status(403).json({ error: 'Only a super admin can act on other admin accounts.' });
       await prisma.user.update({ where: { id: targetUserId }, data: { status: action === 'reinstate' ? 'active' : action === 'ban' ? 'banned' : 'suspended' } });
-      if (action !== 'reinstate') await revokeUserSessions(targetUserId);
+      // The same as suspending in Admin → Users: signed out everywhere, push
+      // stops, and open challenges and lobbies close.
+      if (action !== 'reinstate') {
+        await revokeUserSessions(targetUserId);
+        await prisma.pushSubscription.deleteMany({ where: { userId: targetUserId } });
+        await closeOpenFor(targetUserId, action === 'ban' ? 'account banned' : 'account suspended').catch((err) => console.error('Closing open matches failed:', err.message));
+      }
       forgetUserAccess(targetUserId);
       break;
     }
@@ -334,7 +341,8 @@ adminCommunityRouter.post('/posts/:id/feature', asyncHandler(async (req, res) =>
 adminCommunityRouter.get('/users', asyncHandler(async (req, res) => {
   const q = str(req.query.q, 60);
   const users = await prisma.user.findMany({
-    where: { username: { not: null }, ...(q ? { OR: [{ username: { contains: q.toLowerCase() } }, { name: { contains: q, mode: 'insensitive' } }, { email: { contains: q, mode: 'insensitive' } }] } : {}) },
+    // Moderators don't see emails, so they can't search by one either (it would confirm who owns an address).
+    where: { username: { not: null }, ...(q ? { OR: [{ username: { contains: q.toLowerCase() } }, { name: { contains: q, mode: 'insensitive' } }, ...(isAdmin(req.user) ? [{ email: { contains: q, mode: 'insensitive' } }] : [])] } : {}) },
     select: { ...USER_CARD_SELECT, email: true, communityMutedUntil: true, createdAt: true },
     orderBy: { lastSeenAt: 'desc' },
     take: 50,

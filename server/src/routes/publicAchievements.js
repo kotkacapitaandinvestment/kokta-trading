@@ -73,7 +73,7 @@ export const achievementPage = asyncHandler(async (req, res) => {
   ].join('\n  ');
   let html;
   try {
-    html = (await appShell(origin)).replace(/<title>[\s\S]*?<\/title>/, '').replace(/<meta name="description"[^>]*>/, '').replace('<head>', `<head>\n  ${tags}`);
+    html = (await appShell(origin)).replace(/<title>[\s\S]*?<\/title>/, '').replace(/<meta name="description"[^>]*>/, '').replace('<head>', () => `<head>\n  ${tags}`); // a function, so "$&" or "$'" in someone's goal title stays literal
   } catch {
     // No app shell reachable (e.g. the API running alone): tags still preview.
     html = `<!doctype html><html><head><meta charset="utf-8" />${tags}</head><body><p><a href="/">Open Kotka</a></p></body></html>`;

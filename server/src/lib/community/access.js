@@ -47,6 +47,8 @@ export async function conversationAccess(conversationOrId, me) {
 
   let canSend = canRead;
   let reason = canRead ? null : 'Join this chat to read and reply.';
+  // Removed by the chat's admins: a public chat stays readable, but not to post in.
+  if (canSend && member?.status === 'removed') [canSend, reason] = [false, 'You were removed from this chat, so you can’t post here.'];
   const muted = mutedMessage(me);
   if (canSend && muted) [canSend, reason] = [false, muted];
   if (canSend && conv.archivedAt) [canSend, reason] = [false, 'This chat is closed to new messages.'];

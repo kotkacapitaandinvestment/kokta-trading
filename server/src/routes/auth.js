@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { isEmail } from '../lib/validate.js';
 import { impersonationError } from '../lib/community/users.js';
 import { prisma } from '../lib/prisma.js';
 import { requireAuth, clearSessionCookie, sessionUserId } from '../middleware/auth.js';
@@ -6,16 +7,16 @@ import { toPublicUser, PUBLIC_USER_INCLUDE } from '../lib/serialize.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 import { auditLater } from '../lib/audit.js';
 import { loadAppSettings, supportAddress } from '../lib/appSettings.js';
-import { loginBlocked, signupBlocked, recordAttempt } from '../lib/authThrottle.js';
+import { reserveLoginAttempt, releaseLoginAttempt, signupBlocked, recordAttempt } from '../lib/authThrottle.js';
 import { startSession, revokeSession, readToken, hashSid, signPurposeToken, readPurposeToken, trustThisDevice, knownDevice } from '../lib/sessions.js';
 import { hashPassword, checkPassword, needsRehash, passwordProblem, MAX_LENGTH } from '../lib/passwords.js';
 import { decryptSecret } from '../lib/crypto.js';
 import { verifyCode, hashRecovery } from '../lib/totp.js';
-import { hit, LIMITS, memoryHit } from '../lib/rateLimit.js';
+import { hit, LIMITS } from '../lib/rateLimit.js';
 import { waitUntil } from '@vercel/functions';
 import { sendWelcome, sendPasswordReset, alertPasswordChanged, alertIfNewDevice, emailDomainAcceptsMail, sendSignupCode, sendAccountExists } from '../lib/email/notices.js';
 import { issueSignupCode, useSignupCode } from '../lib/signupCodes.js';
-import { consumeEmailToken, peekEmailToken } from '../lib/email/tokens.js';
+import { consumeEmailToken, peekEmailToken, cancelResetLinks } from '../lib/email/tokens.js';
 import { subscribe } from '../lib/email/inbox.js';
 import { revokeUserSessions } from '../lib/sessions.js';
 import { clientIp } from '../lib/requestMeta.js';
@@ -34,7 +35,6 @@ export function initialsFor(name) {
 }
 
 const normalizeEmail = (e) => (typeof e === 'string' ? e.trim().toLowerCase() : '');
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 const TOO_MANY = 'Too many attempts. Please wait a few minutes and try again.';
 const LOCKED = 'Too many attempts on this account. Wait 15 minutes, or reset your password to sign in straight away.';
 const WRONG = 'That email and password don’t match. Check them and try again.';
@@ -54,7 +54,7 @@ function readSignup(body) {
   // Your name is how Community shows you: it can't suggest you work for Kotka.
   const nameProblem = impersonationError(name);
   if (nameProblem) return { error: nameProblem, field: 'name' };
-  if (!EMAIL_RE.test(email) || email.length > 254) return { error: 'Enter a valid email address.', field: 'email' };
+  if (!isEmail(email)) return { error: 'Enter a valid email address.', field: 'email' };
   const problem = passwordProblem(password, { email, name });
   if (problem) return { error: problem, field: 'password' };
   return { name, email, password };
@@ -152,7 +152,8 @@ authRouter.post('/login', asyncHandler(async (req, res) => {
   // attempts count; elsewhere, failures per email and per network do.
   const device = knownDevice(req);
   const trusted = device ? (await prisma.user.findUnique({ where: { email }, select: { id: true } }))?.id === device.sub : false;
-  if (trusted ? await hit(`login-device:${device.d}`, 20, 15 * 60e3) : await loginBlocked(req, email)) {
+  const attempt = trusted ? { blocked: await hit(`login-device:${device.d}`, 20, 15 * 60e3), id: null } : await reserveLoginAttempt(req, email);
+  if (attempt.blocked) {
     auditLater(req, 'auth.sign_in_blocked', { actor: { id: null, email }, detail: { reason: 'Too many attempts', knownDevice: trusted } });
     return res.status(429).json({ error: trusted ? TOO_MANY : LOCKED });
   }
@@ -161,11 +162,13 @@ authRouter.post('/login', asyncHandler(async (req, res) => {
   // Always runs one bcrypt comparison, so timing doesn't reveal whether the email exists.
   const valid = await checkPassword(password.slice(0, MAX_LENGTH), user?.passwordHash);
   if (!valid) {
-    await recordAttempt(req, 'login', email, false);
+    // (Already counted as a failure by the reservation, unless on a known device.)
+    if (trusted) await recordAttempt(req, 'login', email, false);
     auditLater(req, 'auth.sign_in_failed', { targetType: user ? 'user' : null, targetId: user?.id ?? null, actor: { id: user?.id ?? null, email }, detail: { reason: user ? 'Wrong password' : 'No account with this email' } });
     return res.status(401).json({ error: WRONG });
   }
 
+  await releaseLoginAttempt(attempt.id);
   if (user.status !== 'active') {
     auditLater(req, 'auth.sign_in_refused', { targetType: 'user', targetId: user.id, actor: user, detail: { reason: `Account ${user.status}` } });
     const support = await supportAddress();
@@ -189,7 +192,7 @@ authRouter.post('/login/mfa', asyncHandler(async (req, res) => {
   const claim = readPurposeToken('mfa-login', req.body?.challenge);
   if (!claim) return res.status(401).json({ error: 'That sign-in took too long. Please enter your password again.', code: 'mfa_expired' });
   const [max, windowMs] = LIMITS.mfa;
-  if (await hit(`mfa:${claim.sub}`, max, windowMs)) return res.status(429).json({ error: TOO_MANY });
+  if (await hit(`mfa-login:${claim.sub}`, max, windowMs)) return res.status(429).json({ error: TOO_MANY });
 
   const user = await prisma.user.findUnique({ where: { id: claim.sub }, include: PUBLIC_USER_INCLUDE });
   if (!user || user.status !== 'active' || !user.mfaEnabledAt || !user.mfaSecretCipher) return res.status(401).json({ error: 'Please sign in again.', code: 'mfa_expired' });
@@ -223,8 +226,9 @@ const RESET_SENT = 'If that email has a Kotka account, we’ve sent a link to re
 
 authRouter.post('/password-reset', asyncHandler(async (req, res) => {
   const email = normalizeEmail(req.body?.email);
-  if (!EMAIL_RE.test(email)) return res.status(400).json({ error: 'Enter the email address you signed up with.' });
-  if (memoryHit(`reset-ip:${clientIp(req)}`, 10, 3600e3) || (await hit(`reset:${email}`, 3, 3600e3))) {
+  if (!isEmail(email)) return res.status(400).json({ error: 'Enter the email address you signed up with.' });
+  // Per network as well as per email, both kept in the database (so they hold across servers).
+  if ((await hit(`reset-ip:${clientIp(req) ?? 'unknown'}`, 10, 3600e3)) || (await hit(`reset:${email}`, 3, 3600e3))) {
     return res.status(429).json({ error: 'We’ve sent a few reset emails already. Please check your inbox (and spam), or try again in an hour.' });
   }
   const user = await prisma.user.findUnique({ where: { email }, select: { id: true, name: true, email: true, status: true } });
@@ -256,6 +260,7 @@ authRouter.post('/password-reset/confirm', asyncHandler(async (req, res) => {
     data: { passwordHash: await hashPassword(password), sessionsValidAfter: new Date(), emailVerifiedAt: owner.emailVerifiedAt ?? new Date() },
   });
   await revokeUserSessions(user.id);
+  await cancelResetLinks(user.id);
   forgetUserAccess(user.id);
   await recordAttempt(req, 'login', user.email, true);
   auditLater(req, 'auth.password_reset', { targetType: 'user', targetId: user.id, actor: user });

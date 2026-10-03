@@ -2,6 +2,14 @@
   "git": {
     "deploymentEnabled": { "dependabot/**": false }
   },
+  "redirects": [
+    {
+      "source": "/((?!api/).*)",
+      "has": [{ "type": "host", "value": "kokta-trading.vercel.app" }],
+      "destination": "https://www.kotkafinance.online/$1",
+      "permanent": true
+    }
+  ],
   "headers": [
     {
       "source": "/(.*)",

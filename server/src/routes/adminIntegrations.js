@@ -118,7 +118,15 @@ adminIntegrationsRouter.put('/:provider', asyncHandler(async (req, res) => {
   const config = req.body?.config && typeof req.body.config === 'object'
     ? Object.fromEntries(Object.entries(req.body.config).filter(([k, v]) => allowed.includes(k) && (typeof v === 'string' ? v.length <= 1000 : ['number', 'boolean'].includes(typeof v))))
     : undefined;
-  if (config?.baseUrl && !/^https:\/\/[a-z0-9.-]+(\/[\w./-]*)?$/i.test(config.baseUrl)) return res.status(400).json({ error: 'The address must start with https://' });
+  // The API key is sent to this address, so it must be NVIDIA's own.
+  if (config?.baseUrl && !/^https:\/\/([a-z0-9-]+\.)*(nvidia\.com|api\.nvidia\.com)(\/[\w./-]*)?$/i.test(config.baseUrl)) return res.status(400).json({ error: 'The address must be an https:// address on nvidia.com.' });
+  // R2: uploads (including private chat images) go to this account's bucket,
+  // so each part must be exactly what Cloudflare issues, not any host or path.
+  if (provider === 'r2' && config) {
+    if (config.accountId !== undefined && config.accountId !== '' && !/^[a-f0-9]{32}$/.test(config.accountId)) return res.status(400).json({ error: 'The Cloudflare account ID is 32 letters and numbers (a–f, 0–9).' });
+    if (config.bucket !== undefined && config.bucket !== '' && !/^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$/.test(config.bucket)) return res.status(400).json({ error: 'Bucket names use lowercase letters, numbers and dashes.' });
+    if (config.prefix !== undefined && config.prefix !== '' && !/^[a-z0-9][a-z0-9_-]{0,40}$/i.test(config.prefix)) return res.status(400).json({ error: 'The folder name uses letters, numbers, dashes and underscores.' });
+  }
   if (provider === 'whop' && config) {
     if (config.companyId !== undefined && config.companyId !== '' && !/^biz_[A-Za-z0-9]+$/.test(config.companyId)) return res.status(400).json({ error: 'The Whop company id starts with biz_.' });
     // The webhook secret is stored encrypted, like the API key.

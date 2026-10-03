@@ -12,6 +12,10 @@ import Input, { Select } from '../../components/ui/Input';
 import LoadError from './components/LoadError';
 import { api } from '../../lib/api';
 import { confirmDialog, promptDialog, toast } from '../../lib/dialogs';
+
+// Money actions need a fresh code from the staff member's authenticator app.
+// Returns the code, or null when cancelled.
+const staffCode = (what) => promptDialog({ title: 'Confirm it’s you', message: `${what} Enter the 6-digit code from your authenticator app. (Turn on two-step verification in Settings → Security if you haven’t.)`, label: '6-digit code', placeholder: '123456', confirmLabel: 'Confirm', maxLength: 8 });
 import { naira } from '../game/format';
 
 const TABS = [
@@ -25,7 +29,7 @@ const TABS = [
   { value: 'settings', label: 'Settings' },
 ];
 const when = (d) => (d ? new Date(d).toLocaleString([], { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—');
-const WD_TONE = { requested: 'warning', processing: 'neutral', paid: 'profit', failed: 'loss', rejected: 'loss', cancelled: 'neutral' };
+const WD_TONE = { requested: 'warning', processing: 'neutral', paid: 'profit', failed: 'loss', rejected: 'loss', cancelled: 'neutral', reversed: 'loss' };
 
 function useData(path) {
   const [data, setData] = useState(null);
@@ -88,7 +92,9 @@ function Withdrawals() {
   };
   const approve = (w) => run(async () => {
     if (!(await confirmDialog({ title: `Send ${naira(w.amountKobo)} to ${w.user?.name}?`, message: `This sends real money through ${w.providerName}${w.account?.nameMatchesId === false ? '. The bank account name doesn’t match their verified name.' : '.'}`, confirmLabel: 'Approve and send', danger: w.account?.nameMatchesId === false }))) return;
-    const r = await api.post(`/admin/game/withdrawals/${w.id}/approve`);
+    const twoStepCode = await staffCode('This sends real money.');
+    if (!twoStepCode) return;
+    const r = await api.post(`/admin/game/withdrawals/${w.id}/approve`, { twoStepCode });
     toast(r.withdrawal.status === 'paid' ? 'Paid.' : 'Sent; waiting for the provider to confirm.');
   });
   const reject = (w) => run(async () => {
@@ -99,7 +105,9 @@ function Withdrawals() {
   const resolve = (w, outcome) => run(async () => {
     const note = await promptDialog({ title: outcome === 'paid' ? 'Mark as paid?' : 'Mark as failed and return the money?', message: 'Only do this after checking the provider’s dashboard.', label: 'What the provider shows', confirmLabel: outcome === 'paid' ? 'Mark paid' : 'Mark failed', danger: outcome === 'failed' });
     if (!note) return;
-    await api.post(`/admin/game/withdrawals/${w.id}/resolve`, { outcome, note });
+    const twoStepCode = await staffCode('This settles a payout by hand.');
+    if (!twoStepCode) return;
+    await api.post(`/admin/game/withdrawals/${w.id}/resolve`, { outcome, note, twoStepCode });
   });
   if (error) return <LoadError message={error} />;
   return (
@@ -222,8 +230,10 @@ function Ledger({ canEdit }) {
     if (!amount || !Number(amount)) return;
     const reason = await promptDialog({ title: 'Reason', message: 'Explain the adjustment.', label: 'Reason', confirmLabel: `Adjust by ₦${amount}`, danger: Number(amount) < 0 });
     if (!reason) return;
+    const twoStepCode = await staffCode('This changes someone’s balance.');
+    if (!twoStepCode) return;
     try {
-      await api.post('/admin/game/adjustments', { userId: w.user.id, amountKobo: Math.round(Number(amount) * 100), reason });
+      await api.post('/admin/game/adjustments', { userId: w.user.id, amountKobo: Math.round(Number(amount) * 100), reason, twoStepCode });
       toast('Adjusted.');
       setUserId(w.user.id);
       load();
@@ -235,8 +245,10 @@ function Ledger({ canEdit }) {
     const reason = on ? await promptDialog({ title: `Put ${w.user.name}’s wallet on hold?`, message: 'They can’t stake or withdraw until you clear it. Their balance stays as it is.', label: 'Reason', confirmLabel: 'Put on hold', danger: true }) : null;
     if (on && !reason) return;
     if (!on && !(await confirmDialog({ title: `Clear the hold on ${w.user.name}’s wallet?`, message: w.wallet.holdReason ? `It was held because: ${w.wallet.holdReason}` : 'They can stake and withdraw again.', confirmLabel: 'Clear hold' }))) return;
+    const twoStepCode = on ? undefined : await staffCode('Clearing a hold lets this wallet stake and withdraw again.');
+    if (!on && !twoStepCode) return;
     try {
-      await api.post(`/admin/game/wallets/${w.user.id}/hold`, { on, reason });
+      await api.post(`/admin/game/wallets/${w.user.id}/hold`, { on, reason, twoStepCode });
       toast(on ? 'Wallet on hold.' : 'Hold cleared.');
       setWallets((list) => list.map((x) => (x.user.id === w.user.id ? { ...x, wallet: { ...x.wallet, onHold: on, holdReason: on ? reason : null } } : x)));
     } catch (err) {
@@ -324,9 +336,18 @@ function Promotions({ canEdit }) {
   };
   if (error) return <LoadError message={error} />;
   if (!data) return <div className="h-64 animate-pulse rounded-2xl bg-white dark:bg-ink-900" />;
-  const create = () => run(() => api.post('/admin/game/promotions/campaigns', { name: form.name, description: form.description, amountKobo: Math.round(Number(form.amount) * 100), expiresInDays: Number(form.days), audience: form.audience, maxGrants: form.maxGrants ? Number(form.maxGrants) : null }).then(() => setForm((f) => ({ ...f, name: '', description: '' }))), 'Campaign created.');
-  const toggle = (c) => run(() => api.patch(`/admin/game/promotions/campaigns/${c.id}`, { active: !c.active }), c.active ? 'Campaign stopped.' : 'Campaign running.');
-  const give = () => run(() => api.post('/admin/game/promotions/grants', { user: grant.user, campaignId: grant.campaignId || undefined, amountKobo: Math.round(Number(grant.amount) * 100), expiresInDays: Number(grant.days), reason: grant.reason }).then(() => setGrant((g) => ({ ...g, user: '', reason: '' }))), 'Credits given.');
+  const create = async () => {
+    const twoStepCode = await staffCode('A campaign gives credits away.');
+    if (twoStepCode) run(() => api.post('/admin/game/promotions/campaigns', { name: form.name, description: form.description, amountKobo: Math.round(Number(form.amount) * 100), expiresInDays: Number(form.days), audience: form.audience, maxGrants: form.maxGrants ? Number(form.maxGrants) : null, twoStepCode }).then(() => setForm((f) => ({ ...f, name: '', description: '' }))), 'Campaign created.');
+  };
+  const toggle = async (c) => {
+    const twoStepCode = c.active ? undefined : await staffCode('Starting a campaign gives credits away automatically.');
+    if (c.active || twoStepCode) run(() => api.patch(`/admin/game/promotions/campaigns/${c.id}`, { active: !c.active, twoStepCode }), c.active ? 'Campaign stopped.' : 'Campaign running.');
+  };
+  const give = async () => {
+    const twoStepCode = await staffCode('This gives someone credits.');
+    if (twoStepCode) run(() => api.post('/admin/game/promotions/grants', { user: grant.user, campaignId: grant.campaignId || undefined, amountKobo: Math.round(Number(grant.amount) * 100), expiresInDays: Number(grant.days), reason: grant.reason, twoStepCode }).then(() => setGrant((g) => ({ ...g, user: '', reason: '' }))), 'Credits given.');
+  };
   const revoke = async (g) => {
     const reason = await promptDialog({ title: `Remove ${naira(g.remainingKobo)} of ${g.user.name}’s credits?`, message: 'What’s left of this grant leaves their wallet. Credits already staked aren’t affected.', label: 'Reason', confirmLabel: 'Remove credits', danger: true });
     if (!reason) return;

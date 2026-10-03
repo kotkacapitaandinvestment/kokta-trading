@@ -18,19 +18,28 @@ function prune() {
 
 // Failed logins count per email since that email's last success (inside the
 // window), and per IP across all emails.
-export async function loginBlocked(req, email) {
+// The check and the count happen together: under a lock on the email (and
+// the network), the attempt is written down as a failure before the password
+// is checked, so a burst of parallel guesses can't all see "under the limit".
+// A right password then removes it (releaseLoginAttempt). Returns
+// { blocked, id }.
+export async function reserveLoginAttempt(req, email) {
   const ip = clientIp(req);
   const since = new Date(Date.now() - LOGIN_WINDOW_MS);
-  const lastOk = await prisma.authAttempt.findFirst({
-    where: { kind: 'login', email, success: true, createdAt: { gte: since } },
-    orderBy: { createdAt: 'desc' },
-    select: { createdAt: true },
-  });
-  const [byEmail, byIp] = await Promise.all([
-    prisma.authAttempt.count({ where: { kind: 'login', email, success: false, createdAt: { gte: lastOk?.createdAt ?? since } } }),
-    ip ? prisma.authAttempt.count({ where: { kind: 'login', ip, success: false, createdAt: { gte: since } } }) : 0,
-  ]);
-  return byEmail >= LOGIN_MAX_PER_EMAIL || byIp >= LOGIN_MAX_PER_IP;
+  prune();
+  return prisma.$transaction(async (tx) => {
+    for (const k of [`kotka-login:${email}`, ...(ip ? [`kotka-login-ip:${ip}`] : [])].sort()) await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${k}))`;
+    const lastOk = await tx.authAttempt.findFirst({ where: { kind: 'login', email, success: true, createdAt: { gte: since } }, orderBy: { createdAt: 'desc' }, select: { createdAt: true } });
+    const byEmail = await tx.authAttempt.count({ where: { kind: 'login', email, success: false, createdAt: { gte: lastOk?.createdAt ?? since } } });
+    const byIp = ip ? await tx.authAttempt.count({ where: { kind: 'login', ip, success: false, createdAt: { gte: since } } }) : 0;
+    if (byEmail >= LOGIN_MAX_PER_EMAIL || byIp >= LOGIN_MAX_PER_IP) return { blocked: true, id: null };
+    const row = await tx.authAttempt.create({ data: { kind: 'login', email, ip, success: false }, select: { id: true } });
+    return { blocked: false, id: row.id };
+  }, { maxWait: 10000, timeout: 10000 });
+}
+
+export async function releaseLoginAttempt(id) {
+  if (id) await prisma.authAttempt.delete({ where: { id } }).catch(() => {});
 }
 
 export async function signupBlocked(req) {

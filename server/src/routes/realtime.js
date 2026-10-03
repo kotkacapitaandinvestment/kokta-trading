@@ -25,6 +25,8 @@ realtimeRouter.get('/stream', asyncHandler(async (req, res) => {
   if (requested.includes('community')) channels.push('community');
   const sessionId = req.sessionId;
   const stillAllowed = async () => {
+    // (A sign-in from before sessions were recorded has no session id: check the account alone.)
+    if (!sessionId) return (await prisma.user.findUnique({ where: { id: req.userId }, select: { status: true } }))?.status === 'active';
     const s = await prisma.session.findUnique({ where: { id: sessionId }, select: { revokedAt: true, expiresAt: true, user: { select: { status: true } } } });
     return !!s && !s.revokedAt && s.expiresAt > new Date() && s.user?.status === 'active';
   };

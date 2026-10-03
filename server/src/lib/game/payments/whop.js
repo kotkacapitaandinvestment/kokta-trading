@@ -72,10 +72,17 @@ export async function createCheckout(cfg, { amountKobo, depositId, userId, redir
 export const getPayment = (cfg, id) => call(cfg.apiKey, 'GET', `/payments/${encodeURIComponent(id)}`);
 
 // A Whop payment matches a deposit when it's paid, in NGN, for the amount.
+// The amount actually charged (total) has to match, and so does the price
+// before any discount (subtotal), when Whop sends both: a promo code or a
+// partial refund on Whop's side must never credit more than was paid.
 export function paymentMatches(payment, deposit) {
   const paid = payment?.status === 'paid' && (!payment.substatus || payment.substatus === 'succeeded');
-  const amount = Math.round(Number(payment?.subtotal ?? payment?.total ?? 0) * 100);
-  return paid && String(payment.currency).toLowerCase() === 'ngn' && amount === Number(deposit.amountKobo) && payment.metadata?.kotka_deposit === deposit.id;
+  const kobo = (v) => (v === undefined || v === null ? null : Math.round(Number(v) * 100));
+  const charged = kobo(payment?.total) ?? kobo(payment?.subtotal);
+  const listed = kobo(payment?.subtotal);
+  const want = Number(deposit.amountKobo);
+  const untouched = !Number(payment?.refunded_amount ?? 0) && !payment?.promo_code;
+  return paid && untouched && String(payment.currency).toLowerCase() === 'ngn' && charged === want && (listed === null || listed === want) && payment.metadata?.kotka_deposit === deposit.id;
 }
 
 /**

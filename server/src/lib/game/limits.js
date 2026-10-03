@@ -66,9 +66,21 @@ export async function assertStakeWithinLimits(db, userId, stakeKobo, stakedToday
   }
 }
 
-// Deposits in a rolling window, counting checkouts still open from the last two hours.
+// Deposits in a rolling window, by when the money arrived (a checkout opened
+// days ago and paid today counts today), plus checkouts opened in the last
+// 24 hours that could still be paid.
 async function depositedSince(userId, since) {
-  const agg = await prisma.deposit.aggregate({ where: { userId, createdAt: { gte: since }, OR: [{ status: 'succeeded' }, { status: 'initiated', createdAt: { gte: new Date(Date.now() - 2 * 3600e3) } }] }, _sum: { amountKobo: true } });
+  const agg = await prisma.deposit.aggregate({
+    where: {
+      userId,
+      OR: [
+        { status: 'succeeded', completedAt: { gte: since } },
+        { status: 'succeeded', completedAt: null, createdAt: { gte: since } },
+        { status: 'initiated', createdAt: { gte: new Date(Date.now() - 24 * 3600e3) } },
+      ],
+    },
+    _sum: { amountKobo: true },
+  });
   return kobo(agg._sum.amountKobo);
 }
 
