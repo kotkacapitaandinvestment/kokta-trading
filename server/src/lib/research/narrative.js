@@ -197,7 +197,7 @@ export function rulesNarrative(report) {
     for (const f of top) {
       const fav = f.diff > 0 ? p.base : p.quote;
       const detail = f.key === 'policy_differential' ? f.rationale : `${p.base} ${f.base === null ? 'n/a' : sign(f.base)} vs ${p.quote} ${f.quote === null ? 'n/a' : sign(f.quote)} (${report.currencies[fav].factors[f.key]?.classification ?? ''})`;
-      why.push({ kind: 'KOTKA INTERPRETATION', text: `${f.label} favours ${fav}: ${detail}.`.replace('..', '.'), evidence: [] });
+      why.push({ kind: 'KOTKA INTERPRETATION', text: `${f.label} favours ${fav}: ${detail}.`.replace(/\.{2,}/g, '.'), evidence: [] });
     }
   } else {
     for (const d of cur[0].drivers.slice(0, 3)) why.push({ kind: 'KOTKA INTERPRETATION', text: `${d.label} (${d.effect.toLowerCase()}): ${d.rationale}`, evidence: d.evidence.slice(0, 3) });

@@ -276,7 +276,7 @@ export function publicSnapshot(card, keys, { sensitiveAck = false } = {}) {
   const name = chosen.has('name') ? card.identity.name : null;
   const username = chosen.has('username') ? card.identity.username : null;
   const who = firstName(name) ?? (username ? `@${username}` : 'A Kotka trader');
-  const sentence = card.sentence.replace('{who}', who).replace(/^A Kotka trader's/, "A Kotka trader's");
+  const sentence = card.sentence.replace('{who}', who);
   return {
     snapshot: {
       source: card.source,

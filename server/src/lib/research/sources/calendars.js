@@ -53,7 +53,7 @@ export async function fetchFomcMeetings() {
         // The calendar publishes dates only, so the time is not asserted (dateOnly).
         date: new Date(Date.UTC(year, mIdx, day, 12, 0)).toISOString(),
         dateOnly: true,
-        label: `FOMC monetary policy decision (${month} ${raw.replace('*', '').trim()} meeting)`,
+        label: `FOMC monetary policy decision (${month} ${raw.replaceAll('*', '').trim()} meeting)`,
         withProjections: raw.includes('*'),
       });
       month = null;

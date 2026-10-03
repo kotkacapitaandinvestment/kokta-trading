@@ -494,7 +494,7 @@ conversationsRouter.post('/conversations/:id/messages', requireProfile, asyncHan
   const a = await conversationAccess(req.params.id, req.me);
   if (!a.conv) return res.status(404).json({ error: 'This chat was deleted, or you’re no longer in it.' });
   if (!a.canSend) return res.status(403).json({ error: a.reason });
-  const body = typeof req.body?.body === 'string' ? req.body.body.replace(/\s+$/, '').slice(0, 4000) : '';
+  const body = typeof req.body?.body === 'string' ? req.body.body.slice(0, 4000).trimEnd() : '';
   const pollIn = req.body?.poll && typeof req.body.poll === 'object' ? req.body.poll : null;
   let poll = null;
   if (pollIn) {
@@ -590,7 +590,7 @@ conversationsRouter.patch('/messages/:id', requireProfile, limit('messageEdit'),
   // Editing is sending: someone removed from a group, blocked, or paused can't rewrite old messages.
   const access = await conversationAccess(m.conversation, req.me);
   if (!access.canSend) return res.status(403).json({ error: access.reason ?? 'You can’t edit messages in this chat any more.' });
-  const body = typeof req.body?.body === 'string' ? req.body.body.replace(/\s+$/, '').slice(0, 4000) : '';
+  const body = typeof req.body?.body === 'string' ? req.body.body.slice(0, 4000).trimEnd() : '';
   if (!body.trim() && !(m.attachments ?? []).length) return res.status(400).json({ error: 'A message cannot be empty.' });
   const screen = screenText(body, { staff: isStaff(req.me) });
   if (screen.blocked) return res.status(400).json({ error: screen.blocked, code: 'blocked_content' });

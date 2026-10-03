@@ -13,7 +13,7 @@ const MAX_STACK = 4000;
 export function scrub(text) {
   // Capped first: the patterns below must never see a huge input.
   return String(text ?? '')
-    .slice(0, 10000)
+    .slice(0, 4000)
     .replace(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g, '<email>')
     .replace(/\?[^\s)'"]*/g, '') // query strings (reset links carry tokens there)
     .replace(/\b(?:eyJ[\w-]+\.[\w-]+\.[\w-]+)\b/g, '<jwt>')

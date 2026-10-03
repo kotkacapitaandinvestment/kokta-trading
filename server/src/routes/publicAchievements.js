@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { prisma } from '../lib/prisma.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
-import { publicOrigin } from '../lib/origins.js';
+import { publicOrigin, CANONICAL_ORIGIN } from '../lib/origins.js';
 import { mediaBytes } from '../lib/media.js';
 
 // Public achievement links (no sign-in). They only ever expose the snapshot
@@ -36,12 +36,13 @@ publicAchievementsRouter.get('/achievements/:slug/image', asyncHandler(async (re
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 let shell = { html: null, at: 0 };
 
-// The app shell is fetched from Kotka's own site only (see publicOrigin), so a
+// The app shell is fetched from Kotka's live site only, so a
 // forged Host header can't make the server fetch, cache and serve another
 // site's HTML.
-async function appShell(origin) {
+async function appShell() {
   if (shell.html && Date.now() - shell.at < 5 * 60e3) return shell.html;
-  const r = await fetch(`${origin}/index.html`, { signal: AbortSignal.timeout(4000), redirect: 'error' });
+  // Always the live site's own address, never one taken from the request.
+  const r = await fetch(`${CANONICAL_ORIGIN}/index.html`, { signal: AbortSignal.timeout(4000), redirect: 'error' });
   if (!r.ok) throw new Error(`index.html ${r.status}`);
   const html = await r.text();
   // Only cache something that is recognisably Kotka's own app shell.
@@ -73,7 +74,7 @@ export const achievementPage = asyncHandler(async (req, res) => {
   ].join('\n  ');
   let html;
   try {
-    html = (await appShell(origin)).replace(/<title>[\s\S]*?<\/title>/, '').replace(/<meta name="description"[^>]*>/, '').replace('<head>', () => `<head>\n  ${tags}`); // a function, so "$&" or "$'" in someone's goal title stays literal
+    html = (await appShell()).replace(/<title>[\s\S]*?<\/title>/, '').replace(/<meta name="description"[^>]*>/, '').replace('<head>', () => `<head>\n  ${tags}`); // a function, so "$&" or "$'" in someone's goal title stays literal
   } catch {
     // No app shell reachable (e.g. the API running alone): tags still preview.
     html = `<!doctype html><html><head><meta charset="utf-8" />${tags}</head><body><p><a href="/">Open Kotka</a></p></body></html>`;
