@@ -2,7 +2,9 @@
 // updates, ownership of posts and ideas, polls, reactions, moderation ranks.
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { startServer, stopServer, makeUser, signIn, prisma } from './helpers.js';
+import { startServer, stopServer, makeUser, signIn, prisma, runTag } from './helpers.js';
+import { publish } from '../../src/lib/realtime.js';
+import { forgetUserAccess } from '../../src/middleware/auth.js';
 
 let alice, bob, eve, mod, admin;
 let aliceC, bobC, eveC, modC, adminC;
@@ -61,46 +63,41 @@ test('private groups: outsiders are refused; removed members lose access', async
 });
 
 test('live updates: a private chat channel cannot be subscribed to', async () => {
-  const base = await startServer();
-  const ctrl = new AbortController();
-  const res = await fetch(`${base}/api/realtime/stream?channels=conv:${dmId},market:EURUSD`, { headers: { Cookie: eveC.cookie }, signal: ctrl.signal });
-  const reader = res.body.getReader();
-  let text = '';
-  while (!text.includes('event: ready')) {
-    const { value, done } = await reader.read();
-    if (done) break;
-    text += new TextDecoder().decode(value);
-  }
-  ctrl.abort();
-  const ready = JSON.parse(/event: ready\ndata: (.*)\n/.exec(text)[1]);
-  assert.ok(!ready.channels.includes(`conv:${dmId}`));
-  assert.ok(ready.channels.includes(`user:${eve.id}`));
+  const r = await eveC.get(`/api/realtime/poll?channels=conv:${dmId},market:EURUSD`);
+  assert.equal(r.status, 200);
+  assert.ok(!r.json.channels.includes(`conv:${dmId}`));
+  assert.ok(r.json.channels.includes(`user:${eve.id}`));
+  assert.ok(r.json.channels.includes('market:EURUSD'));
 });
 
-test('live updates stop within seconds once the session is revoked (signed out, suspended or banned)', async () => {
+test('live updates arrive by short check-ins, only on your channels; the old stream is retired', async () => {
   const base = await startServer();
-  process.env.KOTKA_RT_RECHECK_MS = '500';
+  const first = await aliceC.get('/api/realtime/poll?channels=community');
+  assert.equal(first.status, 200);
+  assert.deepEqual(first.json.events, [], 'a first check-in starts from now');
+  await publish([{ channel: `user:${alice.id}`, type: 'notification', payload: { test: runTag } }, { channel: `user:${eve.id}`, type: 'notification', payload: { test: runTag } }]);
+  const next = await aliceC.get(`/api/realtime/poll?channels=community&after=${first.json.cursor}`);
+  const mine = next.json.events.filter((e) => e.data.test === runTag);
+  assert.equal(mine.length, 1, 'only my own private event');
+  assert.equal(mine[0].data.channel, `user:${alice.id}`);
+  assert.ok(BigInt(next.json.cursor) >= BigInt(mine[0].id));
+  // The retired stream answers at once with 204, which stops old EventSource clients reconnecting.
+  const t0 = Date.now();
+  const old = await fetch(`${base}/api/realtime/stream`, { headers: { Cookie: aliceC.cookie } });
+  assert.equal(old.status, 204);
+  assert.ok(Date.now() - t0 < 5000);
+});
+
+test('live updates stop at once when the session is revoked (signed out, suspended or banned)', async () => {
   const u = await makeUser('Streamer');
   const c = await signIn(u);
-  const ctrl = new AbortController();
-  const res = await fetch(`${base}/api/realtime/stream`, { headers: { Cookie: c.cookie }, signal: ctrl.signal });
-  const reader = res.body.getReader();
-  let text = '';
-  const until = async (marker, ms) => {
-    const stop = Date.now() + ms;
-    while (!text.includes(marker) && Date.now() < stop) {
-      const { value, done } = await Promise.race([reader.read(), new Promise((r) => setTimeout(() => r({ timeout: true }), stop - Date.now()))]);
-      if (done) break;
-      if (value) text += new TextDecoder().decode(value);
-    }
-    return text.includes(marker);
-  };
-  assert.ok(await until('event: ready', 10000));
+  assert.equal((await c.get('/api/realtime/poll')).status, 200);
   await prisma.user.update({ where: { id: u.id }, data: { status: 'banned' } });
   await prisma.session.updateMany({ where: { userId: u.id }, data: { revokedAt: new Date() } });
-  assert.ok(await until('event: ended', 5000), 'the open stream is closed');
-  ctrl.abort();
-  delete process.env.KOTKA_RT_RECHECK_MS;
+  forgetUserAccess(u.id);
+  // The sign-in caches on other servers last up to a minute at most.
+  const r = await c.get('/api/realtime/poll');
+  assert.ok([401, 403].includes(r.status), `answered ${r.status}`);
 });
 
 test("people can't edit or delete others' posts, or update others' trade ideas", async () => {

@@ -1,17 +1,19 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 
-// One EventSource per tab. Pages declare the public channels they need with
-// useChannels(); the stream reconnects (resuming from the last event id)
-// when that set changes. The user's private channel is always included by
-// the server.
+// Live updates by short check-ins: each visible tab asks the server what's
+// new on its channels every few seconds (one quick request each time), and
+// stops asking while it's hidden, catching up the moment it's shown again.
+// Pages declare the public channels they need with useChannels(); the user's
+// private channel is always included by the server.
 const RealtimeContext = createContext(null);
 
-const EVENT_TYPES = ['ready', 'message', 'message_updated', 'message_removed', 'reaction', 'typing', 'read', 'delivered', 'thread', 'poll', 'notification', 'conversation', 'sentiment', 'post', 'comment'];
+const FOCUSED_MS = 4000;
+const BACKGROUND_MS = 15000; // visible, but the window isn't the active one
 
 export function RealtimeProvider({ children }) {
   const listeners = useRef(new Map());
   const counts = useRef(new Map());
-  const lastId = useRef(null);
+  const cursor = useRef(null);
   const [channelKey, setChannelKey] = useState('community');
   const [status, setStatus] = useState('connecting');
 
@@ -21,28 +23,54 @@ export function RealtimeProvider({ children }) {
   }, []);
 
   useEffect(() => {
-    let es = null;
-    const timer = setTimeout(() => {
-      const url = `/api/realtime/stream?channels=${encodeURIComponent(channelKey)}${lastId.current ? `&lastEventId=${lastId.current}` : ''}`;
-      es = new EventSource(url);
-      es.onopen = () => setStatus('open');
-      es.onerror = () => setStatus(es.readyState === EventSource.CLOSED ? 'closed' : 'reconnecting');
-      for (const type of EVENT_TYPES) {
-        es.addEventListener(type, (e) => {
-          if (e.lastEventId) lastId.current = e.lastEventId;
-          let data = {};
-          try {
-            data = JSON.parse(e.data);
-          } catch {
-            /* heartbeat or malformed */
-          }
-          listeners.current.get(type)?.forEach((fn) => fn(data));
-        });
+    let stopped = false;
+    let timer = null;
+    let inFlight = false;
+    let failures = 0;
+    const schedule = (ms) => {
+      if (stopped || timer) return;
+      timer = setTimeout(check, ms);
+    };
+    async function check() {
+      timer = null;
+      if (stopped || inFlight || document.hidden) return;
+      inFlight = true;
+      try {
+        const r = await fetch(`/api/realtime/poll?channels=${encodeURIComponent(channelKey)}${cursor.current ? `&after=${cursor.current}` : ''}`, { credentials: 'include', cache: 'no-store' });
+        if (r.status === 401 || r.status === 403) {
+          setStatus('closed');
+          return;
+        }
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        const j = await r.json();
+        cursor.current = j.cursor;
+        failures = 0;
+        setStatus('open');
+        for (const e of j.events) listeners.current.get(e.type)?.forEach((fn) => fn(e.data));
+        schedule(j.more ? 0 : document.hasFocus() ? FOCUSED_MS : BACKGROUND_MS);
+      } catch {
+        failures += 1;
+        setStatus('reconnecting');
+        schedule(Math.min(30000, 2000 * 2 ** Math.min(failures, 4)));
+      } finally {
+        inFlight = false;
       }
-    }, 120);
-    return () => {
+    }
+    // Shown again (or the window comes forward): catch up straight away.
+    const wake = () => {
+      if (document.hidden || stopped) return;
       clearTimeout(timer);
-      es?.close();
+      timer = null;
+      check();
+    };
+    document.addEventListener('visibilitychange', wake);
+    window.addEventListener('focus', wake);
+    schedule(120);
+    return () => {
+      stopped = true;
+      clearTimeout(timer);
+      document.removeEventListener('visibilitychange', wake);
+      window.removeEventListener('focus', wake);
     };
   }, [channelKey]);
 

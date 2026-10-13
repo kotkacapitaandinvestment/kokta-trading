@@ -35,7 +35,7 @@ export async function reserveLoginAttempt(req, email) {
     if (byEmail >= LOGIN_MAX_PER_EMAIL || byIp >= LOGIN_MAX_PER_IP) return { blocked: true, id: null };
     const row = await tx.authAttempt.create({ data: { kind: 'login', email, ip, success: false }, select: { id: true } });
     return { blocked: false, id: row.id };
-  }, { maxWait: 10000, timeout: 10000 });
+  }, { maxWait: 20000, timeout: 30000 }); // sign-ins from one busy network queue on its lock
 }
 
 export async function releaseLoginAttempt(id) {
