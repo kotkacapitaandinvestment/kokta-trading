@@ -5,6 +5,7 @@ import { codeAt, verifyCode, base32Encode, base32Decode, newRecoveryCodes, hashR
 import { cleanImage } from '../../src/lib/imageSafety.js';
 import { passwordProblem, needsRehash } from '../../src/lib/passwords.js';
 import { isAllowedOrigin } from '../../src/lib/origins.js';
+import { clientIp } from '../../src/lib/requestMeta.js';
 
 test('TOTP matches the RFC 6238 test vector', () => {
   const secret = base32Encode(Buffer.from('12345678901234567890'));
@@ -62,3 +63,19 @@ test('only Kotka origins are trusted', () => {
   assert.equal(isAllowedOrigin('https://kokta-trading-abc123-attacker.vercel.app'), false);
   assert.equal(isAllowedOrigin('https://kokta-trading.vercel.app'), false);
 });
+
+test('the visitor IP comes from the host, not from headers a visitor can send', () => {
+  const req = (h) => ({ get: (k) => h[k.toLowerCase()], socket: { remoteAddress: '10.0.0.9' } });
+  const saved = process.env.VERCEL;
+  try {
+    delete process.env.VERCEL; // Render: its proxy appends the real address last
+    assert.equal(clientIp(req({ 'x-real-ip': '6.6.6.6', 'x-forwarded-for': '6.6.6.6, 203.0.113.7' })), '203.0.113.7', 'a made-up X-Real-IP or leading X-Forwarded-For is ignored');
+    assert.equal(clientIp(req({})), '10.0.0.9');
+    process.env.VERCEL = '1'; // Vercel sets x-real-ip itself
+    assert.equal(clientIp(req({ 'x-real-ip': '198.51.100.4', 'x-forwarded-for': '198.51.100.4' })), '198.51.100.4');
+  } finally {
+    if (saved === undefined) delete process.env.VERCEL;
+    else process.env.VERCEL = saved;
+  }
+});
+

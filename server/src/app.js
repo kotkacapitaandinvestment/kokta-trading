@@ -42,7 +42,8 @@ import { memoryLimit } from './lib/rateLimit.js';
 export const app = express();
 app.disable('x-powered-by');
 // Vercel sets X-Forwarded-Proto/Host at its edge (and overwrites any a client sends).
-app.set('trust proxy', true);
+// Vercel's edge sets the forwarding headers itself; elsewhere only our host's one proxy is trusted.
+app.set('trust proxy', process.env.VERCEL ? true : 1);
 
 app.use('/api', securityHeaders);
 // Only Kotka's own sites may call the API with credentials; never reflect any origin.

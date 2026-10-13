@@ -1,0 +1,29 @@
+# Render: Kotka as one always-on Node server (website + API), free plan.
+# The database (Neon), files (Cloudflare R2), email and DNS stay where they are.
+services:
+  - type: web
+    name: kotka
+    runtime: node
+    plan: free
+    region: ohio # next to the Neon database (us-east-2)
+    branch: main
+    autoDeploy: true
+    buildCommand: npm ci --include=dev && npx vite build
+    startCommand: node server/src/index.js
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: NODE_ENV
+        value: production
+      - key: SERVE_CLIENT
+        value: "1"
+      - key: CLIENT_ORIGIN
+        value: https://www.kotkafinance.online
+      # Secrets: copied across from the current host, never committed.
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: ENCRYPTION_KEY
+        sync: false
