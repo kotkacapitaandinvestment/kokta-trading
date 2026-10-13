@@ -90,6 +90,8 @@ const PUBLIC = [
   'GET /api/app/config',
   'GET /api/app/game-rules',
   'GET /api/app/showcase',
+  // Retired live-updates stream: answers 204 so old cached app versions stop reconnecting.
+  'GET /api/realtime/stream',
   'GET /api/public/achievements/:slug',
   'GET /api/public/achievements/:slug/image',
   'GET /achievement/:slug',
