@@ -66,16 +66,17 @@ test('only Kotka origins are trusted', () => {
 
 test('the visitor IP comes from the host, not from headers a visitor can send', () => {
   const req = (h) => ({ get: (k) => h[k.toLowerCase()], socket: { remoteAddress: '10.0.0.9' } });
-  const saved = process.env.VERCEL;
+  const saved = { VERCEL: process.env.VERCEL, RENDER: process.env.RENDER };
   try {
-    delete process.env.VERCEL; // Render: its proxy appends the real address last
-    assert.equal(clientIp(req({ 'x-real-ip': '6.6.6.6', 'x-forwarded-for': '6.6.6.6, 203.0.113.7' })), '203.0.113.7', 'a made-up X-Real-IP or leading X-Forwarded-For is ignored');
-    assert.equal(clientIp(req({})), '10.0.0.9');
+    delete process.env.VERCEL;
+    process.env.RENDER = 'true'; // Render: Cloudflare's CF-Connecting-IP; x-forwarded-for third from the end
+    assert.equal(clientIp(req({ 'x-real-ip': '6.6.6.6', 'cf-connecting-ip': '203.0.113.7', 'x-forwarded-for': '6.6.6.6, 203.0.113.7, 104.22.1.1, 10.26.0.2' })), '203.0.113.7', 'a made-up X-Real-IP or X-Forwarded-For is ignored');
+    assert.equal(clientIp(req({ 'x-forwarded-for': '6.6.6.6, 203.0.113.7, 104.22.1.1, 10.26.0.2' })), '203.0.113.7');
+    delete process.env.RENDER; // a local run: the connection itself
+    assert.equal(clientIp(req({ 'x-real-ip': '6.6.6.6', 'x-forwarded-for': '6.6.6.6' })), '10.0.0.9');
     process.env.VERCEL = '1'; // Vercel sets x-real-ip itself
     assert.equal(clientIp(req({ 'x-real-ip': '198.51.100.4', 'x-forwarded-for': '198.51.100.4' })), '198.51.100.4');
   } finally {
-    if (saved === undefined) delete process.env.VERCEL;
-    else process.env.VERCEL = saved;
+    for (const [k, v] of Object.entries(saved)) if (v === undefined) delete process.env[k]; else process.env[k] = v;
   }
 });
-

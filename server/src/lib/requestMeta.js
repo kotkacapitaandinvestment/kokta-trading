@@ -1,16 +1,20 @@
 // Client IP as Vercel reports it (it overwrites x-forwarded-for / x-real-ip
 // at the edge); falls back to the socket address when running locally.
-// The visitor's IP, from the header our host sets (never one a visitor could
-// send themselves): on Vercel, x-real-ip; elsewhere (Render), the last
-// x-forwarded-for entry, which the host's own proxy appends.
+// The visitor's IP, from what our host sets (never a header a visitor could
+// send themselves):
+// - Vercel: x-real-ip.
+// - Render: CF-Connecting-IP, set by Render's Cloudflare edge, which refuses
+//   requests that bring their own. (In x-forwarded-for the real address is
+//   third from the end: whatever the visitor sent, the visitor, Cloudflare,
+//   Render's internal proxy.)
+// - Anywhere else (local runs): the connection's own address.
 export function clientIp(req) {
-  if (process.env.VERCEL) {
-    const real = req.get('x-real-ip');
-    if (real) return real.trim().slice(0, 64);
-  }
-  const fwd = req.get('x-forwarded-for');
-  if (fwd) return (process.env.VERCEL ? fwd.split(',')[0] : fwd.split(',').at(-1)).trim().slice(0, 64);
-  return (req.socket?.remoteAddress ?? '').slice(0, 64) || null;
+  const fwd = String(req.get('x-forwarded-for') ?? '').split(',').map((s) => s.trim()).filter(Boolean);
+  let ip = null;
+  if (process.env.VERCEL) ip = req.get('x-real-ip') ?? fwd[0];
+  else if (process.env.RENDER) ip = req.get('cf-connecting-ip') ?? (fwd.length >= 3 ? fwd.at(-3) : null);
+  ip = ip ?? req.socket?.remoteAddress ?? null;
+  return ip ? String(ip).trim().slice(0, 64) : null;
 }
 
 // "Chrome on macOS" from the user agent, for activity records people read.
