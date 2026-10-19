@@ -46,6 +46,12 @@ app.disable('x-powered-by');
 app.set('trust proxy', process.env.VERCEL ? true : 1);
 
 app.use('/api', securityHeaders);
+// TEMPORARY (removed in the next commit): which address headers this host sends, only while DEBUG_HEADERS=1.
+app.get('/api/debug/forwarding', (req, res) => {
+  if (process.env.DEBUG_HEADERS !== '1') return res.status(404).json({ error: 'Not found' });
+  const pick = ['x-forwarded-for', 'x-real-ip', 'cf-connecting-ip', 'true-client-ip', 'x-forwarded-proto', 'cf-ray', 'rndr-id', 'x-request-start', 'forwarded', 'via'];
+  res.json({ headers: Object.fromEntries(pick.filter((h) => req.get(h)).map((h) => [h, req.get(h)])), socket: req.socket?.remoteAddress, ip: req.ip });
+});
 // Only Kotka's own sites may call the API with credentials; never reflect any origin.
 app.use(cors({ origin: (origin, cb) => cb(null, !origin || isAllowedOrigin(origin)), credentials: true }));
 // Payment webhooks are verified against the exact bytes sent, so they get
